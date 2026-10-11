@@ -1,0 +1,12 @@
+node_modules/
+package-lock.json
+
+# 运行期状态：里面有 bot 凭据（等同微信号登录态）与全部收发流水，绝不能进仓
+state/
+dsh-home/
+*.log
+
+# 你自己的配置副本（照 config.example.json 抄一份）
+config.json
+
+.DS_Store

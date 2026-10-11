@@ -1,0 +1,39 @@
+{
+  "name": "wechat-agent-bridge",
+  "version": "0.1.0",
+  "description": "把微信变成你的 agent 遥控器 —— 个人微信扫码登录，长轮询收消息，交给可插拔的 agent 后端执行，支持回文本与文件",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "wechat-agent-bridge": "src/cli.mjs"
+  },
+  "files": [
+    "src",
+    "examples",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "start": "node src/cli.mjs run",
+    "qr": "node src/cli.mjs qr",
+    "status": "node src/cli.mjs status",
+    "test": "node --test test/smoke.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  },
+  "keywords": [
+    "wechat",
+    "weixin",
+    "ilink",
+    "agent",
+    "bot",
+    "dsh",
+    "claude-code",
+    "remote-control"
+  ]
+}
