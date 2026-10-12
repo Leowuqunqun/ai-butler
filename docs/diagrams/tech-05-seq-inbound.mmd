@@ -3,8 +3,8 @@ sequenceDiagram
     participant U as 主人
     participant WX as 微信
     participant CH as channel-wechat
-    participant H as hub
-    participant N as node
+    participant H as core（hub 角色）
+    participant N as node（单机内嵌）
     participant A as agent-dsh
 
     U->>WX: 「把桌面那堆图按日期整理一下」

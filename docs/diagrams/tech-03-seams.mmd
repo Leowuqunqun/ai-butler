@@ -7,19 +7,21 @@ flowchart LR
         SP["seam-approval<br/>ctx.approval"]
         SM["seam-memory<br/>ctx.memory"]
     end
-    subgraph IMPL["实现包 ｜ 继承基类，default 导出即插件"]
+    subgraph IMPL["实现包 ｜ 继承基类，default 导出即插件（虚线那张是候选，其余全部已落地）"]
         direction TB
-        CW["channel-wechat ✅M0"]
-        CF["channel-feishu M3"]
-        AD["agent-dsh ✅M0"]
-        AE["agent-exec ✅M0"]
-        LL["link-lan M2"]
-        LT["link-tailscale M2"]
+        CW["channel-wechat"]
+        CT["channel-telegram"]
+        CF["channel-feishu（候选）"]
+        AD["agent-dsh"]
+        AE["agent-exec"]
+        LL["link-lan"]
+        LT["link-tailscale"]
         AI["approval-im"]
         MF["memory-file"]
     end
-    CORE["core<br/>cordis 容器 · patch 加载 · 事件总线"]
+    CORE["@butler/core<br/>cordis 容器 · patch 加载 · 事件总线"]
     CW --> SC
+    CT --> SC
     CF -.-> SC
     AD --> SA
     AE --> SA
@@ -37,8 +39,8 @@ flowchart LR
     classDef todo fill:#F1F3F5,stroke:#ADB5BD,stroke-dasharray:5 4,color:#343A40
     classDef core fill:#D6E8FF,stroke:#3D7DE8,stroke-width:2px,color:#0B2E6B
     class SC,SA,SL,SP,SM seam
-    class CW,AD,AE done
-    class CF,LL,LT,AI,MF todo
+    class CW,CT,AD,AE,LL,LT,AI,MF done
+    class CF todo
     class CORE core
 style SEAM fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px
 style IMPL fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px

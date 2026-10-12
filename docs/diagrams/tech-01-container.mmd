@@ -1,18 +1,18 @@
 flowchart TB
-    subgraph HOST["单机模式：一个 cordis 容器（M1 的形态）"]
+    subgraph HOST["单机模式：一个 cordis 容器（M1 的形态 · butler 拉起来）"]
         direction TB
-        CH["channel-wechat<br/>ctx.channel 实现"]
-        HUB["hub<br/>认人 · 会话 · 路由 · 审批"]
-        NODE["node · 内嵌本机<br/>跑 agent · 动文件"]
-        AG["agent-dsh<br/>ctx.agent 实现"]
-        AP["approval-im<br/>ctx.approval 实现"]
-        MEM["memory-file<br/>ctx.memory 实现"]
-        ST[("state/<br/>登录态 · 会话 · 记忆")]
-        CH --> HUB --> NODE --> AG
-        HUB --> AP
-        HUB --> MEM
+        CH["ctx.channel<br/>channel-wechat（或 channel-telegram）"]
+        CORE["@butler/core —— hub 角色<br/>认主 · 会话 · 路由 · 排队 · 进度 · 回话 · 审批 · 自检"]
+        NODE["node 角色 · 单机时内嵌<br/>跑 agent · 动文件（同进程，不走 ctx.link）"]
+        AG["ctx.agent<br/>agent-dsh（或 agent-exec）"]
+        AP["ctx.approval<br/>approval-im"]
+        MEM["ctx.memory<br/>memory-file"]
+        ST[("state/<br/>登录态 · 会话 · 记忆 · 审批")]
+        CH --> CORE --> NODE --> AG
+        CORE --> AP
+        CORE --> MEM
         NODE --> MEM
-        HUB --> ST
+        CORE --> ST
         MEM --> ST
     end
     WX["微信服务器"]
@@ -25,7 +25,7 @@ flowchart TB
     classDef store fill:#FFF6D6,stroke:#D9A400,stroke-width:2px,color:#5C4400
     classDef ext fill:#F1F3F5,stroke:#ADB5BD,stroke-dasharray:5 4,color:#343A40
     class CH,AG,AP,MEM impl
-    class HUB,NODE core
+    class CORE,NODE core
     class ST store
     class WX,LLM ext
 style HOST fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px

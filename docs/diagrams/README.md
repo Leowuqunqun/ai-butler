@@ -46,8 +46,8 @@ bash scripts/render-diagrams.sh tech-03  # 只重渲某一张
 
 | 图                         | 内容         | 一句话                         |
 | ------------------------- | ---------- | --------------------------- |
-| `tech-01-container`       | 单机容器       | M1 的形态：hub 内嵌 local node    |
-| `tech-02-multimachine`    | 多机部署       | 中枢 + 多节点，跨网走 `ctx.link`     |
+| `tech-01-container`       | 单机容器       | M1 的形态：core 兼 hub 角色，node 角色内嵌同进程 |
+| `tech-02-multimachine`    | 多机部署       | 中枢（core）+ 多节点（link-lan/node），跨网走 `ctx.link` |
 | `tech-03-seams`           | 包结构与 seam  | seam 包只声明，实现包继承注册           |
 | `tech-04-patch-layers`    | 配置分层       | 内置组合 → 用户覆盖 → 运行期状态         |
 | `tech-05-seq-inbound`     | 入站回合时序     | 一条消息从微信到结果回来                |
@@ -55,7 +55,7 @@ bash scripts/render-diagrams.sh tech-03  # 只重渲某一张
 | `tech-07-seq-multidevice` | 跨设备时序      | 别名解析 + 离线就直说                |
 | `tech-08-seq-media`       | 收图 / 收文件时序 | CDN 下载 + 两种 aes_key 编码 + 解密 |
 | `tech-09-state-approval`  | 审批状态机      | 待决 → 已批准 / 已拒绝              |
-| `tech-10-class-seams`     | seam 类图    | 五个抽象基类与它们的实现                |
+| `tech-10-class-seams`     | seam 类图    | 五个抽象基类与各自的实现（channel-feishu 还是候选） |
 | `tech-11-er-state`        | 数据模型       | `state/` 下的实体与关系            |
 | `tech-12-boot`            | 启动组合       | patch 行怎么变成运行时的 ctx         |
 

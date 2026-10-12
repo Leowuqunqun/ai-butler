@@ -6,7 +6,7 @@ flowchart TB
     E -->|"就绪"| F["实例化并注册到 ctx<br/>成为 ctx.channel / ctx.agent / …"]
     E -->|"缺依赖"| G["该行保持未激活<br/>（不报错，等依赖出现）"]
     G -.->|"依赖后来就绪"| F
-    F --> H["hub 开始工作<br/>收信 · 路由 · 干活"]
+    F --> H["core（hub 角色）开始工作<br/>收信 · 路由 · 干活"]
     H --> I["引导页 / CLI 可用了"]
     classDef cfg fill:#D6E8FF,stroke:#3D7DE8,stroke-width:2px,color:#0B2E6B
     classDef rt fill:#EDE0FF,stroke:#8B5CF6,stroke-width:2px,color:#3B1D6E

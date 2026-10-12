@@ -1,18 +1,18 @@
 flowchart TB
     WX["微信服务器<br/>iLink 长轮询"]
-    subgraph HB["中枢 Hub（常开那台，唯一持有登录态）"]
+    subgraph HB["中枢 · hub 角色（@butler/core）<br/>常开那台，唯一持有登录态"]
         CH["channel-wechat"]
-        RT["路由器<br/>别名 → 节点"]
-        AP["审批协调"]
+        RT["@butler/core<br/>路由器 · 别名 → 节点"]
+        AP["approval-im<br/>审批协调"]
         CH --> RT
         RT --> AP
     end
-    LINK["ctx.link<br/>link-lan　|　link-tailscale　|　link-ssh"]
+    LINK["ctx.link<br/>link-lan　|　link-tailscale<br/>（link-ssh / 中继留给高级用户自己写）"]
     subgraph NA["节点 A · 家里 Mac"]
-        A1["node"] --> A2["agent-dsh"] --> A3["本机文件 / 命令"]
+        A1["node 角色<br/>link-lan/node"] --> A2["agent-dsh"] --> A3["本机文件 / 命令"]
     end
     subgraph NB["节点 B · 公司 PC"]
-        B1["node"] --> B2["agent-dsh"] --> B3["本机文件 / 命令"]
+        B1["node 角色<br/>link-lan/node"] --> B2["agent-dsh"] --> B3["本机文件 / 命令"]
     end
     WX <-->|"收 / 发"| CH
     RT --> LINK

@@ -4,15 +4,16 @@ classDiagram
         +string id
         +start() Promise
         +stop() Promise
-        +onMessage(handler) void
         +sendText(to, text, opts) Promise
         +sendFile(to, path, opts) Promise
         +setTyping(to, on) Promise
+        +onMessage(handler) void
+        +offMessage(handler) void
     }
-    class AgentBackend {
+    class AgentService {
         <<abstract>>
         +string id
-        +run(ctx) Promise~AgentResult~
+        +run(req) Promise~AgentResult~
     }
     class LinkService {
         <<abstract>>
@@ -22,26 +23,34 @@ classDiagram
     }
     class ApprovalService {
         <<abstract>>
-        +ask(req) Promise~boolean~
+        +string id
+        +list() Promise~ApprovalRequest[]~
+        +answer(id, decision, by) Promise~boolean~
     }
     class MemoryService {
         <<abstract>>
+        +string id
         +get(key) Promise
         +set(key, value, meta) Promise
         +list(filter) Promise~MemoryEntry[]~
         +forget(key) Promise
     }
+    note for ChannelService "id / start / stop / sendText / sendFile 是 abstract；setTyping / onMessage / offMessage 基类里有默认实现"
     ChannelService <|-- WechatChannel
+    ChannelService <|-- TelegramChannel
     ChannelService <|-- FeishuChannel
-    AgentBackend <|-- DshAgent
-    AgentBackend <|-- ExecAgent
-    LinkService <|-- LinkLan
-    LinkService <|-- LinkTailscale
-    ApprovalService <|-- ApprovalIm
-    MemoryService <|-- MemoryFile
-    class WechatChannel {<<M0>>}
-    class DshAgent {<<M0>>}
-    class ExecAgent {<<M0>>}
-    class FeishuChannel {<<M3>>}
-    class LinkLan {<<M2>>}
-    class LinkTailscale {<<M2>>}
+    AgentService <|-- DshAgent
+    AgentService <|-- ExecAgent
+    LinkService <|-- LanLink
+    LinkService <|-- TailscaleLink
+    ApprovalService <|-- ImApproval
+    MemoryService <|-- FileMemory
+    class WechatChannel {<<已实现>>}
+    class TelegramChannel {<<已实现>>}
+    class FeishuChannel {<<候选：还没做>>}
+    class DshAgent {<<已实现>>}
+    class ExecAgent {<<已实现>>}
+    class LanLink {<<已实现>>}
+    class TailscaleLink {<<已实现>>}
+    class ImApproval {<<已实现>>}
+    class FileMemory {<<已实现>>}
