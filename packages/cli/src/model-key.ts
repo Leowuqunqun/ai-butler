@@ -45,7 +45,11 @@ export async function verifyModelKey(key: string, opts: VerifyKeyOptions = {}): 
   const base = (opts.baseUrl ?? DEFAULT_MODEL_BASE).replace(/\/+$/, '');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
-  timer.unref?.();
+  // ⚠️ 这里**故意不 unref**：这次探测是调用方正在 await 的事，进程必须等它出结果。
+  // unref 会把它变成"要是没别的活干，就别等这个超时了" —— 于是探测被静默跳过，
+  // 在 Node 20/22 上表现为整条用例被 runner 取消（"Promise resolution is still pending
+  // but the event loop has already resolved"）。真 fetch 有 socket 句柄撑着看不出来，
+  // 换成假 fetch 的测试立刻就露。`finally` 里已经 clearTimeout，不会吊着进程。
 
   try {
     const res = await doFetch(`${base}/models`, {
