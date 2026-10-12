@@ -1,0 +1,18 @@
+{
+  "name": "@butler/dsh-plugin-probe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "验收探针：在真 DSH 里把桥接层跑两轮（用本地假模型）",
+  "type": "module",
+  "exports": {
+    ".": "./index.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@butler/dsh-plugin": "*"
+  }
+}

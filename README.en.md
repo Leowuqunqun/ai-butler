@@ -62,7 +62,7 @@ signing certificate.)
 The full walkthrough (written for a completely non-technical reader, with a tick-off acceptance
 checklist and a "stuck? look here" table; Chinese only, on purpose) →
 [**From zero to driving your computer from WeChat: three steps**](docs/GETTING-STARTED.md)
-Command-line details live in [`packages/cli`](packages/cli) (823 offline tests across the repo).
+Command-line details live in [`packages/cli`](packages/cli) (860 offline tests across the repo).
 
 ---
 
@@ -242,11 +242,13 @@ M3 details (in progress):
 | ★ **Mutation testing exposed a fake green** (flipping `doctor`'s "a missing model key must be ✗" to always-true left the whole cli suite green — only the clean-room e2e caught it, and nobody rebuilds a bundle for one change; three cases now pin all three states, and the same mutation was replayed to prove they bite) | ✅ 3 tests |
 | **The test suite itself survives being attacked** (`pnpm mutate`: forty promises deliberately broken — quoting rules, credential precedence, `--again` never losing the old value, `keyState` honouring the environment, the three self-check outcomes, doctor's three key states, the wrapper pinning Node, PATH idempotence, honest first-run reporting, the three memory promises (list numbering / the prefix reaching the agent / directory permissions), the four approval promises (timeout = deny / the audit line records the real outcome / an unrecordable question fails closed / never guess from a stale list number), and the five upgrade-and-diagnosis promises (top-up only what is missing / an unreadable config is left alone / a broken approval wire must be reported red / `run` must speak up when it sees an old config / a wrong key must be refused on the spot / a definite error must never trap the user / a report must never contain a key / a report must survive broken files / a report lands 0600 / an auto-allow must never be dressed up as the owner's nod / an unreadable grant store must say so / one kind is never recorded twice / an out-of-range index never revokes anything / the opening line is never skipped / repeated on every restart / or written in jargon) — **all forty bleed**) | **Honest first run** (`--no-open` never claims the browser was opened; a failed open is reported as such — autostart runs exactly that path, so a false claim leaves the user waiting for a window that never appears) | ✅ 4 tests (including the **gate** path that `butler run` goes through — where new fields used to get silently dropped) |
 | ✅ `pnpm mutate` = 17/17 |
+| ★ **The WeChat channel is also installable as a DSH plugin** (no repo checkout and no npm release needed: one bundle directory plus `dsh plugin --profile web add file:<dir>/plugin`. It does exactly two things — mount the WeChat channel into DSH, and carry messages into a session and replies back out; the work is still done by DSH itself, so the same session is visible and editable in the DSH UI. One session per contact (`wechat-<16 hex>`), messages from one contact run serially, and **the conversation survives a restart**) | ✅ 37 offline tests + a real-DSH acceptance |
+| ★ **The real-DSH acceptance caught two bugs offline tests can never see** (① when `source.messageId` has no value it is `undefined`, and DSH takes a **lossless JSON snapshot** before writing a session event — the key disappears in the round trip and the whole message is rejected: `session event "agent/inbox/spliced" carries non-JSON-serializable data`; ② the probe first tried to `insert` a second pi-ai row and hit `configurable provider "amazon-bedrock" is already declared` — the template already has that row, and DSH's `config` is **whole replacement**, not a deep merge. Both fixed, with regression tests) | ✅ one-command probe: `bash probe/run.sh` (throwaway profile + local fake model, no network, no cost) |
 
-**823 test cases in total, all runnable offline** (fifteen packages: seam-channel 12 /
+**860 test cases in total, all runnable offline** (sixteen packages: seam-channel 12 /
 seam-agent 12 / seam-link 15 / seam-approval 7 / seam-memory 6 / core 161 /
 channel-wechat 134 / channel-telegram 51 / agent-dsh 40 / agent-exec 26 / approval-im 18 /
-memory-file 9 / link-lan 65 / link-tailscale 34 / cli 233).
+memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 233).
 (The per-item counts in the two tables above are the numbers **as of the day that item landed**, and
 they keep growing with the feature set — **treat the total on this line as authoritative**.)
 

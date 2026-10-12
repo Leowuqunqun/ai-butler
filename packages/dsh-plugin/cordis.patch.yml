@@ -1,0 +1,19 @@
+# DSH 的 profile 组合里插一行 —— 微信通道就挂上了。
+#
+# 为什么只有一行：微信协议的实现（`wechat-agent-bridge`）由这一行**自己**挂进来
+# （见 src/plugin.mjs 里的 `ctx.plugin(WechatChannel, …)`），而不是再写一行
+# 让 DSH 去按包名解析它。少一处模块解析，就少一个"装好了却起不来"的失败点。
+#
+# 想改配置就在下面补 config:（一个字段都不写 = 全用默认值）：
+#
+#   - insert:
+#       - id: butler-wechat
+#         name: '@butler/dsh-plugin'
+#         config:
+#           cwd: /Users/you/code            # 微信里的活在哪干
+#           owner: ['<你的 userId>']         # 认主：只服务这些人（空 = 让第一个说话的人认主）
+#           qrPort: 8099                    # 没登录态时扫码页的端口
+#
+- insert:
+    - id: butler-wechat
+      name: '@butler/dsh-plugin'

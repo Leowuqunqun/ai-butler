@@ -158,6 +158,19 @@ importers:
         specifier: 3.18.4
         version: 3.18.4
 
+  packages/dsh-plugin:
+    dependencies:
+      wechat-agent-bridge:
+        specifier: workspace:*
+        version: link:../channel-wechat
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: 4.0.4
+        version: 4.0.4
+      '@deepseek-ai/schemastery':
+        specifier: 3.18.4
+        version: 3.18.4
+
   packages/link-lan:
     dependencies:
       '@butler/seam-agent':

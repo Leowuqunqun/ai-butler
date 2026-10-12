@@ -51,7 +51,7 @@ curl -fsSL https://github.com/Leowuqunqun/ai-butler/releases/latest/download/ins
 （macOS 第一次双击会被系统拦一下 —— 在它上面右键 →「打开」；我们没买 Apple 的签名证书。）
 
 详细走一遍（给完全不懂技术的人看，附可打勾的验收清单和「卡住了看这里」对照表）→ [**从零到「用微信遥控这台电脑」：三步**](docs/GETTING-STARTED.md)
-命令行细节在 [`packages/cli`](packages/cli)（全仓 823 个离线测试）
+命令行细节在 [`packages/cli`](packages/cli)（全仓 860 个离线测试）
 
 ---
 
@@ -249,10 +249,13 @@ M3 明细（进行中）：
 | **微信出站图片 / 视频**（同一套上传三步，唯独**图片**的 `aes_key` 是 `base64(16 字节原始 key)`、还要带 `image_item.aeskey`（hex）—— 收信端优先读的正是后者；文件与视频都是 `base64(hex(key))`。**写混了不会报错**，只会让对方收到一坨打不开的东西） | ✅ 4 个用例（其中三条把上传的密文用请求里给的 key 解回原文对账） |
 | **这套测试本身经得住砸**（`pnpm mutate`：65 处承诺逐个改坏 —— 引用规则、凭据优先级、`--again` 不许丢旧值、`keyState` 认环境、自检的三种结局、doctor 的 key 三种状态、出站图片/视频的三处、首次运行照实说的一处、装出来的命令钉住 Node、PATH 幂等、记忆的编号/贴给 agent/目录权限三处、审批的超时=不许/账本如实记/记不下就 fail-closed/不拿旧编号硬猜四处、升级补行只补缺的、配置读不动就不补、审批线接不上必须报红、run 看见老配置必须开口、key 贴错了必须当场拦住、拿定了的错不许把人堵死、报告里不许有一个 key、报告碰见坏文件不许崩、报告落盘必须是 0600、长期授权不许冒名写成「主人批的」、授权读不动必须如实说、同一类授权不许记两条、越界编号不许乱收、开门那句不许省/不许每次重启都唠叨/不许带行话三处、跨网配对的落盘/端口/每台一把密钥/发现时的那把/忘掉要真删五处、地址判据不许滤掉 utun 一处、记忆自动抽取五处（认下了不摘/句中也算数/句中不摘/认第一条/存不进去就炸）、自检"没配置过 ≠ 配置坏了"一处、限时授权三处（读不懂也照记/过点还算数/老记录反而不算数）、微信自检五处（抛了就静默跳过/返回垃圾也当没看见/一项都没查却说"都正常"/自己没跑起来还说"都正常"/问的时候把 this 丢了）、开场白里那条逃生口两处（不提／只管"回自检"不管彻底没反应）、微信通道自检两处（没登录也报绿／把「存过」说成「已登录」）—— **65 处全部当场见血**） | ✅ `pnpm mutate` = 65/65 |
 
-**合计 823 个用例，全部离线可跑**（十五个包：seam-channel 12 / seam-agent 12 /
+| ★ **微信通道也能当 DSH 插件装**（不用装这个仓库、也不用等 npm 发布：一个 bundle 目录 + `dsh plugin --profile web add file:<目录>/plugin`。它只做两件事 —— 把微信这条通道挂进 DSH、把消息接进会话再把回复送回去；干活的还是 DSH 自己，所以微信里说的活在同一份会话里也看得见、也能接着改。一个人一个会话（`wechat-<16位>`），同一个人连发串行不打架，**跨重启接得上**） | ✅ 37 个离线测试 + 真机验收 |
+| ★ **真机验收抓出两个离线测试永远看不见的 bug**（① `source.messageId` 没值时是 `undefined`，而 DSH 写事件前要做一次**无损 JSON 快照** —— 键往返之后少一个，整条消息被拒：`session event "agent/inbox/spliced" carries non-JSON-serializable data`；② 探针一开始想 `insert` 一行新的 pi-ai，撞上 `configurable provider "amazon-bedrock" is already declared` —— 模板里本来就有那一行，而 DSH 的 `config` 是**整体替换**不是深合并。两个都修了，回归测试也补了） | ✅ 一条命令的探针：`bash probe/run.sh`（临时 profile + 本机假模型，不出网不花钱） |
+
+**合计 860 个用例，全部离线可跑**（十六个包：seam-channel 12 / seam-agent 12 /
 seam-link 15 / seam-approval 7 / seam-memory 6 / core 161 / channel-wechat 134 /
 channel-telegram 51 / agent-dsh 40 / agent-exec 26 / approval-im 18 / memory-file 9 /
-link-lan 65 / link-tailscale 34 / cli 233）。
+link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 233）。
 （上面两张明细里的用例数是**各条目落地当时**的数，会随功能继续长 —— **当前总数以这一行为准**。）
 
 最有分量的几条证据：

@@ -1,0 +1,42 @@
+# 验收探针的组合。
+#
+# 三条，**顺序是有意的**（同一个 patch 文件里的条目按顺序生效）：
+#
+#   1. 把模型端点指到本地假服务（回声）。
+#      注意是**改写模板已有的那一行**（`llm-pi-ai` 在 headless 模板里本来就有），
+#      不是再 `insert` 一行 —— 插第二行会让内置 provider 重复声明：
+#          LlmError: configurable provider "amazon-bedrock" is already declared
+#      这条也是真机探针抓出来的。
+#      （另外：DSH 的 config 是**整体替换**，所以这里的 providers 就是全集。）
+#   2. 再把默认模型换成假端点上的那个。
+#   3. **最后**才挂探针 —— 它 apply 的时候就要真跑两轮，
+#      前面两条必须先 apply 完。
+#
+# 端口写死 8123：run.sh 启动前会确认它空着。
+# （别在这里用 `!!js` 模板串拼端口 —— 会把 YAML 解析弄坏，DSH 装插件时会校验这个文件。）
+- id: llm-pi-ai
+  name: '@deepseek-ai/dsh-llm-pi-ai'
+  config:
+    providers:
+      probe-local:
+        displayName: Probe Local
+        apiKeyEnv: BUTLER_PROBE_KEY
+        api: openai-completions
+        baseURL: 'http://127.0.0.1:8123/v1'
+        models:
+          - id: probe-model
+            name: Probe Model
+            contextWindow: 8192
+            maxTokens: 1024
+            input:
+              - text
+
+- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config:
+    provider: probe-local
+    model: probe-model
+
+- insert:
+    - id: butler-probe
+      name: '@butler/dsh-plugin-probe'
