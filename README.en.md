@@ -1,5 +1,7 @@
 # AI Butler
 
+[![CI](https://github.com/Leowuqunqun/ai-butler/actions/workflows/ci.yml/badge.svg)](https://github.com/Leowuqunqun/ai-butler/actions/workflows/ci.yml)
+
 [中文](README.md) | English
 
 **Talk like a human in WeChat. Remote-control your own computer.**
@@ -40,7 +42,7 @@ above are still being designed or built:
 
 **Want to use it now** → [**From zero to driving your computer from WeChat: three steps**](docs/GETTING-STARTED.md)
 (written for a completely non-technical reader, with a tick-off acceptance checklist and a "stuck? look here" table; Chinese only, on purpose)
-　　→ command-line details live in [`packages/cli`](packages/cli) (770 offline tests across the repo)
+　　→ command-line details live in [`packages/cli`](packages/cli) (823 offline tests across the repo)
 **Want to see what it's meant to become** → [`docs/`](docs/)
 
 ---
@@ -72,22 +74,27 @@ A non-technical user should be able to walk through these five steps alone (targ
 
 ```
 packages/
-  channel-wechat/      ✅ the WeChat channel (iLink protocol): QR login, send/receive, attachments, pluggable backends
-  channel-telegram/    ✅ the Telegram channel: pure `fetch`, zero deps, long-poll, native reply quotes (the second channel — this is what proves the abstraction)
   seam-channel/        ✅ channel service slot ctx.channel (TypeScript; interfaces only, no implementation)
   seam-agent/          ✅ agent service slot ctx.agent (interfaces only, no implementation)
   seam-link/           ✅ link service slot ctx.link (interfaces only, no implementation)
-  core/                ✅ the kernel: claim ownership, queue, progress updates, reply (recognizes only the two service slots above)
+  seam-approval/       ✅ approval service slot ctx.approval (interfaces only, no implementation)
+  seam-memory/         ✅ memory service slot ctx.memory (interfaces only, no implementation)
+  core/                ✅ the kernel (the hub role): claim ownership, routing, queue, progress, reply, approval relay, `doctor`
+  channel-wechat/      ✅ channel implementation: WeChat (iLink protocol) QR login, send/receive, attachments, pluggable backends
+  channel-telegram/    ✅ channel implementation: Telegram (pure `fetch`, zero deps, long-poll; the second channel — this is what proves the abstraction)
   agent-dsh/           ✅ agent implementation: DSH headless agent (with tool-level progress)
   agent-exec/          ✅ agent implementation: any "one question, one answer" command-line program
-  cli/                 ✅ the entry point `butler`: config + patch overlay → bring up the container → go online
-  link-lan/            ✅ link implementation: LAN (HTTP + SSE, zero dependencies; authentication is a red line)
+  approval-im/         ✅ approval implementation: ask the owner in the conversation (default)
+  memory-file/         ✅ memory implementation: JSON files (0600 + atomic writes)
+  link-lan/            ✅ link implementation: LAN (HTTP + SSE, zero deps; two entry points: hub / node)
   link-tailscale/      ✅ link implementation: across networks (the roster is asked of Tailscale; the wire protocol is link-lan's)
-  (the following are M2–M3 plans)
-  the two seams ctx.approval / ctx.memory
-  hub/ node/ installer/
+  cli/                 ✅ the entry point `butler`: config + patch overlay → bring up the container → go online / `doctor`
+  (the following are not packages yet)
+  channel-feishu/      —— candidate: a third channel
+  hub/ node/           —— the roles already have owners: hub is `core/`, node is `link-lan/node`
+  installer/           —— the installer script already ships at the repo root (install.sh); the package isn't split out yet
 docs/                  product and technical architecture, 18 diagrams
-scripts/               diagram rendering scripts
+scripts/               diagram rendering + docs/package-structure checks + mutation testing
 ```
 
 ---
@@ -217,10 +224,10 @@ M3 details (in progress):
 | **The test suite itself survives being attacked** (`pnpm mutate`: forty promises deliberately broken — quoting rules, credential precedence, `--again` never losing the old value, `keyState` honouring the environment, the three self-check outcomes, doctor's three key states, the wrapper pinning Node, PATH idempotence, honest first-run reporting, the three memory promises (list numbering / the prefix reaching the agent / directory permissions), the four approval promises (timeout = deny / the audit line records the real outcome / an unrecordable question fails closed / never guess from a stale list number), and the five upgrade-and-diagnosis promises (top-up only what is missing / an unreadable config is left alone / a broken approval wire must be reported red / `run` must speak up when it sees an old config / a wrong key must be refused on the spot / a definite error must never trap the user / a report must never contain a key / a report must survive broken files / a report lands 0600 / an auto-allow must never be dressed up as the owner's nod / an unreadable grant store must say so / one kind is never recorded twice / an out-of-range index never revokes anything / the opening line is never skipped / repeated on every restart / or written in jargon) — **all forty bleed**) | **Honest first run** (`--no-open` never claims the browser was opened; a failed open is reported as such — autostart runs exactly that path, so a false claim leaves the user waiting for a window that never appears) | ✅ 4 tests (including the **gate** path that `butler run` goes through — where new fields used to get silently dropped) |
 | ✅ `pnpm mutate` = 17/17 |
 
-**770 test cases in total, all runnable offline** (fifteen packages: seam-channel 12 /
-seam-agent 12 / seam-link 15 / seam-memory 6 / seam-approval 7 / channel-wechat 130 /
-channel-telegram 51 / agent-exec 26 / agent-dsh 40 / core 129 / cli 228 / link-lan 65 /
-link-tailscale 22 / memory-file 9 / approval-im 18).
+**823 test cases in total, all runnable offline** (fifteen packages: seam-channel 12 /
+seam-agent 12 / seam-link 15 / seam-approval 7 / seam-memory 6 / core 161 /
+channel-wechat 134 / channel-telegram 51 / agent-dsh 40 / agent-exec 26 / approval-im 18 /
+memory-file 9 / link-lan 65 / link-tailscale 34 / cli 233).
 (The per-item counts in the two tables above are the numbers **as of the day that item landed**, and
 they keep growing with the feature set — **treat the total on this line as authoritative**.)
 

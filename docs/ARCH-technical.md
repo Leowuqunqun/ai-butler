@@ -74,7 +74,7 @@ dsh 的拆法是 **"seam 接口包 + 各自独立的实现包"**（`dsh-bash-loc
 
 ```
 packages/
-├── core/                    # ✅ 已建：内核（认主/认路/排队/进度/回话/记忆/审批中转/长期授权（可带期限）/自检（CLI + 微信）/开场白/记忆自动抽取，159 个测试）
+├── core/                    # ✅ 已建：内核（认主/认路/排队/进度/回话/记忆/审批中转/长期授权（可带期限）/自检（CLI + 微信）/开场白/记忆自动抽取，161 个测试）
 │                            #    必需下面两个能力位；ctx.link 可选（只有一台电脑的人不装）
 ├── seam-channel/            # ✅ 已建：ctx.channel 接口（TypeScript，12 个测试）
 ├── seam-agent/              # ✅ 已建：ctx.agent 接口（TypeScript，12 个测试）
@@ -82,7 +82,7 @@ packages/
 ├── seam-approval/           # ✅ 已落地：ctx.approval 接口（TypeScript，7 个测试）
 ├── seam-memory/             # ✅ 已落地：ctx.memory 接口（TypeScript，6 个测试）
 │
-├── channel-wechat/          # ✅ M0 已完成；✅ M1 已接上 cordis（一个包两个入口，见下；130 个测试）
+├── channel-wechat/          # ✅ M0 已完成；✅ M1 已接上 cordis（一个包两个入口，见下；134 个测试）
 ├── channel-telegram/        # ✅ M3：第二个通道（纯 fetch 零依赖、51 个测试）。
 │                            #    它的价值不在功能，而在**证明换一个 IM 不用改核心层** ——
 │                            #    接进来只动了配置里那一行 name（`butler init --im telegram`）
@@ -96,11 +96,11 @@ packages/
 ├── approval-auto/           # 候选：测试 / 自动化用（还没有真需求，所以还没做）
 ├── memory-file/             # ✅ 已落地：JSON 文件（9 个测试；0600 + 原子写 + 顺序靠 seq，不靠时钟）
 │
-├── hub/                     # 中枢编排
-├── node/                    # 设备节点
-├── cli/                     # ✅ 入口 `butler`：配置 → 装容器 → 上线（含引导页）/ doctor 自检（228 个测试）
+├── hub/                     # 规划中：独立的中枢编排包 —— 这个角色现在由 core/ 承担（单机时同进程）
+├── node/                    # 规划中：独立的设备节点包 —— 现在由 link-lan 的 /node 子入口承担
+├── cli/                     # ✅ 入口 `butler`：配置 → 装容器 → 上线（含引导页）/ doctor 自检（233 个测试）
 │                            #    含 M3 的第一块：`butler init`（配置由程序写，用户一个字都不用填；老配置升级时缺的能力行自己补）
-└── installer/               # M3：引导器 + 双击壳（`install.sh` / `install.command`，与 CLI 同源）
+└── installer/               # 半落地：脚本已在仓库根目录（install.sh 生成并双击 install.command，与 CLI 同源），包还没拆出来
 ```
 
 **命名约定**（学 dsh）：`seam-*` 只声明接口不实现；`<域>-<实现>` 是具体实现；
