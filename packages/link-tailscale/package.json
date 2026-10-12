@@ -1,0 +1,45 @@
+{
+  "name": "@butler/link-tailscale",
+  "version": "0.1.0",
+  "description": "ctx.link 的实现：尾巴网络（Tailscale）链路。换掉的是「怎么找到那台机器」，线上跑的还是 link-lan 那套 HTTP + SSE",
+  "type": "module",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.json && node --test test/*.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@butler/seam-link": "workspace:*",
+    "@butler/link-lan": "workspace:*"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/schemastery": "3.18.4"
+  },
+  "keywords": [
+    "cordis",
+    "plugin",
+    "link",
+    "tailscale",
+    "multi-device"
+  ]
+}

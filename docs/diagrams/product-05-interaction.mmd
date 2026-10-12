@@ -1,0 +1,28 @@
+flowchart TB
+    subgraph IN["主人发进来"]
+        direction LR
+        I1["文字"]
+        I2["语音<br/>微信已转写"]
+        I3["图片"]
+        I4["文件"]
+        I5["引用某条"]
+    end
+    CORE["管家理解意图"]
+    subgraph OUT["管家回出去"]
+        direction LR
+        O1["文本答复<br/>带 ↩ 引用前缀"]
+        O2["文件 / 图片"]
+        O3["进度提示<br/>长任务"]
+        O4["审批询问<br/>要动手前"]
+    end
+    IN --> CORE --> OUT
+    ESC["逃生舱（不主动教，但查得到）<br/>/help　/devices　/memory　/forget　/stop"]
+    OUT -.-> ESC
+    classDef io fill:#D6E8FF,stroke:#3D7DE8,stroke-width:2px,color:#0B2E6B
+    classDef core fill:#EDE0FF,stroke:#8B5CF6,stroke-width:2px,color:#3B1D6E
+    classDef esc fill:#F1F3F5,stroke:#ADB5BD,stroke-dasharray:5 4,color:#343A40
+    class I1,I2,I3,I4,I5,O1,O2,O3,O4 io
+    class CORE core
+    class ESC esc
+style IN fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px
+style OUT fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px

@@ -1,39 +1,24 @@
 {
-  "name": "wechat-agent-bridge",
-  "version": "0.1.0",
-  "description": "把微信变成你的 agent 遥控器 —— 个人微信扫码登录，长轮询收消息，交给可插拔的 agent 后端执行，支持回文本与文件",
-  "type": "module",
+  "name": "wechat-agent-bridge-workspace",
+  "private": true,
   "license": "MIT",
-  "bin": {
-    "wechat-agent-bridge": "src/cli.mjs"
-  },
-  "files": [
-    "src",
-    "examples",
-    "docs",
-    "README.md",
-    "LICENSE"
-  ],
-  "scripts": {
-    "start": "node src/cli.mjs run",
-    "qr": "node src/cli.mjs qr",
-    "status": "node src/cli.mjs status",
-    "test": "node --test test/smoke.mjs"
-  },
+  "type": "module",
+  "description": "AI 管家 —— 用微信以自然语言遥控个人电脑、管理多终端设备",
   "engines": {
     "node": ">=20"
   },
-  "dependencies": {
-    "qrcode": "^1.5.4"
+  "packageManager": "pnpm@10.32.1",
+  "scripts": {
+    "build": "pnpm -r --if-present build",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "check:docs": "node scripts/check-docs.mjs",
+    "check:packages": "node scripts/check-packages.mjs",
+    "mutate": "node scripts/mutate.mjs",
+    "diagrams": "bash scripts/render-diagrams.sh"
   },
-  "keywords": [
-    "wechat",
-    "weixin",
-    "ilink",
-    "agent",
-    "bot",
-    "dsh",
-    "claude-code",
-    "remote-control"
-  ]
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.3"
+  }
 }

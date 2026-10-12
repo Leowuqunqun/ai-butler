@@ -1,0 +1,48 @@
+{
+  "name": "@butler/agent-dsh",
+  "version": "0.1.0",
+  "description": "ctx.agent 的实现：调用 DSH 本体的 headless agent 当大脑",
+  "type": "module",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json",
+    "./templates/default.patch.yml": "./templates/default.patch.yml"
+  },
+  "files": [
+    "lib",
+    "templates"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.json && tsc -p tsconfig.fixture.json && node --test test/*.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@butler/seam-agent": "workspace:*"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/schemastery": "3.18.4",
+    "@butler/core": "workspace:*",
+    "@butler/seam-channel": "workspace:*"
+  },
+  "keywords": [
+    "cordis",
+    "plugin",
+    "agent",
+    "dsh",
+    "headless"
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "name": "@butler/core",
+  "version": "0.1.0",
+  "description": "AI 管家的内核：把 ctx.channel 收到的消息交给 ctx.agent，再把结果发回去",
+  "type": "module",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.json && tsc -p tsconfig.fixture.json && node --test test/*.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@butler/seam-agent": "workspace:*",
+    "@butler/seam-channel": "workspace:*",
+    "@butler/seam-link": "workspace:*",
+    "@butler/seam-memory": "workspace:*",
+    "@butler/seam-approval": "workspace:*"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4"
+  },
+  "devDependencies": {
+    "@butler/memory-file": "workspace:*",
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/schemastery": "3.18.4",
+    "@butler/seam-link": "workspace:*"
+  },
+  "keywords": [
+    "cordis",
+    "plugin",
+    "core",
+    "agent",
+    "butler"
+  ]
+}

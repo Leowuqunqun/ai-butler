@@ -1,0 +1,21 @@
+sequenceDiagram
+    autonumber
+    participant U as 主人
+    participant H as hub
+    participant D as devices 注册表
+    participant L as ctx.link
+    participant N as 节点 · 家里 Mac
+
+    U->>H: 「家里那台电脑上有个叫报销的文件夹，找出来发我」
+    H->>D: 解析别名「家里那台」
+    D-->>H: node-home
+    alt 在线
+        H->>L: connect(node-home)
+        L->>N: 建立链路
+        H->>N: agent.run
+        N-->>H: 结果 + 附件
+        H-->>U: 找到了，发你
+    else 离线
+        H-->>U: 那台电脑现在离线（最后在线 3 小时前）
+        Note over H: 不硬试，直接说清楚
+    end

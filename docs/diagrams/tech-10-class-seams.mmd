@@ -1,0 +1,47 @@
+classDiagram
+    class ChannelService {
+        <<abstract>>
+        +string id
+        +start() Promise
+        +stop() Promise
+        +onMessage(handler) void
+        +sendText(to, text, opts) Promise
+        +sendFile(to, path, opts) Promise
+        +setTyping(to, on) Promise
+    }
+    class AgentBackend {
+        <<abstract>>
+        +string id
+        +run(ctx) Promise~AgentResult~
+    }
+    class LinkService {
+        <<abstract>>
+        +string id
+        +discover() Promise~DeviceInfo[]~
+        +connect(deviceId) Promise~LinkSession~
+    }
+    class ApprovalService {
+        <<abstract>>
+        +ask(req) Promise~boolean~
+    }
+    class MemoryService {
+        <<abstract>>
+        +get(key) Promise
+        +set(key, value, meta) Promise
+        +list(filter) Promise~MemoryEntry[]~
+        +forget(key) Promise
+    }
+    ChannelService <|-- WechatChannel
+    ChannelService <|-- FeishuChannel
+    AgentBackend <|-- DshAgent
+    AgentBackend <|-- ExecAgent
+    LinkService <|-- LinkLan
+    LinkService <|-- LinkTailscale
+    ApprovalService <|-- ApprovalIm
+    MemoryService <|-- MemoryFile
+    class WechatChannel {<<M0>>}
+    class DshAgent {<<M0>>}
+    class ExecAgent {<<M0>>}
+    class FeishuChannel {<<M3>>}
+    class LinkLan {<<M2>>}
+    class LinkTailscale {<<M2>>}

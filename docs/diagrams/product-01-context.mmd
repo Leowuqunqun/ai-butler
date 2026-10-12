@@ -1,0 +1,24 @@
+flowchart TB
+    Owner["主人 · 手机微信<br/>唯一用户，账号即身份"]
+    subgraph TC["腾讯"]
+        WX["微信服务器<br/>消息中转"]
+    end
+    subgraph PC["你的电脑（管家住处）"]
+        Butler["AI 管家<br/>认人 · 理解 · 执行 · 回报"]
+    end
+    LLM["模型服务<br/>主人自备 key"]
+    Dev["其他设备<br/>家里 Mac / 公司 PC"]
+
+    Owner <-->|"说人话 · 发图 · 发文件"| WX
+    WX <-->|"长轮询收信 · 主动发送"| Butler
+    Butler -->|"推理"| LLM
+    Butler <-.->|"跨网指令 · 局域网 / Tailscale"| Dev
+
+    classDef person fill:#FFE7C2,stroke:#E8A33D,stroke-width:2px,color:#5A3A00
+    classDef core fill:#D6E8FF,stroke:#3D7DE8,stroke-width:2px,color:#0B2E6B
+    classDef ext fill:#F1F3F5,stroke:#ADB5BD,stroke-dasharray:5 4,color:#343A40
+    class Owner person
+    class Butler,Dev core
+    class WX,LLM ext
+style TC fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px
+style PC fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px

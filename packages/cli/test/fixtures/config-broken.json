@@ -1,0 +1,6 @@
+{
+  "plugins": [
+    { "id": "broken", "name": "./plugins/broken.mjs" },
+    { "id": "core", "name": "./plugins/core-stub.mjs", "config": { "workspace": "/tmp" } }
+  ]
+}

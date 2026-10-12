@@ -1,0 +1,31 @@
+flowchart TB
+    WX["微信服务器<br/>iLink 长轮询"]
+    subgraph HB["中枢 Hub（常开那台，唯一持有登录态）"]
+        CH["channel-wechat"]
+        RT["路由器<br/>别名 → 节点"]
+        AP["审批协调"]
+        CH --> RT
+        RT --> AP
+    end
+    LINK["ctx.link<br/>link-lan　|　link-tailscale　|　link-ssh"]
+    subgraph NA["节点 A · 家里 Mac"]
+        A1["node"] --> A2["agent-dsh"] --> A3["本机文件 / 命令"]
+    end
+    subgraph NB["节点 B · 公司 PC"]
+        B1["node"] --> B2["agent-dsh"] --> B3["本机文件 / 命令"]
+    end
+    WX <-->|"收 / 发"| CH
+    RT --> LINK
+    LINK --> NA
+    LINK --> NB
+    classDef core fill:#D6E8FF,stroke:#3D7DE8,stroke-width:2px,color:#0B2E6B
+    classDef seam fill:#EDE0FF,stroke:#8B5CF6,stroke-width:2px,color:#3B1D6E
+    classDef impl fill:#D9F2E3,stroke:#34A853,stroke-width:2px,color:#0B3D1E
+    classDef ext fill:#F1F3F5,stroke:#ADB5BD,stroke-dasharray:5 4,color:#343A40
+    class CH,RT,AP core
+    class LINK seam
+    class A1,A2,A3,B1,B2,B3 impl
+    class WX ext
+style HB fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px
+style NA fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px
+style NB fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px

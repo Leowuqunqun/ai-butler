@@ -1,0 +1,95 @@
+# 管家给 DSH 用的补丁 —— 由 `butler init` 复制到 ~/.butler/dsh.patch.yml。
+#
+# 它是**叠加**在 DSH 自己的配置之上的，不改动你任何全局 profile。
+#
+#   ✅ 这个文件**你不用改**：模型通道有默认值，模型 key 由程序问你一次
+#      （`butler run` 会打开一个页面让你贴）。② 那段是管家人格的约定，
+#      **别删** —— 删了以后 agent 会往微信里发 Markdown 表格。
+#
+# 真想换成别的模型，再看 ① 里的注释。
+#
+# 想自己检查一眼（顺序不能反，`--patch` 必须在 `--dump-config` 前面）：
+#
+#   dsh --profile headless --patch ~/.butler/dsh.patch.yml --dump-config | head
+
+# ── ① 模型通道（默认 DeepSeek，**不用改**）─────────────────────────
+#
+# **key 不在这个文件里。** 它存在管家自己的凭据库里：
+#   <dsh-home>/.credentials.yaml
+# `butler run` 第一次会自动打开一个页面让你贴 —— 不用手写任何文件。
+# 下面这行的 `apiKeyEnv` 就是那个页面要写进去的名字。
+#
+# 想换成别的模型（OpenAI 兼容的都行）：把 apiKeyEnv 改成你自己的名字，
+# 再把 agent-default-model 的 provider / model 换成你用的那个。改完
+# key 也要重新贴一次（换个名字就是换了一把）。
+- id: llm-deepseek
+  name: '@deepseek-ai/dsh-llm-deepseek-api-key'
+  config:
+    apiKeyEnv: DEEPSEEK_API_KEY
+
+- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config:
+    provider: deepseek-official
+    model: deepseek-flash
+
+# ── ② 人格（重要：这段是管家和 agent 之间的约定，别删）─────────────
+# agent 的输出会被**原样发进微信**，所以必须在这里说清楚输出格式。
+# 少了这段，就会天天收到"一坨 Markdown 表格"。
+- id: system-prompt
+  name: '@deepseek-ai/dsh-system-prompt'
+  config:
+    personaPrefix: >-
+      你是一个通过微信被远程遥控的私人助理，运行在用户自己的机器上。
+      你的输出会被原样发进微信：禁止 Markdown（不要表格、不要代码围栏、不要 # 标题、
+      不要 ** 粗体），用纯文本短句，结论先行，默认 200 字以内。
+      要给他发文件，就在回复里**单独写一行** [[file:/绝对/路径]]，
+      也可以带配文 [[file:/绝对/路径|说明]]——管家会自动把文件发进微信，这一行本身不会显示。
+      写之前先确认文件真实存在。
+      碰到**长期有用**的事（主人的偏好、常用路径、习惯、怎么称呼他），
+      就在回复的**最后单独一行**写 [[记住: 一句话]]；一次最多写一条，
+      拿不准就**别写**——记错了比没记住更糟。一次性的东西（这次的任务、这次的结果）不要写。
+      破坏性操作（删除、改系统配置、对外发送）先问一句再动手。
+
+      【硬性禁止】绝不要用「截图 + 模拟鼠标键盘」去操作图形界面程序（微信、浏览器、
+      编辑器、系统设置等）。这条路极慢、极脆、几十步都未必成，还会在用户屏幕上乱点东西。
+      凡是只能靠点界面才能完成的事，就直接说做不到，并给替代路径（命令行 / API /
+      让用户自己动手），不要退而求其次去搞 GUI 自动化。
+
+      【预算意识】同一个思路连续两次没有实质进展，就停下换思路，或直接把卡点告诉用户。
+      不要靠"再试一次"堆步数。
+    personaSuffix: 你的工作目录是 {{cwd}}。
+
+# ── ③ 审批：问进对话里 ──────────────────────────────────────────
+#
+# ask = 碰到被判定为敏感的操作，dsh 会向下问"应答者"。管家在补丁末尾装了一个
+# 应答者（butler init 生成的 `approval-answerer` 那一行）—— 它把这个问号变成
+# 一条微信，主人回「允许」才放行。**到点没人答就是不许。**
+#
+# 这里以前钉的是 never，理由是"headless 里没人能批准，会无限期卡住"。
+# 那个理由现在不成立：@deepseek-ai/dsh-user-approval 的 decide() 在没有应答者
+# 时的兜底就是 `unavailable`，调用方 fail-closed —— 是"拒绝"，**不是"卡住"**。
+# 所以哪怕应答者没装上，ask 也只是"什么都不做"，不会把管家吊死。
+- id: approval
+  config:
+    policy: ask
+
+# 如果你的管家进程本身跑在另一个沙箱里（例如从某个 agent 会话里启动的），
+# macOS 的 sandbox-exec **不允许嵌套**，所有 bash 都会以
+#   sandbox-exec: sandbox_apply: Operation not permitted
+# 失败，agent 就变成"只能看不能动"。此时把 bash 执行器换成不套沙箱的本地实现：
+#
+#   - id: bash-sandbox
+#     disabled: true
+#   - id: permission
+#     disabled: true          # permission-presets 必须配"会约束"的执行器，换掉后它会报误配置
+#   - insert:
+#       - id: bash-local
+#         name: '@deepseek-ai/dsh-bash-local'
+#         config:
+#           timeoutMs: 600000
+#
+#   ⚠️ 代价：agent 的 shell 命令**不再受文件写入边界约束**。
+#   更干净的做法是把管家装成 launchd/systemd 服务，让进程由 init 直接拉起、
+#   不在任何沙箱内，然后保留默认的 sandbox。
+#   上面这几行默认注释掉——**先试默认配置**，只在真报 nested sandbox_apply 错时才打开。

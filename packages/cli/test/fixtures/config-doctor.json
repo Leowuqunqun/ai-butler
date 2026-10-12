@@ -1,0 +1,7 @@
+{
+  "plugins": [
+    { "id": "channel", "name": "./plugins/check-channel.mjs" },
+    { "id": "agent", "name": "./plugins/agent-stub.mjs" },
+    { "id": "core", "name": "./plugins/core-stub.mjs", "config": { "workspace": "/tmp" } }
+  ]
+}

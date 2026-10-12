@@ -1,0 +1,28 @@
+flowchart LR
+    subgraph M1["审批 · 默认保守，越用越松"]
+        A1["破坏性 / 对外操作<br/>默认都要问"] --> A2["主人说<br/>「这类以后不用问」"] --> A3["写进记忆<br/>下次直接做"]
+        A4["超时 = 拒绝<br/>不问就不做"] -.-> A1
+    end
+    subgraph M2["记忆 · 越用越懂"]
+        B1["偏好<br/>简历都放 Documents/简历/"]
+        B2["事实<br/>工作目录是 ~/work"]
+        B3["授权<br/>整理下载文件夹不用问"]
+    end
+    subgraph M3["主动 · 从应答到管家"]
+        C1["定时<br/>早 8 点报日程"]
+        C2["事件<br/>磁盘满 · 备份失败"]
+        C3["长任务完成<br/>主动说一声"]
+    end
+    subgraph M4["多设备 · 不做隐式猜测"]
+        D1["别名<br/>家里那台 / 公司 PC"]
+        D2["默认 = 中枢本机"]
+        D3["离线就直说离线"]
+    end
+    classDef box fill:#D9F2E3,stroke:#34A853,stroke-width:2px,color:#0B3D1E
+    classDef warn fill:#FFE0E0,stroke:#E5484D,stroke-width:2px,color:#6B0F14
+    class A1,A2,A3,B1,B2,B3,C1,C2,C3,D1,D2,D3 box
+    class A4 warn
+style M1 fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px
+style M2 fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px
+style M3 fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px
+style M4 fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px

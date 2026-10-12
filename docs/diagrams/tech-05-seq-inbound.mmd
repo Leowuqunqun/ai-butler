@@ -1,0 +1,29 @@
+sequenceDiagram
+    autonumber
+    participant U as 主人
+    participant WX as 微信
+    participant CH as channel-wechat
+    participant H as hub
+    participant N as node
+    participant A as agent-dsh
+
+    U->>WX: 「把桌面那堆图按日期整理一下」
+    WX->>CH: 长轮询返回消息
+    CH->>H: InboundMessage
+    H->>H: 认人（不是主人则静默丢弃，不回话）
+    H->>H: 路由　目标设备 = 中枢本机
+    H->>H: 会话　(通道, 用户, 设备) → sessionId
+    H->>N: 下发任务
+    N->>A: run(text, sessionId, cwd)
+    Note over A,N: 收信循环从不被阻塞<br/>干活严格串行
+    A-->>N: onProgress
+    N-->>H: 进度
+    H-->>CH: sendText
+    CH-->>WX: 正在处理…
+    WX-->>U: 正在处理…
+    A-->>N: text + files
+    N-->>H: 结果
+    H->>H: 加 ↩ 引用前缀 → 按长度切块
+    H->>CH: sendText / sendFile
+    CH->>WX: 发送
+    WX->>U: 结果 + 附件

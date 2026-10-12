@@ -1,0 +1,7 @@
+{
+  "plugins": [
+    { "id": "demo", "name": "./plugins/demo.mjs" },
+    { "id": "off", "name": "./plugins/demo.mjs", "disabled": true },
+    { "id": "core", "name": "./plugins/core-stub.mjs", "config": { "workspace": "/tmp" } }
+  ]
+}

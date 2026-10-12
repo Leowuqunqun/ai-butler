@@ -1,0 +1,22 @@
+sequenceDiagram
+    autonumber
+    participant A as agent
+    participant AP as approval-im
+    participant CH as channel
+    participant U as 主人
+
+    A->>AP: ask（要删 32 个文件，风险高）
+    AP->>CH: 要删 32 个文件（都是 .tmp），确认吗？
+    CH->>U: 发出
+    Note over AP: 起 5 分钟计时器
+    alt 主人回「确认」
+        U->>CH: 确认
+        CH->>AP: 匹配到 pending
+        AP-->>A: true
+        A->>A: 执行
+        A->>U: 删了，移到了废纸篓，一周内可捞回
+    else 主人回别的 / 超时
+        AP-->>A: false
+        A->>U: 你说别做，我没做
+    end
+    Note over AP: 超时 = 拒绝<br/>绝不无限等（M0 实测卡死过）

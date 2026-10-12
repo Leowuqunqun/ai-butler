@@ -1,0 +1,18 @@
+flowchart TB
+    A["读内置组合<br/>butler-base/cordis.patch.yml"] --> C
+    B["读用户覆盖<br/>~/.butler/cordis.patch.yml"] --> C
+    C["按 id 合并成最终行集<br/>整行覆盖，last write wins"] --> D
+    D["cordis 逐行加载插件包"] --> E{"该行 inject 的依赖<br/>都就绪了吗？"}
+    E -->|"就绪"| F["实例化并注册到 ctx<br/>成为 ctx.channel / ctx.agent / …"]
+    E -->|"缺依赖"| G["该行保持未激活<br/>（不报错，等依赖出现）"]
+    G -.->|"依赖后来就绪"| F
+    F --> H["hub 开始工作<br/>收信 · 路由 · 干活"]
+    H --> I["引导页 / CLI 可用了"]
+    classDef cfg fill:#D6E8FF,stroke:#3D7DE8,stroke-width:2px,color:#0B2E6B
+    classDef rt fill:#EDE0FF,stroke:#8B5CF6,stroke-width:2px,color:#3B1D6E
+    classDef warn fill:#FFF6D6,stroke:#D9A400,stroke-width:2px,color:#5C4400
+    classDef ok fill:#D9F2E3,stroke:#34A853,stroke-width:2px,color:#0B3D1E
+    class A,B,C cfg
+    class D,E rt
+    class G warn
+    class F,H,I ok

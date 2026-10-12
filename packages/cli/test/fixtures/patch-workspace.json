@@ -1,0 +1,5 @@
+{
+  "plugins": [
+    { "id": "core", "name": "./plugins/core-stub.mjs", "config": { "workspace": "/被补丁改过的目录" } }
+  ]
+}

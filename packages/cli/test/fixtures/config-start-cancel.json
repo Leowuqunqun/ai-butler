@@ -1,0 +1,6 @@
+{
+  "plugins": [
+    { "id": "demo", "name": "./plugins/demo.mjs" },
+    { "id": "core", "name": "./plugins/core-stub-fails.mjs", "config": { "message": "登录已被取消" } }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "name": "@butler/link-lan",
+  "version": "0.1.0",
+  "description": "ctx.link 的实现：局域网链路（HTTP + SSE，零依赖）。中枢侧 @butler/link-lan，节点侧 @butler/link-lan/node",
+  "type": "module",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json",
+    "./node": {
+      "types": "./lib/types/node.d.ts",
+      "default": "./lib/node.js"
+    }
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.json && node --test test/*.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@butler/seam-link": "workspace:*",
+    "@butler/seam-agent": "workspace:*"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/schemastery": "3.18.4"
+  },
+  "keywords": [
+    "cordis",
+    "plugin",
+    "link",
+    "lan",
+    "multi-device"
+  ]
+}

@@ -1,0 +1,20 @@
+sequenceDiagram
+    autonumber
+    participant U as 主人
+    participant CH as channel-wechat
+    participant CDN as 微信 CDN
+    participant F as 本地缓存
+    participant A as agent（多模态）
+
+    U->>CH: 发一张图片
+    Note over CH: item_list[i].image_item.media<br/>encrypt_query_param + aes_key
+    CH->>CH: 拼下载地址 /download?encrypted_query_param=…
+    CH->>CH: 解析 aes_key
+    Note over CH: base64(raw 16 字节) → 图片<br/>base64(hex 32 字符) → 文件/语音/视频<br/>两种编码真实流量里同时存在
+    CH->>CDN: 下载密文
+    CDN-->>CH: 密文
+    CH->>CH: AES-128-ECB 解密
+    CH->>F: 落成本地文件
+    CH->>A: files = [本地路径]
+    A-->>CH: 这是发票，金额 1280，要我记到报销台账吗？
+    CH-->>U: 转达

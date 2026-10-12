@@ -1,5 +1,9 @@
+# 依赖与构建产物
 node_modules/
 package-lock.json
+lib/
+dist/
+*.tsbuildinfo
 
 # 运行期状态：里面有 bot 凭据（等同微信号登录态）与全部收发流水，绝不能进仓
 state/
@@ -10,3 +14,9 @@ dsh-home/
 config.json
 
 .DS_Store
+
+# 架构图：文档引用 .svg；.png 只是聊天/预览用的产物，不入库
+docs/diagrams/*.png
+
+# 测试夹具的编译产物
+packages/*/test/.build/

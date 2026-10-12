@@ -1,0 +1,44 @@
+flowchart LR
+    subgraph SEAM["seam-* ｜ 只声明抽象接口，不含实现"]
+        direction TB
+        SC["seam-channel<br/>ctx.channel"]
+        SA["seam-agent<br/>ctx.agent"]
+        SL["seam-link<br/>ctx.link"]
+        SP["seam-approval<br/>ctx.approval"]
+        SM["seam-memory<br/>ctx.memory"]
+    end
+    subgraph IMPL["实现包 ｜ 继承基类，default 导出即插件"]
+        direction TB
+        CW["channel-wechat ✅M0"]
+        CF["channel-feishu M3"]
+        AD["agent-dsh ✅M0"]
+        AE["agent-exec ✅M0"]
+        LL["link-lan M2"]
+        LT["link-tailscale M2"]
+        AI["approval-im"]
+        MF["memory-file"]
+    end
+    CORE["core<br/>cordis 容器 · patch 加载 · 事件总线"]
+    CW --> SC
+    CF -.-> SC
+    AD --> SA
+    AE --> SA
+    LL --> SL
+    LT --> SL
+    AI --> SP
+    MF --> SM
+    SC --> CORE
+    SA --> CORE
+    SL --> CORE
+    SP --> CORE
+    SM --> CORE
+    classDef seam fill:#EDE0FF,stroke:#8B5CF6,stroke-width:2px,color:#3B1D6E
+    classDef done fill:#D9F2E3,stroke:#34A853,stroke-width:2px,color:#0B3D1E
+    classDef todo fill:#F1F3F5,stroke:#ADB5BD,stroke-dasharray:5 4,color:#343A40
+    classDef core fill:#D6E8FF,stroke:#3D7DE8,stroke-width:2px,color:#0B2E6B
+    class SC,SA,SL,SP,SM seam
+    class CW,AD,AE done
+    class CF,LL,LT,AI,MF todo
+    class CORE core
+style SEAM fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px
+style IMPL fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px

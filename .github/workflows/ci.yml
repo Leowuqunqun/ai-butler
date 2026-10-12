@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 20 是声明的最低版本；依赖树里没有任何 Node 22+ 独有 API，所以排上矩阵验证
+        node: [20, 22, 24]
+    steps:
+      - uses: actions/checkout@v4
+
+      # ⚠️ 故意**不写** version：本仓 package.json 里有 `packageManager: pnpm@10.32.1`，
+      #    两处都指定就会打架（action 的文档也明确说"有 packageManager 字段时省略 version"）。
+      #    让它读 packageManager，装的才是**锁文件对应的那个确切版本**，而不是任意 10.x。
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 构建（TypeScript 包 → lib/）
+        run: pnpm build
+
+      - name: 类型检查
+        run: pnpm typecheck
+
+      - name: 文档体检（断链 / 锚点 / 引用了被 gitignore 的文件）
+        run: pnpm check:docs
+
+      - name: 打包自检（装出来的包是不是完整的）
+        run: pnpm check:packages
+
+      - name: 跑测试（全部离线：不连网、不需要微信账号、不会真的发消息）
+        run: pnpm test

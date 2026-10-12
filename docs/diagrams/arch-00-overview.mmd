@@ -1,0 +1,54 @@
+%%{init: {"flowchart": {"wrappingWidth": 420}}}%%
+flowchart TB
+    OWNER["主人 · 手机微信<br/>唯一用户，账号即身份"]
+    WXSRV["微信服务器 iLink<br/>消息中转"]
+    LLM["模型服务<br/>主人自备 key"]
+    OTHER["别的电脑 · node<br/>只跑 agent，不登录微信"]
+
+    subgraph BOX["你的电脑 · 一个 cordis 容器（butler run 拉起来）"]
+        direction TB
+        CH["② 对话层<br/>channel-wechat<br/>channel-telegram<br/>扫码 · 收发 · 语音 · 图/文件"]
+        SEAMCH["seam-channel · ctx.channel"]
+        CORE["@butler/core<br/>认主 · 排队 · 进度播报 · 自检 · 回话"]
+        subgraph L3["③ 能力层"]
+            direction LR
+            AG["agent 后端 · 可插拔<br/>agent-dsh / agent-exec"]
+            MEM["memory-file · approval-im<br/>记忆 · 要动手先问"]
+        end
+        subgraph L4["④ 设备层"]
+            direction LR
+            LNK["link-lan<br/>link-tailscale<br/>局域网 · 跨网"]
+        end
+        ST[("state/ · ⑤ 信任层落在这儿<br/>owner · token · memory · approvals")]
+    end
+
+    INST["① 接入层 · 一行装上<br/>install.command / install.sh<br/>butler init / run / doctor / autostart"]
+
+    OWNER <-->|"说人话 · 发图 · 发文件"| WXSRV
+    WXSRV <-->|"长轮询收信 / 主动发送"| CH
+    CH --> SEAMCH --> CORE
+    CORE --> AG
+    CORE --> MEM
+    CORE --> LNK
+    AG -->|"推理"| LLM
+    LNK <-.->|"指令 / 结果"| OTHER
+    MEM --> ST
+    CORE --> ST
+    INST -.->|"装 / 起 / 修"| CORE
+
+    classDef person fill:#FFE7C2,stroke:#E8A33D,stroke-width:2px,color:#5A3A00
+    classDef core fill:#D6E8FF,stroke:#3D7DE8,stroke-width:2px,color:#0B2E6B
+    classDef seam fill:#EDE0FF,stroke:#8B5CF6,stroke-width:2px,color:#3B1D6E
+    classDef impl fill:#D9F2E3,stroke:#34A853,stroke-width:2px,color:#0B3D1E
+    classDef store fill:#FFF6D6,stroke:#D9A400,stroke-width:2px,color:#5C4400
+    classDef ext fill:#F1F3F5,stroke:#ADB5BD,stroke-dasharray:5 4,color:#343A40
+    class OWNER person
+    class CORE core
+    class SEAMCH seam
+    class INST,CH,AG,MEM,LNK impl
+    class ST store
+    class WXSRV,LLM,OTHER ext
+
+style L3 fill:#FFFFFF,stroke:#ADB5BD,stroke-width:1px
+style L4 fill:#FFFFFF,stroke:#ADB5BD,stroke-width:1px
+style BOX fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px
