@@ -27,6 +27,12 @@ async function setup(extra = {}) {
   const home = mkdtempSync(join(tmpdir(), 'dsh-home-'));
   const work = mkdtempSync(join(tmpdir(), 'dsh-work-'));
   const ctx = new Context();
+  // 假 dsh 是 **Node 写的**（实现里 spawn 时继承 process.env），所以它启动时可能先往 stderr
+  // 打一句 Node 自己的警告 —— 设了 NODE_USE_ENV_PROXY 的机器上，Node 22 会打
+  // "(node:1) [UNDICI-EHPA] Warning: ..." 外加一行 "Use `node --trace-warnings ...`"。
+  // 那两行会把"stderr 为空 → 至少报退出码"和"只取最后一行"这两条用例的前提搅掉。
+  // 关掉夹具自己的噪音；真 dsh 打不打警告不归这些用例管。
+  process.env.NODE_NO_WARNINGS = '1';
   await ctx.plugin(DshAgent, { bin: FAKE, patchFile: '/tmp/patch.yml', home, timeoutMs: 10_000, ...extra });
   return {
     ctx,
