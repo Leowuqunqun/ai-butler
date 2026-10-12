@@ -33,10 +33,25 @@
 | ④ 设备 | 多终端（中枢 + 节点 + 别名路由 + 微信里配对收设备） | ✅ **能用**（两台机器，微信里 `@家里那台` 就指过去） |
 | ⑤ 信任 | 审批、审计 | 📐 已设计，未开工 |
 
-**想现在就用** → [**从零到「用微信遥控这台电脑」：三步**](docs/GETTING-STARTED.md)
-（给完全不懂技术的人看的，附一份可打勾的验收清单和「卡住了看这里」对照表）
-　　→ 命令行细节在 [`packages/cli`](packages/cli)（全仓 823 个离线测试）
 **想看要做成什么样** → [`docs/`](docs/)
+
+---
+
+## 装（给要用的人）
+
+**一行命令**（macOS / Linux；不用先装 Node —— 它会自己下一个并校验 SHA256）：
+
+```sh
+curl -fsSL https://github.com/Leowuqunqun/ai-butler/releases/latest/download/install.sh | sh
+```
+
+不想碰终端，就下载整包、解压、**双击 `install.command`** → <https://github.com/Leowuqunqun/ai-butler/releases/latest>
+
+装完浏览器会弹出一个页面，**只剩两步**：贴一次模型 key、拿手机扫一次码。
+（macOS 第一次双击会被系统拦一下 —— 在它上面右键 →「打开」；我们没买 Apple 的签名证书。）
+
+详细走一遍（给完全不懂技术的人看，附可打勾的验收清单和「卡住了看这里」对照表）→ [**从零到「用微信遥控这台电脑」：三步**](docs/GETTING-STARTED.md)
+命令行细节在 [`packages/cli`](packages/cli)（全仓 823 个离线测试）
 
 ---
 

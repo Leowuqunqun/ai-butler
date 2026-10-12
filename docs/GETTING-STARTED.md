@@ -16,8 +16,8 @@
 已经有的话先看看里面是不是你的数据，别硬来。
 
 ```sh
-# ① 解开分发包，装（**离线**，十几秒：包里的 install.sh 用自带的 tarballs，不去网上取）
-mkdir -p ~/butler-试 && tar -xzf butler-installer-0.1.0.tar.gz -C ~/butler-试
+# ① 解开分发包（名字里的版本号以后会变，所以这里用通配），装（**离线**，十几秒：包里的 install.sh 用自带的 tarballs，不去网上取）
+mkdir -p ~/butler-试 && tar -xzf butler-installer-*.tar.gz -C ~/butler-试
 sh ~/butler-试/install.sh --no-start
 
 # ② 写配置 —— **默认就是微信**，你什么都不用填
@@ -133,14 +133,39 @@ env PATH=/usr/bin:/bin sh install.sh --home /tmp/butler-演练/home --prefix /tm
 
 </details>
 
+## 第 0 步：把它拿到手（约 1 分钟）
+
+两条路，挑一条走。**装出来的东西一模一样** —— 路 A 拿到的就是路 B 那个包，区别只是谁替你解开。
+
+**路 A：一行命令**（会打字就走这条，最快）
+
+打开「终端」（macOS：聚焦搜索里敲"终端"），把下面这行**整行**粘进去、回车：
+
+```sh
+curl -fsSL https://github.com/Leowuqunqun/ai-butler/releases/latest/download/install.sh | sh
+```
+
+它会一路装完并启动 —— **直接跳到第 2 步**。
+
+**路 B：下载整包、双击**（不想碰终端就走这条）
+
+1. 打开 <https://github.com/Leowuqunqun/ai-butler/releases/latest>
+2. 下那个 `butler-installer-….tar.gz`（几百 KB；名字里带版本号的和带 `latest` 的**内容一样**，下哪个都行）
+3. **双击解开**（Mac 自带的解压就行）→ 接着看第 1 步
+
+> 卡住了随时可以换另一条路 —— 两条路装完是同一个东西。
+
+---
+
 ## 第 1 步：装上（约 2 分钟）
 
-1. 拿到 `butler-installer-0.1.0.tar.gz`，**双击解开**（Mac 自带的解压就行）
-2. 里面有个 `install.command`，**双击它**
+> 走了路 A 的话，这一步已经做完了 —— 直接跳到第 2 步。
+
+1. 在解开出来的文件夹里找到 `install.command`，**双击它**
    - 如果系统弹窗说「来自身份不明的开发者」，**别点「移到废纸篓」**：在它上面**右键 → 打开 → 再点「打开」**。
      只需要做一次。
    - 双击没反应的，就打开「终端」（聚焦搜索里敲"终端"），把 `install.sh` 拖进终端窗口，回车。
-3. 它会自己看着办：检查有没有够新的 Node（没有就自己从官网下一份并校验），
+2. 它会自己看着办：检查有没有够新的 Node（没有就自己从官网下一份并校验），
    然后装进 `~/.butler` —— **不要管理员密码，也不碰你系统里别的东西**。
 
 > 不用先装任何东西。它自带一份 Node，装完之后 `butler` 用哪个 Node 跟你系统里的无关。

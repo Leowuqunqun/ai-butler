@@ -22,11 +22,27 @@ set -eu
 
 HERE=$(cd "$(dirname "$0")" && pwd)
 
+# 我们是不是在跑一个**脚本文件**？管道里跑的时候（curl … | sh）$0 就是 "sh"，
+# dirname 得到 "."，那等于"用户当前所在的目录" —— 拿它去找 ./tarballs 是碰运气：
+# 用户恰好站在一个带 tarballs/ 的目录里时，会装上那份来路不明的包。
+# 所以本地 tarballs 只在"确实在跑一个文件"时才认（下面第 217 行用它）。
+SELF_IS_FILE=0
+case "$0" in
+  */*) SELF_IS_FILE=1 ;;                 # ./install.sh、/path/install.sh
+  *) [ -f "$0" ] && SELF_IS_FILE=1 ;;    # install.sh（在 PATH 里或当前目录）
+esac
+
 # 固定 Node 版本，不用 latest：装出来的东西要可复现，SHA256 才有意义
 NODE_VERSION="${BUTLER_NODE_VERSION:-v24.14.0}"
 NODE_MIN_MAJOR=20
 # 以后发布到 npm 用这个包名（还没发布时请用 --source 指一个目录，见下）
 PKG_NPM="${BUTLER_NPM_PACKAGE:-@butler/cli}"
+
+# 分发包（install.sh + tarballs/ + install.command + 说明）挂在 GitHub Release 上。
+# 手上只有**这一个文件**的时候（比如 curl | sh），就从这里把整包取下来 ——
+# 于是"一行命令装"不需要 npm、不需要 git，也不需要先有 Node。
+RELEASE_BASE="${BUTLER_RELEASE_BASE:-https://github.com/Leowuqunqun/ai-butler/releases/latest/download}"
+RELEASE_ASSET="${BUTLER_RELEASE_ASSET:-butler-installer-latest.tar.gz}"
 
 DRY=0
 START=1
@@ -47,9 +63,32 @@ run() {
   fi
 }
 
+# SHA256（macOS 上是 shasum，Linux 上是 sha256sum）
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
+# curl 还是 wget —— 下 Node 和下分发包都走它
+pick_fetcher() {
+  if command -v curl >/dev/null 2>&1; then
+    FETCH="curl -fsSL -o"
+  elif command -v wget >/dev/null 2>&1; then
+    FETCH="wget -q -O"
+  else
+    die "既没有 curl 也没有 wget，下不了东西。手动装一个 Node ${NODE_MIN_MAJOR}+ 再跑这个脚本"
+  fi
+}
+
 usage() {
   cat <<'EOF'
 用法：sh install.sh [选项]
+
+  手上只有这一个文件也行（比如 curl … | sh）—— 它会自己去 GitHub Release 取分发包，
+  取来的包里是全部 15 个 tarball，离线装。
 
   --dry-run          只说要干什么，一个字节都不动
   --no-start         装好但不启动
@@ -60,7 +99,7 @@ usage() {
   --source <路径|URL|包名>
                      从哪装。给**目录**=装里面所有 .tgz（分发包就是这么装的）；
                      也可以给 npm 包名或 git 地址。默认：有 ./tarballs 就用它，
-                     否则用 @butler/cli
+                     否则从 GitHub Release 取分发包（装出来的形状和发布后一样）
 EOF
 }
 
@@ -148,13 +187,7 @@ else
   BASE="https://nodejs.org/dist/${NODE_VERSION}"
   say "① Node：机器上没有够新的 Node（要 >= ${NODE_MIN_MAJOR}），从官方下 ${NODE_VERSION}"
 
-  if command -v curl >/dev/null 2>&1; then
-    FETCH="curl -fsSL -o"
-  elif command -v wget >/dev/null 2>&1; then
-    FETCH="wget -q -O"
-  else
-    die "既没有 curl 也没有 wget，下不了 Node。手动装一个 Node ${NODE_MIN_MAJOR}+ 再跑这个脚本"
-  fi
+  pick_fetcher
 
   TMP="${BUTLER_DIR}/tmp-install"
   run mkdir -p "${TMP}" "${RUNTIME}" "${LOG_DIR}"
@@ -165,11 +198,7 @@ else
   if [ "$DRY" = 0 ]; then
     WANT=$(grep " ${FILE}\$" "${TMP}/SHASUMS256.txt" | awk '{print $1}')
     [ -n "${WANT}" ] || die "官方校验表里没有 ${FILE} —— 不敢装"
-    if command -v sha256sum >/dev/null 2>&1; then
-      GOT=$(sha256sum "${TMP}/${FILE}" | awk '{print $1}')
-    else
-      GOT=$(shasum -a 256 "${TMP}/${FILE}" | awk '{print $1}')
-    fi
+    GOT=$(sha256_of "${TMP}/${FILE}")
     [ "${WANT}" = "${GOT}" ] || die "校验不过！官方说 ${WANT}，下下来的是 ${GOT} —— 一个字节都没装"
     say "   校验通过 ✅（SHA256 和官方一致）"
   fi
@@ -189,13 +218,39 @@ if [ ! -f "${NPM_CLI}" ] && [ "$DRY" = 0 ]; then
   die "这个 Node 里没有 npm（${NPM_CLI} 不在）—— 换一个完整的官方 Node 再跑"
 fi
 
-# 装到哪：优先 --source；分发包里就是 ./tarballs；最后才走 npm 包名
+# 装到哪：优先 --source；分发包里就是 ./tarballs；手上只有 install.sh 一个文件时去 Release 取
 SPECS=""
 FROM_DIR=""
+FROM_RELEASE=0
 if [ -n "${SOURCE}" ]; then
   if [ -d "${SOURCE}" ]; then FROM_DIR="${SOURCE}"; else SPECS="${SOURCE}"; fi
-elif [ -d "${HERE}/tarballs" ]; then
+elif [ "$SELF_IS_FILE" = 1 ] && [ -d "${HERE}/tarballs" ]; then
   FROM_DIR="${HERE}/tarballs"
+else
+  # 没有本地 tarballs：说明我们手上只有这一个 install.sh（curl … | sh 那条路），
+  # 而 npm 上还没有我们的包 —— 所以去 Release 把整包取下来。
+  FROM_RELEASE=1
+  say "② 手上只有 install.sh，从 Release 取分发包：${RELEASE_ASSET}"
+  if [ "$DRY" = 1 ]; then
+    say "  [dry-run] 下 ${RELEASE_BASE}/${RELEASE_ASSET}（连 .sha256 一起；校验不过就一个字节都不装）"
+    say "  [dry-run] 解开 → 用里面的 tarballs 装（离线）"
+  else
+    pick_fetcher
+    TMP="${BUTLER_DIR}/tmp-install"
+    run mkdir -p "${TMP}"
+    say "   下：${RELEASE_BASE}/${RELEASE_ASSET}"
+    run sh -c "${FETCH} '${TMP}/${RELEASE_ASSET}' '${RELEASE_BASE}/${RELEASE_ASSET}'"
+    run sh -c "${FETCH} '${TMP}/${RELEASE_ASSET}.sha256' '${RELEASE_BASE}/${RELEASE_ASSET}.sha256'"
+    WANT=$(awk '{print $1}' "${TMP}/${RELEASE_ASSET}.sha256" 2>/dev/null || true)
+    [ -n "${WANT}" ] || die "校验文件里没读出哈希（${RELEASE_BASE}/${RELEASE_ASSET}.sha256）—— 不敢装"
+    GOT=$(sha256_of "${TMP}/${RELEASE_ASSET}")
+    [ "${WANT}" = "${GOT}" ] || die "校验不过！Release 上写的是 ${WANT}，下下来的是 ${GOT} —— 一个字节都没装"
+    say "   校验通过 ✅（SHA256 和 Release 上的一致）"
+    run rm -rf "${TMP}/bundle"
+    run mkdir -p "${TMP}/bundle"
+    run tar -xzf "${TMP}/${RELEASE_ASSET}" -C "${TMP}/bundle"
+    FROM_DIR="${TMP}/bundle/tarballs"
+  fi
 fi
 
 # ⚠️ 装成**一棵树**（一个私有项目里的依赖），不是 11 个全局包。
@@ -212,7 +267,10 @@ else
   printf '%s\n' '{ "name": "butler-app", "private": true }' > "${APP}/package.json"
 fi
 
-if [ -n "${FROM_DIR}" ]; then
+if [ "$FROM_RELEASE" = 1 ] && [ "$DRY" = 1 ]; then
+  say "② 装 AI 管家：用取来的 tarballs（离线，装成一棵树）"
+  say "  [dry-run] npm install --prefix ${APP} <取来的 tarballs>/*.tgz"
+elif [ -n "${FROM_DIR}" ]; then
   if ! ls "${FROM_DIR}"/*.tgz >/dev/null 2>&1; then
     die "${FROM_DIR} 里没有 .tgz —— 分发包是不是没解开完整？"
   fi

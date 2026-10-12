@@ -40,10 +40,29 @@ above are still being designed or built:
 | ④ Devices | Multi-terminal (hub + nodes + alias routing + pairing devices from WeChat) | ✅ **works** (two machines; `@the-one-at-home` in WeChat reaches that one) |
 | ⑤ Trust | Approval, audit | 📐 Designed, not started |
 
-**Want to use it now** → [**From zero to driving your computer from WeChat: three steps**](docs/GETTING-STARTED.md)
-(written for a completely non-technical reader, with a tick-off acceptance checklist and a "stuck? look here" table; Chinese only, on purpose)
-　　→ command-line details live in [`packages/cli`](packages/cli) (823 offline tests across the repo)
 **Want to see what it's meant to become** → [`docs/`](docs/)
+
+---
+
+## Install (for people who just want to use it)
+
+**One line** (macOS / Linux — no Node needed; it downloads one and checks the SHA256):
+
+```sh
+curl -fsSL https://github.com/Leowuqunqun/ai-butler/releases/latest/download/install.sh | sh
+```
+
+Prefer not to touch a terminal? Download the bundle, unzip it, and **double-click `install.command`** → <https://github.com/Leowuqunqun/ai-butler/releases/latest>
+
+When it finishes, your browser opens a page and **only two steps are left**: paste a model key once,
+then scan one QR code with your phone.
+(On macOS the first double-click gets blocked — right-click it → Open. We didn't buy Apple's
+signing certificate.)
+
+The full walkthrough (written for a completely non-technical reader, with a tick-off acceptance
+checklist and a "stuck? look here" table; Chinese only, on purpose) →
+[**From zero to driving your computer from WeChat: three steps**](docs/GETTING-STARTED.md)
+Command-line details live in [`packages/cli`](packages/cli) (823 offline tests across the repo).
 
 ---
 
