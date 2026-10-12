@@ -19,10 +19,23 @@ DSH 干完活，回复回到微信。
 
 ## 装
 
-一个 DSH bundle，用 DSH 自己的插件命令装（**不需要** npm 发布，从目录装就行）：
+**最省事的一条路** —— 下整包、解开、跑里面那条命令（`web` 换成 `headless` 也行）：
 
 ```bash
-dsh plugin --profile web add file:/绝对路径/butler-dsh-plugin/plugin
+curl -fsSL https://github.com/Leowuqunqun/ai-butler/releases/download/v0.1.0/butler-dsh-plugin-0.1.0.tar.gz | tar xz
+cd butler-dsh-plugin-0.1.0 && bash install.sh
+```
+
+等价的手工一条（不想要 `install.sh` 就自己敲；`file:` 后面指到**解开的那个目录**）：
+
+```bash
+dsh plugin --profile web add "file:$(pwd)/plugin"
+```
+
+从仓库里装是同一件事，只是路径换成仓库里的包目录：
+
+```bash
+dsh plugin --profile web add file:/绝对路径/packages/dsh-plugin
 ```
 
 装完重启 profile 就生效。装到哪个 profile 就服务哪个 profile

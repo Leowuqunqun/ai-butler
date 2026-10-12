@@ -139,6 +139,8 @@ say ""
 say "════ 6. 起本地假模型"
 node "$HERE/fake-model.mjs" "$PORT" > "$MODEL_LOG" 2>&1 &
 MODEL_PID=$!
+# disown：不然收尾时 bash 会打一行 "Terminated: 15"，看着像这场验收失败了
+disown "$MODEL_PID" 2>/dev/null || true
 READY=0
 for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
   if node -e "fetch('http://127.0.0.1:$PORT/v1/models').then(()=>process.exit(0)).catch(()=>process.exit(1))" 2>/dev/null; then
