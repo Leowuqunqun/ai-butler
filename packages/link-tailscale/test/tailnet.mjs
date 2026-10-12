@@ -121,7 +121,11 @@ test('状态码翻成给不懂技术的人看的话', () => {
 function stubEnv(json, mode = 'ok') {
   const file = join(mkdtempSync(join(tmpdir(), 'butler-tail-')), 'status.json');
   writeFileSync(file, json);
-  return { STUB_TAILNET_FILE: file, STUB_TAILNET_MODE: mode };
+  // 假 CLI 是 **Node 写的**，所以它启动时可能先往 stderr 打一句 Node 自己的警告
+  // （典型：设了 NODE_USE_ENV_PROXY 的机器上，Node 22 会先来一句 [UNDICI-EHPA] 实验性提示）。
+  // 那是夹具的噪音，不是 CLI 说的话 —— 不关掉它，「第一行 stderr」测到的就是那句警告。
+  // 真 tailscale 是 Go 二进制，不存在这种情况。
+  return { STUB_TAILNET_FILE: file, STUB_TAILNET_MODE: mode, NODE_NO_WARNINGS: '1' };
 }
 
 /** 临时改 env 跑一段 */
