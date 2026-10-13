@@ -1016,6 +1016,13 @@ const configPath = opts.configPath ?? join(butler, 'config.json');    // 配置�
 单独跑这个包也全绿** —— 所以是并行负载下的抖动，不是这轮碰出来的。写在这里，免得下次
 看到它红的时候又从头查一遍。
 
+⚠️ 还顺手记一个**同一族、没修**的：内核的授权文件路径也是从 `stateFile` 派生的
+（`grantsFileOf`：`dirname(stateFile)/grants.json`），而 `stateFile` **为空**时它退回
+`<homedir>/state/grants.json` —— 那是**管家目录之外**的一个目录（`~/.butler/state/` 才是它
+该在的地方）。第 34 轮之后新生成的配置都带着 `stateFile`，所以这条只在**手写的、没有那个
+字段的**配置上才踩得到（真装的机器跑一次 `butler init` 就补上了）。先写在这儿：它现在是一条
+**已知的**不一致，而不是没发现的那种。
+
 ## 十二、真机验收手册（给"第一枪"用）
 
 三分钟，两条命令。**这一步只能人来做**（要手机扫码），所以把"看到什么 → 说明什么"
