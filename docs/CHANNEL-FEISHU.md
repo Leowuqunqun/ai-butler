@@ -1434,8 +1434,8 @@ const configPath = opts.configPath ?? join(home, '.butler', 'config.json');
 - `error` / `warn` → 原样进 `ctx.logger`（官方报的错必须看得见）；
 - `info` / `debug` / `trace` → 降一级到 `debug`。Cordis 的 logger 默认级别是 `info`（实现里就是
   `this.level ?? 1`），所以这一级**默认不打印** —— 实测：真管家上下文里跑 `doctor`（那一步会构造
-  官方通道），官方那两行 `[info]` **一行都不出现**。级别本身是可调的，但**现在没有一个现成的开关**
-  把它调细（见下面"没做的"）。
+  官方通道），官方那两行 `[info]` **一行都不出现**。级别本身是可调的 —— **第 46 轮补上了那个开关**
+  （`BUTLER_LOG_LEVEL=debug`）。
 
 `larkOptionsOf(config, log)` 是交给官方的那份选项，抽成**纯函数**只为可测：注释挡不住下一个人顺手加
 一行 `loggerLevel`，用例挡得住。探针（它没有 Cordis 的 logger）用同一套规矩，另外加了 `--sdk-log`
@@ -1452,8 +1452,12 @@ const configPath = opts.configPath ?? join(home, '.butler', 'config.json');
   —— 那是它自己的 logger，我们够不着（**没验**：真连一次才知道它到底打不打）。
 - 没给"日志级别"加配置项：默认安静、warn/error 照出已经够用，再多一个旋钮等于多一处会漂的地方。
   ⚠️ 代价说清楚：`info`/`debug`/`trace` 那三级现在**递到了** logger，而这台机器的默认级别（`info`）
-  会把它们压掉，`butler run` 又没有一个开关能临时调细 —— 所以真要看官方那几行，眼下只有探针的
-  `--sdk-log` 这一条路。要补的话，是给 `run`/环境变量加一个级别开关（那属于下一件事）。
+  会把它们压掉。
+
+  ✅ **（第 46 轮补）** 上面那句"眼下只有探针的 `--sdk-log` 这一条路"已经不准了，一并记在这儿：
+  第 46 轮发现整个 `ctx.logger` **根本没往终端打**（Cordis 默认那个 exporter 只往内存里塞），
+  于是补了一个终端 exporter 和 `BUTLER_LOG_LEVEL` 这个开关。现在真要看官方那几行，说
+  `BUTLER_LOG_LEVEL=debug` 就行。
 
 ### 第 46 轮：插件自己的日志，其实**从来没有被打印过**
 

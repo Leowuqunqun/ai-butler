@@ -83,8 +83,9 @@ type LoggerLike = NonNullable<Context['logger']>;
  *   - `error` / `warn` → 原样进用户看得见的日志（官方报的错必须看得见）
  *   - `info` / `debug` / `trace` → 降一级到 `debug`。Cordis 的 logger 默认级别是 `info`
  *     （实现里就是 `this.level ?? 1`），所以这一级**默认不打印** —— 实测：真管家上下文里跑
- *     `doctor`（会构造官方通道），官方那两行 `[info]` **一行都不出现**。级别本身可调，
- *     但**现在没有一个现成的开关**把它调细（见第十一节第 45 轮的"没做的"）。
+ *     `doctor`（会构造官方通道），官方那两行 `[info]` **一行都不出现**。要调细就说
+ *     `BUTLER_LOG_LEVEL=debug`（第 46 轮补上的开关：在那之前，这些行连"递到 logger"都到不了
+ *     终端 —— 见第十一节第 46 轮）。
  */
 export function sdkLoggerOf(log: LoggerLike | undefined): SdkLogger {
   // ⚠️ 整条消息**当对象打**（`%o`）：官方塞进来的参数里可能带 `%s`/`%d` 这类字样，
