@@ -39,6 +39,23 @@ let saved = false;
 const HOME = homeOf();
 
 /**
+ * 第二件"第一枪最容易查错方向"的事 —— 同样**一份文本，两处用**（`--dry` 的说明、连上之前再说一遍）。
+ *
+ * 事件订阅/权限点没配齐时，长连接**照样建得起来**：`connect()` 成功、机器人身份也打出来了，
+ * 然后**一条消息都收不到**。用户在终端里干等，最容易怀疑的是"是不是我消息发错了"。
+ *
+ * 官方的说法只到"创建 / 授权"（`registerApp` 那段 README 的原话），**默认带哪些权限它没写**，
+ * 我们也没在真企业里验过 —— 所以这句只说"往哪查"，不替飞书打保票。
+ */
+function warnEventSubscription() {
+  console.log('  ⚠️ 连上了却一条都收不到？多半是应用的**事件订阅 / 权限点**没配齐 ——');
+  console.log('     长连接是通的，事件却没投过来。三条最常踩的：事件订阅要走**长连接**、');
+  console.log('     要订上「接收消息」（`im.message.receive_v1`）、**权限改完必须发版才生效**。');
+  console.log('     （详细对照表在 docs/CHANNEL-FEISHU.md 第十二节；扫码建的应用默认带哪些权限，');
+  console.log('       官方只写到"创建 / 授权"，我们也没在真企业里验过。）');
+}
+
+/**
  * 第一枪最容易查错方向的那件事 —— **一份文本，两处用**（`--dry` 的说明、连上之前再说一遍）。
  *
  * 同一个应用开两条长连接时，飞书把事件在两条之间**分流投递** —— 表现是"消息偶尔不回"，
@@ -64,6 +81,8 @@ if (DRY) {
   if (SAVE) console.log('  ＋ --save：把凭据写进 ' + secretsFileOf(HOME) + '（0600），`butler run` 直接用它');
   console.log('');
   warnTwoConnections();
+  console.log('');
+  warnEventSubscription();
   console.log('');
   console.log('  通了就证明五件事：凭据、长连接、事件投递、权限点、回复 —— 全对。');
   process.exit(0);
@@ -207,6 +226,8 @@ if (!me) {
 }
 console.log(`长连接已建立。机器人身份：${me.name}（${me.openId}）`);
 console.log('现在用手机飞书给它发一条消息（单聊；群聊里记得 @ 它）。Ctrl-C 退出。\n');
+warnEventSubscription();
+console.log('');
 
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => {

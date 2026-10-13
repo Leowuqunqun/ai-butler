@@ -61,7 +61,7 @@ signing certificate.)
 The full walkthrough (written for a completely non-technical reader, with a tick-off acceptance
 checklist and a "stuck? look here" table; Chinese only, on purpose) →
 [**From zero to driving your computer from WeChat: three steps**](docs/GETTING-STARTED.md)
-Command-line details live in [`packages/cli`](packages/cli) (936 offline tests across the repo).
+Command-line details live in [`packages/cli`](packages/cli) (937 offline tests across the repo).
 
 **Already running DSH and only want a WeChat channel inside it?** Then skip the whole stack above — the built bundle ships in the Release, and one command installs it into a profile:
 
@@ -91,7 +91,7 @@ above are still being designed or built:
 | ④ Devices | Multi-terminal (hub + nodes + alias routing + pairing devices from WeChat) | ✅ **works** (two machines; `@the-one-at-home` in WeChat reaches that one) |
 | ⑤ Trust | Approval, audit | Approval ✅ usable (it asks in WeChat; a time-limited standing authorisation is possible); audit 📐 not started |
 
-The evidence for every layer above (the M1/M2/M3 breakdowns, how the 936 cases are distributed,
+The evidence for every layer above (the M1/M2/M3 breakdowns, how the 937 cases are distributed,
 which ones are end-to-end, what the clean-room acceptance runs caught) → [**EVIDENCE.md**](docs/EVIDENCE.md)
 
 ---

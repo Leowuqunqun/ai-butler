@@ -10,9 +10,9 @@
 
 ## 用例总数（以此为准）
 
-**合计 936 个用例，全部离线可跑**（十七个包：seam-channel 12 / seam-agent 12 /
+**合计 937 个用例，全部离线可跑**（十七个包：seam-channel 12 / seam-agent 12 /
 seam-link 15 / seam-approval 7 / seam-memory 6 / core 162 / channel-wechat 134 /
-channel-telegram 51 / channel-feishu 59 / agent-dsh 40 / agent-exec 26 / approval-im 18 /
+channel-telegram 51 / channel-feishu 60 / agent-dsh 40 / agent-exec 26 / approval-im 18 /
 memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 249）。
 （下面两张明细里的用例数是**各条目落地当时**的数，会随功能继续长 —— **当前总数以这一行为准**。）
 

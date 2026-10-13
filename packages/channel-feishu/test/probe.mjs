@@ -121,3 +121,25 @@ test('★ --dry 里必须警告"别让管家同时连着同一个应用"（两�
   assert.match(r.stdout, /分流/, '要说清机制：事件被分流投递，不是"坏了"');
   assert.match(r.stdout, /偶尔不回/, '要说清症状 —— 不然遇到时会往错的方向查');
 });
+
+/**
+ * 和上一条同一个道理、同一份文本：**连上了却没有消息**是事件订阅 / 权限点的问题，
+ * 而用户从终端里看不出来（长连接是通的，机器人身份也打出来了）。文档第十二节那张表
+ * 写着这三条，可"用户在终端里盯的是探针，不是文档" —— 所以这句得由探针自己说。
+ *
+ * 这条只钉 `--dry` 那一份：真跑那份在 `connect()` 之后，离线测不到。但两处调的是**同一个
+ * 函数**（和上一条一样），文本在这儿钉住就够了。
+ */
+test('★ --dry 里必须说清"连上了却没动静"往哪查（权限点 / 事件订阅）', () => {
+  const home = freshHome();
+  const r = spawnSync('bash', [join(pkgRoot, 'probe', 'run.sh'), '--dry', '--home=' + home], {
+    encoding: 'utf8',
+    timeout: 30_000,
+  });
+
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /一条都收不到/, '先把症状说出来 —— 不然他会以为是自己消息发错了');
+  assert.match(r.stdout, /im\.message\.receive_v1/, '给一个能照着查的锚点：事件名');
+  assert.match(r.stdout, /长连接/, '订阅方式得是长连接');
+  assert.match(r.stdout, /发版/, '最常见的坑：权限改完不发版不生效（文档那张表里也写着）');
+});
