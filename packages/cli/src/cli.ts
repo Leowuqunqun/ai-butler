@@ -112,6 +112,13 @@ const HELP = `AI 管家 —— 用微信遥控你的电脑
   --out <文件>                 报告写到哪儿（只有 report 认）
   -v, --version                看版本
 
+环境变量：
+  BUTLER_HOME                  管家目录（默认 ~/.butler；--config 仍然优先）
+  BUTLER_LOG_LEVEL             插件自己的日志放到哪一档，默认 warn：
+                                 error = 只有错；info = 错 + 常规（不含 warn）；
+                                 warn  = 错 + 常规 + 警告；debug = 全放，最细的也出来
+                               不认识的取值会明说一声，再按 warn 来
+
 butler init 写这两份（已经存在的一律不动；设了 BUTLER_HOME 就写在那底下）：
 
   ~/.butler/config.json        装哪几个插件（五行：通道 / agent / 内核 / 记忆 / 链路）

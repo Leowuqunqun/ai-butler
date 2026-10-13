@@ -19,6 +19,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, type LoadedConfig, type PluginRow } from './config.js';
 import { importPlugin, type ResolveContext } from './resolve.js';
+import { installConsoleLog, type LogLevel } from './logging.js';
 
 /** 本包根目录（`lib/` 或 `src/` 的上一层）—— 包名插件从这儿开始找 */
 export const SELF_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -45,6 +46,11 @@ export interface BootOptions {
    * （插件的 config 是构造时读进去的，装上了再改不生效）。
    */
   rows?: PluginRow[];
+  /**
+   * 插件日志的级别（不给就读 `BUTLER_LOG_LEVEL`，再不给就是 `warn`）。
+   * 有它，测试不必去动进程环境变量。
+   */
+  logLevel?: LogLevel;
 }
 
 export interface Booted {
@@ -82,6 +88,9 @@ export async function boot(options: BootOptions): Promise<Booted> {
   };
 
   const ctx = new Context();
+  // 插件自己的日志得能到终端上。Cordis 内建那个 exporter 只往内存里塞、从不打印，
+  // 于是 `feishu: 上线了…`、官方 SDK 报的错全进了一个没人看的缓冲 —— 见 logging.ts。
+  installConsoleLog(ctx, options.logLevel ? { BUTLER_LOG_LEVEL: options.logLevel } : process.env);
   const loaded: PluginRow[] = [];
   const failures: BootFailure[] = [];
 

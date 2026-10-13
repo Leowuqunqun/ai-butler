@@ -1455,6 +1455,71 @@ const configPath = opts.configPath ?? join(home, '.butler', 'config.json');
   会把它们压掉，`butler run` 又没有一个开关能临时调细 —— 所以真要看官方那几行，眼下只有探针的
   `--sdk-log` 这一条路。要补的话，是给 `run`/环境变量加一个级别开关（那属于下一件事）。
 
+### 第 46 轮：插件自己的日志，其实**从来没有被打印过**
+
+上一轮把官方 SDK 的日志接进了 `ctx.logger`（info 降一级、warn/error 照原样出），并在文档里写下
+"warn/error 必须看得见"。这一轮去验那句话 —— 结果发现**整个 `ctx.logger` 都没人打印**。
+
+Cordis 的 `Context` 一建起来就替 `ctx.logger` 装了一个**默认 exporter**，而它只做一件事：
+
+```js
+(message) => {
+  self.buffer.push(message);
+  if (self.buffer.length > self.bufferSize) self.buffer = self.buffer.slice(-self.bufferSize);
+}
+```
+
+`bufferSize = 1e3`，环形，**没有读者**。所以这些行全都掉进了一个没人看的缓冲：
+
+- `feishu: 上线了（机器人身份：…）` —— 验收手册让你看的那句；
+- `[core] …`、`[agent-dsh] 启动：profile=…`；
+- 官方 SDK 报的错（上一轮刚接进来的那些）。
+
+实测（三处，都不是推理）：
+
+| 怎么看 | 结果 |
+| --- | --- |
+| 真 `butler run`（临时家 + 假凭据）的输出 | `feishu:` / `[core]` / `[agent-dsh]` **0 行** |
+| `boot()` 之后直接 `ctx.logger.info(...)` | 终端上**什么都不出**（而 `ctx.logger.exporters` 里确实躺着 1 个） |
+| `logs/autostart.log`（自启动那个文件） | 也收不到 —— 它接的是进程的 stdout/stderr，而这些行从没走到 stdout |
+
+**没有报错，也没有任何提示** —— 正是这个项目一直在防的那类：看起来正常，其实是哑的。
+
+做法：`boot()` 里再挂一个**往终端打**的 exporter（默认那份留着不动），级别由 `BUTLER_LOG_LEVEL`
+定，默认 `warn`：
+
+| 取值 | Cordis 的数字 | 能看到 |
+| --- | --- | --- |
+| `error` | 0 | 只有 error |
+| `info` | 1 | error + info —— **不含 warn**（Cordis 的排法是 `info=1 < warn=2`，反直觉） |
+| `warn` | 2 | error + info + warn ← **默认** |
+| `debug` | 3 | 全都，含 debug（官方 SDK 的 info 就降在这一档） |
+
+两个细节：`warn`/`error` 走 **stderr**（管道里能和正常输出分开），`info`/`debug` 走 stdout；
+**不加前缀** —— 这个仓库每条日志都自带前缀，而 `message.name` 一律是服务名 `logger`（实测），
+再拼一遍只是噪声。取值不认识时**明说一声**再按默认来（`BUTLER_LOG_LEVEL=deubg` 会得到
+`⚠️ BUTLER_LOG_LEVEL=deubg 不认识，按 warn 来（可选：error / info / warn / debug）`）。
+
+**这一轮也把上一轮那句话坐实了**：`BUTLER_LOG_LEVEL=debug` 跑 `doctor`，终端上真的出现
+
+```
+feishu sdk: [["client ready"]]
+feishu sdk: [["event-dispatch is ready"]]
+```
+
+—— 官方 SDK 那两行，现在**够得着了**（上一轮只是"递到了 logger"，够不着）。
+
+**验证**：新文件 `test/logging.mjs` 5 条 —— ① 级别表（含"不认识要出声"）；② 挂上之后三条的流向
+与级别过滤；③ `debug` 档放行最低一级；④ **摘掉之后就不打了**（`ctx.logger.exporter()` 返回的
+disposer 真管用）；⑤ **`boot()` 里已经挂好了**（装完插件直接 `ctx.logger.info` 就能到 stdout）。
+反向验证两道：把 `boot()` 里那行挂载注释掉 ⇒ 第 ⑤ 条红（消息里直接给出"实际收到：[]"）；把级别
+写死成 3 ⇒ 第 ② 条红。恢复后 5/5 绿。
+
+**没做的（这一轮）**：
+- Cordis 自带那个缓冲 exporter **没动**（它不碍谁，也不好从外面摘）；我们只是**多挂了一个**。
+- 没做**按插件分别定级**（只开了 `levels.default` 一个口子）。真需要时再加。
+- 没验 DSH 图形界面那边的日志视图 —— 那条路走的是它自己的通道，与这里无关。
+
 ## 十二、真机验收手册（给"第一枪"用）
 
 三分钟，两条命令。**这一步只能人来做**（要手机扫码），所以把"看到什么 → 说明什么"
@@ -1490,6 +1555,10 @@ bash packages/channel-feishu/probe/run.sh --save   # ② 顺手把凭据装好�
 bash packages/channel-feishu/probe/run.sh --sdk-log  # ③ 官方 SDK 的日志全打出来（默认只放 warn/error，见第十一节第 45 轮）
 ```
 
+> ℹ️ 插件自己的日志（`feishu: 上线了（机器人身份：…）` 这类）**从第 46 轮起会打到终端上**，
+> 默认档只放 error / info / warn；想看官方 SDK 那一级（`client ready` 那两行）就说
+> `BUTLER_LOG_LEVEL=debug`。取值不认识会明说一声，再按 `warn` 来（见第十一节第 46 轮）。
+>
 > **装出来的机器**（`install.sh`）上没有 `packages/` —— 那种机器上，**上面第 0 步跑过的
 > `butler doctor` 就会印出你能照着敲的那条完整命令**（`node <包内路径>/probe/smoke.mjs --save`）：
 > 路径是按**包自己的位置**算的，所以装完指包内那份、在源码树里指源码那份，同一个式子。

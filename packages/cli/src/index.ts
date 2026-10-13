@@ -27,6 +27,14 @@ export {
 export { boot, SELF_DIR, type BootOptions, type Booted, type BootFailure } from './boot.js';
 
 export {
+  installConsoleLog,
+  logLevelOf,
+  DEFAULT_LOG_LEVEL,
+  type LogLevel,
+  type LogLevelChoice,
+} from './logging.js';
+
+export {
   channelSecretNeed,
   channelSecretNeeds,
   injectChannelSecrets,
