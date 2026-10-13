@@ -14,9 +14,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import {
+  boot,
   channelSecretNeed,
   channelSecretNeeds,
   injectChannelSecrets,
+  loadConfig,
   readSecrets,
   saveSecret,
   secretOf,
@@ -147,4 +149,51 @@ test('★ 两项都从凭据文件填进配置行，且只填**空的**', () => 
     assert.equal(half.config.appId, 'cli_MINE');
     assert.equal(half.config.appSecret, 's3cret');
   } finally { s.cleanup(); }
+});
+
+/**
+ * **产品路径**：探针存好的凭据，真的会流进飞书插件的 config 吗？
+ *
+ * 这条补的是"两半都对、中间那道缝没人走过"：
+ *   - 契约那一头有测试（探针写出来的形状 == CLI 认的形状）；
+ *   - `injectChannelSecrets` 本身有测试（给它 rows 和文件，它填得对）。
+ * 但**没有任何一条**证明"用户在探针里存好凭据之后，`butler run` 装出来的那个飞书插件
+ * 身上真的有这两串" —— 而这正是用户会碰到的那个问题："我明明扫过了，它怎么说没填？"
+ *
+ * 走的是 `butler run` 真实的三步（读 → 填 → 装），只是不起长连接：
+ *   `loadConfig` → `injectChannelSecrets` → `boot({ rows })`
+ * （`boot` 的 `rows` 是"调用方给的行优先"，就是为这一步留的口子。）
+ */
+test('★★ 产品路径：存好的飞书凭据，真的进到插件身上（读 → 填 → 装）', async () => {
+  const { dir, cleanup } = sandbox();
+  try {
+    const file = join(dir, 'config.json');
+    writeFileSync(file, JSON.stringify({
+      plugins: [
+        { id: 'channel-feishu', name: '@butler/channel-feishu', config: { home: dir, appId: '', appSecret: '' } },
+        { id: 'core', name: '@butler/core', config: { workspace: dir, stateFile: join(dir, 'state.json') } },
+      ],
+    }));
+
+    // 用 CLI 自己的写法存 —— 和探针写出来的**同一份契约**（那一头由 probe-contract 盯着）
+    saveSecret(secretsFileOf(dir), 'feishu', 'appId', 'cli_from_probe');
+    saveSecret(secretsFileOf(dir), 'feishu', 'appSecret', 'secret_from_probe');
+
+    const rows = loadConfig(file, []).rows;                        // ① butler run：读
+    const filled = injectChannelSecrets(rows, secretsFileOf(dir)); // ② butler run：填
+    assert.deepEqual(filled, ['appId', 'appSecret']);
+
+    const b = await boot({ configPath: file, rows });               // ③ butler run：装
+    try {
+      assert.deepEqual(b.failures.map((f) => `${f.id}: ${f.message}`), []);
+      assert.equal(b.ctx.channel.id, 'feishu');
+      // 关键：要落在**插件实例**上，不是只改了个本地副本
+      assert.equal(b.ctx.channel.config.appId, 'cli_from_probe', '凭据没进到插件身上');
+      assert.equal(b.ctx.channel.config.appSecret, 'secret_from_probe');
+    } finally {
+      await b.dispose();
+    }
+  } finally {
+    cleanup();
+  }
 });

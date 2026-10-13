@@ -281,7 +281,7 @@ M-c 引导页 / `doctor` / 文档 / GETTING-STARTED。
   钉住"我们传下去的 policy"和"官方接住了什么"一致
 - **依赖表就是"没重写协议"的证据**：运行时只 import `@larksuite/channel` + 接缝 + cordis/schemastery，
   没有 HTTP 客户端、没有 protobuf、没有 WebSocket
-- 全仓库 **923 个用例**通过、17 个包、`check:docs` 33 个 md 全绿
+- 全仓库 **924 个用例**通过、17 个包、`check:docs` 33 个 md 全绿
 
 **还没做**（下一步的顺序）：
 
@@ -474,6 +474,22 @@ CLI 自己的读法读回来、并走一遍 `butler run` 的注入那一步。�
    （日志里只有 `忽略不属于主人的来信 from=…`）。而飞书 `dmMode` 默认是 `open` ——
    **同一个企业里谁都能单聊这个机器人**。手册现在把这条写成第 5 步，并给了"想彻底钉死"的做法：
    用探针打印的 `senderId` 写进 `<管家目录>/state/state.json` 的 `owner`。
+
+### 第 16 轮：把"中间那道缝"补上 —— 凭据真的进到插件身上了吗
+
+到这轮为止，凭据这件事**两头都有测试**：契约那头（探针写出来的形状 == CLI 认的形状，
+`packages/cli/test/probe-contract.mjs`）和作用那头（给 `injectChannelSecrets` 一组 rows 和文件，
+它填得对，`packages/cli/test/secrets.mjs`）。但**没有任何一条**证明"用户在探针里存好凭据之后，
+`butler run` 装出来的那个飞书插件身上真的有这两串" —— 而那正是用户会问的那句话：
+**"我明明扫过了，它怎么说没填？"**
+
+现在有一条走**真实三步**的测试（`packages/cli/test/secrets.mjs`）：`loadConfig`（读）→
+`injectChannelSecrets`（填）→ `boot({ rows })`（装），断言 `ctx.channel.config.appId / appSecret`
+就是存进去的那两串 —— 落在**插件实例**上，不是只改了个本地副本。（`boot` 的 `rows` 是
+"调用方给的行优先"，本来就是为这一步留的口子。）全程不联网：飞书那行的构造是懒的。
+
+反验用的是**漂移型**故障：把飞书那一项的 `key: 'appId'` 改成一个字母的 `'appID'` —— 凭据就填不进去，
+测试立刻红。这类错（拼错一个字母）恰恰是这种"隔着三层"的配置最容易出的。
 
 ---
 
