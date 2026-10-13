@@ -1,0 +1,52 @@
+{
+  "name": "@butler/channel-feishu",
+  "version": "0.1.0",
+  "description": "ctx.channel 的第三个实现：飞书 / Lark —— 站在官方 @larksuite/channel 上，只写「它 ↔ ctx.channel」的映射",
+  "type": "module",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json",
+    "./map": {
+      "types": "./lib/types/map.d.ts",
+      "default": "./lib/map.js"
+    }
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.json && node --test test/*.mjs",
+    "probe": "bash probe/run.sh"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@butler/seam-channel": "workspace:*",
+    "@deepseek-ai/cordis": "4.0.4",
+    "@deepseek-ai/schemastery": "3.18.4",
+    "@larksuite/channel": "^0.7.1"
+  },
+  "devDependencies": {
+    "qrcode": "^1.5.4"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "~4.0.4"
+  },
+  "keywords": [
+    "cordis",
+    "plugin",
+    "channel",
+    "feishu",
+    "lark",
+    "im"
+  ]
+}
