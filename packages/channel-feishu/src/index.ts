@@ -22,9 +22,22 @@
 import z from '@deepseek-ai/schemastery';
 import { ChannelService, type HealthCheck, type LocalFile, type SendOpts, type SendResult } from '@butler/seam-channel';
 import type { Context } from '@deepseek-ai/cordis';
-import { createLarkChannel, type LarkChannel, type NormalizedMessage } from '@larksuite/channel';
+/**
+ * ⚠️ **两个 `SendResult` 同名不同形**，这个文件里两个都要用：
+ *   - 接缝的（`@butler/seam-channel`）是给内核看的：`{ chunks?, fileName?, size? }`；
+ *   - 官方的（`@larksuite/channel`）是"发给飞书的结果"：`{ messageId, chunkIds? }`。
+ * 所以官方那个**必须改名导入** —— 不改，`replyOrSend` 的返回类型就会悄悄指向接缝那个，
+ * 然后 `chunkIds` 一片报错（这坑踩过一次，写在这里）。
+ */
+import {
+  createLarkChannel,
+  type LarkChannel,
+  type NormalizedMessage,
+  type SendInput,
+  type SendResult as LarkSendResult,
+} from '@larksuite/channel';
 
-import { toInbound, toQuoteLine, decodeContext } from './map.js';
+import { toInbound, toQuoteLine, decodeContext, type FeishuContext } from './map.js';
 import { scanHint } from './probe-path.js';
 import { SeenStore } from './seen.js';
 import { destFor, downloadTypeOf, guessMime, kindOf } from './files.js';
@@ -375,6 +388,32 @@ export class FeishuChannel extends ChannelService {
   }
 
   /**
+   * 回一条（**带引用**）—— 引用回不了就**退回直接发**。
+   *
+   * 为什么要有这一步：答案是在我们这边**算出来的**（可能花了几十秒），而"引用回复"只是
+   * **展示方式**。被引的那句被你删了 / 太旧了 / 话题对不上，官方那条 `reply` 就会失败 ——
+   * 这时候把算好的答案丢掉、让你干等，是这里最坏的结局（而且入站去重已经记过账，
+   * 飞书重推也不会再试一次）。
+   *
+   * 所以：`reply` 抛错 → 原样 `send` 一条到同一个会话（少一段引用，好过什么都不回）。
+   * **两条路都失败才往上抛** —— 那已经不是"展示方式"的问题，交给内核去说。
+   *
+   * 发文本 / 发文件两处调用**共用这一个地方**：抄两遍，就迟早有一遍忘了兜底。
+   */
+  private async replyOrSend(ctx: FeishuContext, input: SendInput, what: string): Promise<LarkSendResult> {
+    if (!ctx.messageId) return this.lark.send(ctx.chatId, input);
+    try {
+      return await this.lark.reply(
+        { chatId: ctx.chatId, messageId: ctx.messageId, ...(ctx.threadId ? { threadId: ctx.threadId } : {}) },
+        input,
+      );
+    } catch (error) {
+      this.ctx.logger?.warn(`feishu: 引用回复失败，退回直接发送（${what}）：%o`, error);
+      return await this.lark.send(ctx.chatId, input);
+    }
+  }
+
+  /**
    * 发一段文本。
    *
    * 两件事归实现管、内核不插手，这里的选择是：
@@ -386,13 +425,7 @@ export class FeishuChannel extends ChannelService {
    */
   async sendText(to: string, text: string, opts: SendOpts = {}): Promise<SendResult> {
     const ctx = decodeContext(opts.contextToken, to);
-    const input = { markdown: text };
-    const res = ctx.messageId
-      ? await this.lark.reply(
-        { chatId: ctx.chatId, messageId: ctx.messageId, ...(ctx.threadId ? { threadId: ctx.threadId } : {}) },
-        input,
-      )
-      : await this.lark.send(ctx.chatId, input);
+    const res = await this.replyOrSend(ctx, { markdown: text }, '文本');
     return { chunks: res.chunkIds?.length ?? 1 };
   }
 
@@ -419,12 +452,7 @@ export class FeishuChannel extends ChannelService {
     const input = isImage
       ? { image: { source: path } }
       : { file: { source: path, fileName: name } };
-    const res = ctx.messageId
-      ? await this.lark.reply(
-        { chatId: ctx.chatId, messageId: ctx.messageId, ...(ctx.threadId ? { threadId: ctx.threadId } : {}) },
-        input,
-      )
-      : await this.lark.send(ctx.chatId, input);
+    const res = await this.replyOrSend(ctx, input, isImage ? '图片' : '文件');
     return { fileName: name, ...(res.chunkIds?.length ? { chunks: res.chunkIds.length } : {}) };
   }
 

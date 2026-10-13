@@ -193,6 +193,46 @@ test('★ 话题里的消息，回文本和回文件都要带 threadId（两处�
   assert.equal(fake.replies[1].target.threadId, 'omt_1', 'sendFile 那条路也要带 —— 两处调用会各自漂移');
 });
 
+/**
+ * **引用回不了 ≠ 不回。**
+ *
+ * 最现实的触发：你把自己那条消息删了（引用目标没了）。这时官方的 `reply` 会失败，
+ * 而答案是刚算出来的（可能花了几十秒）—— 丢掉它、让你干等，是这里最坏的结局：
+ * 入站去重已经记过账，飞书重推也不会再试一次。
+ *
+ * "少一段引用，好过什么都不回" 和取不到被引原文时那条规矩是同一个取舍。
+ */
+test('★★ 引用回复失败就退回直接发送：答案是算出来的，不能因为引用丢了就不回', async () => {
+  const { channel, fake } = makeFeishu({ home: freshHome() });
+  await channel.start();
+
+  const token = JSON.stringify({ chatId: 'oc_chat', messageId: 'om_1' });
+  fake.failReply = true;
+
+  await channel.sendText('ou_alice', '这是算了半天的答案', { contextToken: token });
+  assert.equal(fake.replies.length, 1, '先试过引用回复');
+  assert.equal(fake.sent.length, 1, '引用失败后必须退回直接发送 —— 不能什么都不回');
+  assert.equal(fake.sent[0].to, 'oc_chat', '要发回同一个会话（你删的是那条消息，不是一个会话）');
+  assert.equal(fake.sent[0].input.markdown, '这是算了半天的答案', '内容一字不改');
+
+  const p = join(freshHome(), '答案.txt');
+  writeFileSync(p, 'x');
+  await channel.sendFile('ou_alice', p, { contextToken: token });
+  assert.equal(fake.sent.length, 2, 'sendFile 也要退回直接发送 —— 两处调用会各自漂移');
+});
+
+test('★ 两条路都失败才往上抛（那已经不是"展示方式"的问题了，交给内核去说）', async () => {
+  const { channel, fake } = makeFeishu({ home: freshHome() });
+  await channel.start();
+  fake.failReply = true;
+  fake.failSend = true;
+
+  await assert.rejects(
+    () => channel.sendText('ou_alice', 'x', { contextToken: JSON.stringify({ chatId: 'oc', messageId: 'om' }) }),
+    /send rejected/,
+  );
+});
+
 test('文件超过飞书上限时给一句人话，而不是让官方包报一个看不懂的错', async () => {
   const { channel } = makeFeishu({ home: freshHome() });
   await channel.start();

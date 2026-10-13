@@ -28,6 +28,14 @@ import { FeishuChannel } from '../lib/index.js';
 export class FakeLark {
   sent = [];
   replies = [];
+  /**
+   * 让 `reply` / `send` 失败（测"引用回不了怎么办"）。
+   *
+   * ⚠️ `reply` 会**先记下来再抛**：我们关心的是"试过引用回复、然后退了没有"，
+   * 所以"试过"这件事必须留痕。
+   */
+  failReply = false;
+  failSend = false;
   connected = false;
   identity = { openId: 'ou_fake_bot', name: '管家的测试身份' };
   fetched = new Map();
@@ -80,11 +88,13 @@ export class FakeLark {
 
   async send(to, input) {
     this.sent.push({ to, input });
+    if (this.failSend) throw new Error('send rejected (fake)：发不出去');
     return { messageId: `om_sent_${this.sent.length}` };
   }
 
   async reply(target, input) {
     this.replies.push({ target, input });
+    if (this.failReply) throw new Error('reply rejected (fake)：被引的那句没了');
     return { messageId: `om_reply_${this.replies.length}`, chunkIds: ['om_c1'] };
   }
 

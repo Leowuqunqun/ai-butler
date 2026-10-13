@@ -10,9 +10,9 @@
 
 ## Test case total (authoritative)
 
-**928 test cases in total, all runnable offline** (seventeen packages: seam-channel 12 / seam-agent 12 /
+**930 test cases in total, all runnable offline** (seventeen packages: seam-channel 12 / seam-agent 12 /
 seam-link 15 / seam-approval 7 / seam-memory 6 / core 162 / channel-wechat 134 /
-channel-telegram 51 / channel-feishu 56 / agent-dsh 40 / agent-exec 26 / approval-im 18 /
+channel-telegram 51 / channel-feishu 58 / agent-dsh 40 / agent-exec 26 / approval-im 18 /
 memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 244).
 (The per-item counts in the two tables below are the numbers **as of the day that item landed**, and
 they keep growing with the feature set — **treat the total on this line as authoritative**.)
@@ -113,6 +113,10 @@ they keep growing with the feature set — **treat the total on this line as aut
   we drop anything. It caught a bug that made messages **vanish** — text-only types (a forwarded
   chat history / a card / a contact card / a location) used to be dropped, so the brain received an
   empty prompt. Revert the rule to the old allowlist and the cases measuring it go red at once.
+  The **send-failure** path is pinned too (`test/plugin.mjs`): a failed quote-reply must **fall back
+  to a plain send** — falsified twice with two different faults (rethrow instead of falling back →
+  both cases red; keep the fallback but swallow the final failure → only the "both paths failed must
+  surface" case goes red).
 - **47 of the 65 tests in `link-lan` really do start an HTTP node** (or complete a real round
   trip): real listening socket, real authentication, a real connection through `ctx.link`, a real
   call with progress. Five of them target failures that are hard to explain in one sentence (idle
