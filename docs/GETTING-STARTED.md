@@ -266,6 +266,7 @@ curl -fsSL https://github.com/Leowuqunqun/ai-butler/releases/latest/download/ins
 | 双击 `install.command` 说「身份不明的开发者」 | macOS 的安全拦截 | 在它上面**右键 → 打开 → 打开**（一次就够）；还不行就 `sh install.sh` |
 | 终端说 `command not found: butler` | `~/.butler/prefix/bin` 不在 PATH 里 | 跑 `sh install.sh --add-path`，然后**关掉终端窗口重开** |
 | 终端说「配置读不了」/「文件不存在」 | 还没跑过 `butler init` | 先跑 `butler init`（用 Telegram 就 `butler init --im telegram`） |
+| `sh install.sh` 装完，最后一行却报**退出码 1** | v0.2.1 及更早的安装器装完会顺手替你跑 `butler run`，而刚装好的机器**还没有配置**，管家于是退 1 —— **装是成功的**（东西都在，`butler --version` 能跑） | 照它最后打印的两条来：先 `butler init`，再 `butler run`。仓库里已改成「没配置就不启动、退出码 0」，跟下一个版本一起发出去 |
 | `doctor` 说「Node 版本」✗ | 你系统里那个 `node` 太老 | 重新跑一次 `sh install.sh`（它会自己下一份够新的），重开终端 |
 | `doctor` 说「模型 key」✗ | key 没贴、或者跳过了那一步 | 再跑一次 `butler run`，页面会重新问你 |
 | `doctor` 说「审批那根线」✗ / 「审批这一侧」✗ | 新版本多出来的那一行还没补上（管家因此**什么敏感操作都不肯干** —— 它宁可不动） | 再跑一次 `butler init`，缺的行它会自己补上 |

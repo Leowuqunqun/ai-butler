@@ -2,7 +2,7 @@
 # ============================================================================
 # AI 管家 —— 引导器
 #
-#   sh install.sh                装好，然后立刻启动（浏览器会弹出引导页）
+#   sh install.sh                装好，然后启动（还没配置过的话，它会先让你跑一次 butler init）
 #   sh install.sh --dry-run      只说要干什么，一个字节都不动
 #   sh install.sh --no-start     装好但不启动
 #   sh install.sh --uninstall    卸载（默认保留 ~/.butler 里的数据）
@@ -11,7 +11,8 @@
 #   1. 找一个够新的 Node（>= 20）。没有就从**官方**下一个固定版本，并校验 SHA256
 #   2. 把 AI 管家装进 ~/.butler/prefix（一个私有项目，不碰你系统的 npm 全局目录）
 #   3. 告诉你 `butler` 怎么进 PATH（**不擅自改你的 dotfiles**，除非你给 --add-path）
-#   4. 启动它（`butler run`），浏览器弹出引导页 —— 扫码、贴 key，就完了
+#   4. 启动它（`butler run`）—— 浏览器弹出引导页，扫码、贴 key 就完了；
+#      刚装好还没配置过的机器上**先不启动**，只把「butler init → butler run」两条命令写给你
 #
 # 两条设计纪律：
 #   · **不要 root。** 一个管家凭什么叫你 sudo。所以 Node 装在 ~/.butler/runtime 里，
@@ -362,13 +363,29 @@ say "装好了：${BUTLER_BIN}"
 say "它的数据都在：${BUTLER_DIR}（配置、微信登录态、收件箱）"
 
 if [ "$START" = 1 ]; then
-  say ""
-  say "▶ 现在启动管家。浏览器会自动弹出引导页 —— 扫码、贴模型 key，就完了。"
-  say "  （这个窗口要留着：它就是管家本人。想让它开机自己起来：butler autostart on）"
-  say ""
   if [ "$DRY" = 1 ]; then
+    say ""
+    say "▶ 装完会启动管家（还没配置过的机器上，它会先让你跑一次 butler init）"
     say "  [dry-run] HOME=${HOME_DIR} ${BUTLER_BIN} run"
+  elif [ ! -f "${BUTLER_DIR}/config.json" ]; then
+    # ⚠️ 刚装好、还没配置过的机器：`butler run` 会直接退出（退出码 1），并让你先跑 butler init。
+    #    那不是"装失败"，是"还差你一步" —— 可这个退出码会一路传出去，于是 `curl … | sh` 明明
+    #    装好了，看起来却像失败了。而且这里原来写着"浏览器会自动弹出引导页"，跟 CLI 的实际行为
+    #    是**矛盾**的（GETTING-STARTED 和 doctor 说的都是：先 init，再 run）。
+    #    所以没配置就不启动：把该敲的两条命令写清楚，退出码 0 —— 装的部分确实好了。
+    #    （考虑过替用户跑一次 `butler init`，但它只会写**默认**通道；而换通道要的
+    #     `butler init --im feishu` 反正得用户自己跑，替他 init 一次反而多一步、还容易看糊涂。）
+    say ""
+    say "▶ 还差一步（装的部分已经好了）：先跑一次 butler init，再 butler run"
+    say "  ${BUTLER_BIN} init"
+    say "  ${BUTLER_BIN} run"
+    say "  （init 会把默认配置写好，你什么都不用填；想用微信以外的通道就 init --im <通道>）"
+    exit 0
   else
+    say ""
+    say "▶ 现在启动管家。浏览器会自动弹出引导页 —— 扫码、贴模型 key，就完了。"
+    say "  （这个窗口要留着：它就是管家本人。想让它开机自己起来：butler autostart on）"
+    say ""
     HOME="${HOME_DIR}" "${BUTLER_BIN}" run
   fi
 else

@@ -113,11 +113,25 @@ fi
 grep -q "AI 管家（butler）PATH" "${HOME_DIR}/.bashrc" || bad "--add-path 没写进 .bashrc"
 ok "数据都在 ~/.butler 里，PATH 也加好了（幂等：可重跑）"
 
-# 再跑一次 --add-path：不许重复追加
+# 再跑一次 --add-path：① 不许重复追加；② 顺便走一遍「全新机器默认那条启动路」。
+# ⚠️ ②是从真事故里补的：上面那次带 --no-start，所以 install.sh 最后那段「启动」从来没被
+#    验收脚本走过。而它原来是直接 `butler run` —— 刚装好的机器还没有配置，管家会打印
+#    「还没有配置…先跑 butler init」并 exit 1，于是 `curl … | sh` 明明装好了却像失败。
+#    现在的规矩：没配置就不启动，把「先 init 再 run」写清楚，退出码 0。
 ${INSTALL} sh "${DL}/install.sh" --home "${HOME_DIR}" --prefix "${PREFIX}" \
-  --no-start --add-path > "${TMP}/install2.log" 2>&1 || bad "第二次安装失败"
+  --add-path > "${TMP}/install2.log" 2>&1 || {
+    tail -20 "${TMP}/install2.log"
+    bad "没配置过的机器上装完退出码不是 0（装好了却像失败）—— 见 install.sh 里那段注释"
+  }
 [ "$(grep -c 'AI 管家（butler）PATH' "${HOME_DIR}/.bashrc")" = 1 ] || bad "PATH 那行被重复加了"
-ok "重复安装不重复写 PATH（而且没把已装的搞坏）"
+grep -q "butler init" "${TMP}/install2.log" || bad "没配置过的机器上没告诉用户先跑 butler init"
+if grep -q "现在启动管家" "${TMP}/install2.log"; then
+  bad "还没配置就去启动管家了（它只会 exit 1）—— 该走「还差一步」那条路"
+fi
+if [ -f "${HOME_DIR}/.butler/config.json" ]; then
+  bad "不该替用户写配置（换通道要他自己 init --im）"
+fi
+ok "重复安装不重复写 PATH；全新机器默认那条启动路：退 0、说清「先 init 再 run」、不启动、不写配置"
 
 # ─────────────────────── 3. 装出来的命令真能用 ───────────────────────
 
