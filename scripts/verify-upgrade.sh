@@ -18,6 +18,11 @@
 #      所以把 HOME 指到临时目录，整间房子就都是临时的）
 #   · 不碰真的自启动：一律 `--no-start`，也不加 `--add-path`
 #   · 不登微信、不贴 key（要真人扫码，故意不测）
+#   · **`step` / `ok` / `bad` 的标题里不许出现反引号** —— 它们在**双引号**里，反引号就是**命令替换**：
+#     写 `step "… `butler run` …"` 会在拼这行标题的时候**真的把 butler run 跑起来**（还没重定向、
+#     还没人来收它）。这个坑仓库里踩过两次：一次在 install.sh 的 heredoc 里（教训记在
+#     make-installer-bundle.sh），一次就在本脚本 —— 卡死 27 分钟，我一度以为"后台起进程的壳有问题"，
+#     其实是标题里的反引号。想在标题里强调命令名，用「」或者干脆不加引号。
 #
 # 走的是**发布出来的真包**：v0.1.0（旧）→ latest（新）。中间那步就是用户要敲的
 # `curl … | sh` —— 所以这个脚本本身也是对"那条命令能不能用"的验收。
@@ -25,8 +30,18 @@
 set -eu
 
 TMP=$(mktemp -d)
-# 收尾：临时目录整个删掉（真 ~/.butler 从没进过这里 —— 全程只动临时 HOME）
-trap 'rm -rf "${TMP}"' EXIT
+# 收尾：先把可能还挂着的 `butler run` 送走，再删临时目录（真 ~/.butler 从没进过这里 —— 全程只动临时 HOME）。
+# 按 pid 文件送一次，再按**这个临时前缀**匹配兜一次底：万一 pid 拿错了，也不许留下没人管的进程。
+stop_run() {
+  if [ -f "${TMP}/run.pid" ]; then
+    kill -INT "$(cat "${TMP}/run.pid")" 2>/dev/null || true
+    sleep 1
+    kill -9 "$(cat "${TMP}/run.pid")" 2>/dev/null || true
+    rm -f "${TMP}/run.pid"
+  fi
+  pkill -9 -f "${PREFIX}/app/node_modules/@butler/cli/lib/cli.js" 2>/dev/null || true
+}
+trap 'stop_run; rm -rf "${TMP}"' EXIT
 
 FAKE_HOME="${TMP}/home"
 BUTLER="${FAKE_HOME}/.butler"
@@ -107,7 +122,7 @@ ok "state/secrets.json 一个字节没变"
 [ "$(perm "${BUTLER}/state/secrets.json")" = "-rw-------" ] || bad "凭据权限被改了"
 ok "凭据还是 0600"
 
-step "⑥ 升级后 `butler init` 补能力行：补上缺的，别的（含收信那行）一个字不动"
+step "⑥ 升级后「butler init」补能力行：补上缺的，别的（含收信那行）一个字不动"
 doctor "${TMP}/doctor1.log"
 grep -q "channel" "${TMP}/doctor1.log" || { tail -25 "${TMP}/doctor1.log"; bad "doctor 里没有 channel 那行"; }
 ok "butler doctor 能跑（它如实报"微信还没登录"这类，退出码非零不算故障）"
@@ -139,4 +154,40 @@ node "${PREFIX}/app/node_modules/@butler/channel-feishu/probe/smoke.mjs" --dry \
 grep -q "dry run" "${TMP}/dry.log" || bad "探针 --dry 没输出该有的东西"
 ok "探针 --dry 通了（升级后，用户那条扫码命令真的存在且能跑）"
 
-printf '\n✅ 升级演练通过：该来的来了，原来的一个字节没变，换通道只换那一行。\n'
+step "⑧ 第三条命令 butler run：端上来的得是**飞书**的引导页（不扫码、不联网）"
+# 此刻配置里已经是飞书那行、凭据里只有微信的 token —— 正是用户 `init --im feishu` 之后、
+# 还没扫码之前的样子。通道凭据那道门在模型 key 之前（插件的 config 是构造时读进去的），
+# 所以这时 run 的下一件事就是"问你要飞书应用的 app_id"。
+# ⚠️ 起进程这一段有两处踩过的坑（都写在文件头的纪律里）：
+#    ① 标题里别用反引号（会变成命令替换，真的把 butler run 跑起来）；
+#    ② 后台起进程要在**专门的子壳**里取 `$!`，否则拿到的可能是壳自己，SIGINT 到不了里面的 node。
+( env HOME="${FAKE_HOME}" "${PREFIX}/bin/butler" run --no-open > "${TMP}/run.log" 2>&1 & echo $! > "${TMP}/run.pid" )
+RUN_PID=$(cat "${TMP}/run.pid")
+# 它必须**立刻**把日志文件建出来 —— 建不出来说明连启动都失败了，别在这儿干等 20 秒
+sleep 1
+[ -f "${TMP}/run.log" ] || bad "run 一启动就没了（看上面，或者手动跑一次）"
+URL=""
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  URL=$(grep -o "http://127\.0\.0\.1:[0-9]*/s/[0-9a-f]*/" "${TMP}/run.log" 2>/dev/null | head -1 || true)
+  if [ -n "${URL}" ]; then break; fi
+  sleep 1
+done
+if [ -z "${URL}" ]; then stop_run; tail -20 "${TMP}/run.log"; bad "run 没把引导页地址打出来"; fi
+ok "引导页起来了（地址里那串随机数不打印）"
+grep -q "app_id" "${TMP}/run.log" || { stop_run; bad "引导页问的不是飞书的 app_id —— 那问的是什么？"; }
+ok "它问的是飞书应用的 app_id（不是微信那种二维码）"
+
+curl -s --max-time 5 "${URL}" > "${TMP}/page.html" || { stop_run; bad "页面打不开（地址就在上面那个）"; }
+for k in app_id smoke.mjs 飞书; do
+  grep -q "${k}" "${TMP}/page.html" || { stop_run; bad "页面上没有「${k}」"; }
+done
+ok "页面上有：app_id、飞书那两样、以及探针那条命令"
+
+stop_run
+sleep 1
+if ps -p "${RUN_PID}" >/dev/null 2>&1; then
+  bad "Ctrl-C 之后它没收工（第 21 轮修过一次，怎么又回来了）"
+fi
+ok "Ctrl-C 之后它自己收工了（没留一个没人管的监听端口）"
+
+printf '\n✅ 升级演练通过：该来的来了，原来的一个字节没变，换通道只换那一行，run 端的是飞书那页。\n'

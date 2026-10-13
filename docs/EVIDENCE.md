@@ -128,7 +128,7 @@ memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 249）。
   再用**发布出来的**新 `install.sh` 就地升级，然后验：新版该来的来了（飞书包 + 探针）、
   `config.json` / `secrets.json` / 0600 **一个字节没变**、升级后 `init` 补能力行但**不换**收信那行、
   `init --im feishu` 只换那一行且换完 `doctor` 里**真的装载成功**。
-  （`butler run` 端上来的确实是飞书引导页、Ctrl-C 能自己收工 —— 这一条是**手工实测**的，没进脚本。）
+  （`butler run` 端上来的确实是飞书引导页、Ctrl-C 能自己收工 —— 第 30 轮起也进了脚本，见下。）
   **"住着的房子"才是用户的常态**，而"干净机器第一次装"永远验不到它。
 - `channel-wechat/test/login.mjs` 那条 ★ **真起了一个本地 HTTP 扫码页**（只监听 127.0.0.1），
   喂一个假客户端走完整条登录：码真的进了页面、浏览器真的被指向页面那个地址、
