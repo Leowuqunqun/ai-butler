@@ -39,6 +39,19 @@ let saved = false;
 const HOME = homeOf();
 
 /**
+ * 手册在**仓库**里，而用户手里可能没有仓库 —— `install.sh` 装出来的人就没有。
+ *
+ * 所以提示里给的是**能打开的那个地址**，不是 `docs/CHANNEL-FEISHU.md` 这种仓库内路径：
+ * "详细对照表在 docs/…" 对装出来的人等于没说（他那儿没有这个文件）。这个坑和第 40 轮那条
+ * 探针路径是同一类 —— 提示里出现的东西，用户手上得真有，或者真够得着。
+ *
+ * 有演练用例盯着（`test/tarball.mjs`，跑在**打包产物**上）：探针里提到它必须是这个完整地址，
+ * 而且地址指向的文件必须真在仓库里；另外那份副本里**所有会打印出去的行**都不许出现仓库内路径
+ * （`packages/` `docs/` `scripts/`）—— 地址里的不算，那是"够得着"的那一种。
+ */
+const DOC = 'https://github.com/Leowuqunqun/ai-butler/blob/main/docs/CHANNEL-FEISHU.md';
+
+/**
  * 第二件"第一枪最容易查错方向"的事 —— 同样**一份文本，两处用**（`--dry` 的说明、连上之前再说一遍）。
  *
  * 事件订阅/权限点没配齐时，长连接**照样建得起来**：`connect()` 成功、机器人身份也打出来了，
@@ -51,7 +64,7 @@ function warnEventSubscription() {
   console.log('  ⚠️ 连上了却一条都收不到？多半是应用的**事件订阅 / 权限点**没配齐 ——');
   console.log('     长连接是通的，事件却没投过来。三条最常踩的：事件订阅要走**长连接**、');
   console.log('     要订上「接收消息」（`im.message.receive_v1`）、**权限改完必须发版才生效**。');
-  console.log('     （详细对照表在 docs/CHANNEL-FEISHU.md 第十二节；扫码建的应用默认带哪些权限，');
+  console.log(`     （详细对照表在 ${DOC} 第十二节；扫码建的应用默认带哪些权限，`);
   console.log('       官方只写到"创建 / 授权"，我们也没在真企业里验过。）');
 }
 
@@ -109,7 +122,7 @@ function reportFailure(what, error) {
   console.error('     本地客户端还没在线（官方原文：保存长连接配置时客户端必须已在线，顺序反了会一直失败）');
   console.error('  3. 应用缺权限：收消息至少要有「接收消息」那类权限，而且**改动要发新版才生效** ——');
   console.error('     直接改配置不生效，很容易被当成"代码没写对"');
-  console.error('\n把 code / message 这两行原样贴出来就能对症（细节见 docs/CHANNEL-FEISHU.md 第二、三节）。');
+  console.error(`\n把 code / message 这两行原样贴出来就能对症（细节见 ${DOC} 第二、三节）。`);
   // 这一趟**不白跑**：`--save` 是存盘在连接之前的（失败也留住了凭据）。
   // 不说这句，用户会以为白扫了一次、又去重扫 —— 而重扫解决不了上面那三件事。
   if (saved) {

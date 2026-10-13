@@ -15,7 +15,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -64,4 +64,50 @@ test('★★ 打包产物里那份探针能跑，提示里那条路径也真的�
   const hint = mod.scanHint(mod.defaultHome());
   assert.match(hint, /--save/, '提示要带 --save —— 不带只会连一下，不会把凭据存下来');
   assert.ok(hint.includes(probe), '提示里印的正是这条路径');
+
+  // ★ 提示里提到手册时，给的是**能打开的地址**吗？
+  //
+  //   手册在仓库里，而 `install.sh` 装出来的人手里**没有**仓库 —— "详细对照表在
+  //   `docs/CHANNEL-FEISHU.md` 第十二节"对他等于没说。这和上面那条探针路径是同一类毛病：
+  //   提示里出现的东西，用户得真有，或者真够得着。
+  //
+  //   两条一起盯：① 探针提到手册的地方得是**完整地址** ② 地址指向的文件必须**真在仓库里**
+  //   —— 文档改名/搬家会让它红，而不是静默地印一个 404。
+  const smoke = readFileSync(join(copy, 'probe', 'smoke.mjs'), 'utf8');
+  assert.ok(
+    smoke.includes('https://github.com/Leowuqunqun/ai-butler/blob/main/docs/CHANNEL-FEISHU.md'),
+    '探针提到手册时要给能打开的地址（装出来的人手里没有 docs/）',
+  );
+  assert.ok(
+    existsSync(join(REPO, 'docs', 'CHANNEL-FEISHU.md')),
+    '提示里那个地址指向的文件必须真在仓库里 —— 文档改名/搬家了就得改提示',
+  );
+
+  // 同一个毛病在**整个包**里都不许有：这份副本里凡是"会打印出去"的行（console / stdout），
+  // 都不许出现仓库内路径（`packages/` `docs/` `scripts/`）—— 装出来的人手里没有仓库。
+  // 扫的是**这一份副本**，也就是**真发出去的东西**（连编译后的 `lib/` 一起，不只是源码）。
+  // `https://…` 里的路径不算：那是用户真够得着的那一种。
+  const walk = (dir) =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) return e.name === 'node_modules' ? [] : walk(p);
+      return /\.(ts|mjs|js|sh)$/.test(e.name) ? [p] : [];
+    });
+  const offenders = [];
+  for (const file of walk(copy)) {
+    const text = readFileSync(file, 'utf8');
+    if (!/packages\/|docs\/|scripts\//.test(text)) continue;
+    text.split('\n').forEach((line, i) => {
+      if (!/console\.(log|error|warn)\(|process\.(stdout|stderr)\.write\(|^\s*(echo|printf)\b/.test(line)) return;
+      const withoutUrls = line.replace(/https?:\/\/\S+/g, '');
+      if (/packages\/|docs\/|scripts\//.test(withoutUrls)) {
+        offenders.push(`${file.replace(copy, '<包>')}:${i + 1}: ${line.trim()}`);
+      }
+    });
+  }
+  assert.equal(
+    offenders.length,
+    0,
+    `这些"会打印出去"的行里还印着仓库内路径（用户那儿没有这些文件）：\n${offenders.join('\n')}`,
+  );
 });
