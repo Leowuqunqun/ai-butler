@@ -374,6 +374,8 @@ export async function ensureChannelSecrets(
     // 缺哪项问哪项：存过的那项不重问（除非 --again）
     const outcomes: KeyOutcome[] = [];
     for (const need of missing) {
+      // 上面按了 Ctrl-C：剩下的别再问了 —— 不然会为下一项再开一个页面、再等一轮
+      if (opts.signal?.aborted) break;
       if (!opts.force && secretOf(file, need.channel, need.key)) continue;
       outcomes.push(await ensureChannelToken({
         butlerDir: opts.butlerDir,
@@ -521,6 +523,10 @@ export async function askForSecret(prompt: SecretPrompt, opts: SecretPageOptions
   const timeout = setTimeout(() => settle('skipped'), opts.timeoutMs ?? DEFAULT_KEY_TIMEOUT_MS);
   timeout.unref?.();
   const onAbort = (): void => settle('skipped');
+  // ⚠️ 已经中断过的信号，listener **不会再响**（那件事早就发生完了）—— 不查这一下，
+  //    飞书这种要两项凭据的通道在 Ctrl-C 之后会为第二项**再等满一个 timeout**，
+  //    在终端里看起来就是"卡住了"（实测：4.2 秒，正好是超时）。
+  if (opts.signal?.aborted) settle('skipped');
   opts.signal?.addEventListener('abort', onAbort, { once: true });
 
   opts.log(`${prompt.name}：还没有，起了一个本地页面让你贴`);

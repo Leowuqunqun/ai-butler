@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 import { DEFAULT_KEY_PORT, ensureChannelSecrets, ensureChannelToken, ensureModelKey } from '../lib/onboarding.js';
 import { credentialsFileOf } from '../lib/credentials.js';
-import { saveSecret, secretOf, secretsFileOf } from '../lib/secrets.js';
+import { channelSecretNeeds, injectChannelSecrets, saveSecret, secretOf, secretsFileOf } from '../lib/secrets.js';
 
 const REF = 'DEEPSEEK_API_KEY';
 
@@ -410,6 +410,82 @@ test('★ 贴进 token：写进 0600 的凭据文件，并**填进通道那一�
   assert.equal(statSync(file).mode & 0o777, 0o600, '凭据文件必须 0600');
   assert.equal(rows[0].config.botToken, '123456:ABC-DEF', '要当场填进那一行（容器还没起）');
   assert.equal(s.log.lines.join('\n').includes('123456:ABC-DEF'), false, 'token 不许打日志');
+});
+
+/** 守门页的地址在同一台服务器上**复用同一个端口** —— 第 n 页要等它真的起来 */
+async function pageAt(s, nth) {
+  for (let i = 0; i < 400; i += 1) {
+    if (s.opened.length >= nth) return new URL(s.opened[nth - 1]);
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  throw new Error(`第 ${nth} 页一直没打开。日志：${s.log.lines.join(' | ')}`);
+}
+
+const FS_ROW = () => ({ name: '@butler/channel-feishu', config: { appId: '', appSecret: '' } });
+
+/**
+ * 飞书是**唯一要两项**凭据的通道（`app_id` + `app_secret`）—— "两项只填进去一项"
+ * 正是这里最容易出的错。分两半测：
+ *
+ * ① **数据那一半**（离线）：两个 need 的定义与顺序；两项都在凭据文件里时，
+ *    `injectChannelSecrets` 必须**两项都填**进那一行。
+ * ② **页面那一半**：只 GET 首页，断言提示里那条命令是能照着跑的。
+ *
+ * ⚠️ **驱动两页的整条流程测不了**：飞书页面的校验是**真校验** —— 点保存到"存好了"
+ *    之间实测有 **~2.5 秒**，那是一次真 API 往返（编的 app_id 当然会失败，页面会给出
+ *    "我知道，就要存这一把"那条出口）。离线用例不碰网络，所以到 ② 为止；
+ *    页面交互那一半由 telegram 那几条用例盯着（同一套代码）。
+ */
+test('★★ 飞书两项凭据：两个 need、两项都必须填进那一行（唯一的两项通道）', async (t) => {
+  // ① 数据那一半
+  assert.deepEqual(
+    channelSecretNeeds(FS_ROW()).map((n) => [n.channel, n.key]),
+    [['feishu', 'appId'], ['feishu', 'appSecret']],
+    '两个 need、顺序也得对（先问 app_id）',
+  );
+
+  const dir = tempHome();
+  const file = secretsFileOf(dir);
+  saveSecret(file, 'feishu', 'appId', 'cli_from_page');
+  saveSecret(file, 'feishu', 'appSecret', 'secret_from_page');
+  const row = FS_ROW();
+  assert.deepEqual(injectChannelSecrets([row], file), ['appId', 'appSecret'], '两项都要注入');
+  assert.equal(row.config.appId, 'cli_from_page');
+  assert.equal(row.config.appSecret, 'secret_from_page', '只填一项是最容易出的错');
+  assert.equal(statSync(file).mode & 0o777, 0o600, '凭据文件必须 0600');
+
+  // ② 页面那一半：只 GET，不发 POST（那一步会真打 API）
+  const rows = [FS_ROW()];
+  const s = gateStarter(rows);
+  t.after(() => stop(s));
+  const html = await (await fetch(await pageAt(s, 1))).text();
+  assert.match(html, /probe\/(run\.sh|smoke\.mjs)/,
+    '飞书的提示里要有探针那条命令 —— 光说"去后台建个应用"等于没说');
+  assert.match(html, /--save/, '而且要带 --save —— 不带只会连一下，不会把凭据存下来');
+  assert.match(html, /不需要开发者后台|不用开发者后台/, '要说清它比"去后台建应用"省事');
+});
+
+/**
+ * Ctrl-C 之后不许再等。
+ *
+ * `signal` 早就接上了，但 `addEventListener('abort')` 对**已经中断过**的信号**不会再响**
+ * （那件事发生完了）。于是：第一项被中断 → 循环走到第二项 → 又等满一个 timeout。
+ * 飞书是唯一要两项的通道，所以它最明显（实测 4.2 秒，看着就是"卡住了"）。
+ */
+test('★★ 中断之后立刻收工：飞书那两项不许为第二项再等满一个超时', async (t) => {
+  const rows = [FS_ROW()];
+  const s = gateStarter(rows, { timeoutMs: 3000 });
+  t.after(() => stop(s));
+  await pageAt(s, 1); // 第一页起来了
+
+  const t0 = Date.now();
+  s.controller.abort();
+  const filled = await s.promise;
+  const waited = Date.now() - t0;
+
+  assert.ok(waited < 1000, `中断要立刻收工，实际等了 ${waited}ms —— 在终端里看着就是卡住`);
+  assert.deepEqual(filled, [], '一项都没填上（跳过了）');
+  assert.equal(s.opened.length, 1, '中断之后不许再为第二项开一个页面');
 });
 
 test('空白 token 不算数：报错，而且继续等（不能当成存好了）', async (t) => {
