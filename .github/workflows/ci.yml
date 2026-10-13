@@ -49,3 +49,6 @@ jobs:
 
       - name: 跑测试（全部离线：不连网、不需要微信账号、不会真的发消息）
         run: pnpm test
+
+      - name: 飞书验收手册的离线演练（除"拿手机扫码进真企业"之外，按手册顺序走一遍：临时家 + 假凭据，2 秒）
+        run: pnpm rehearse:feishu

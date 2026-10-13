@@ -2041,6 +2041,39 @@ tsc 会合并跨行语句、抹掉空行，两份文件行数并不相等（599 
 
 **没验**：真机验收 —— 仍然卡在这里，目标继续 active。
 
+### 第 58 轮：把验收手册变成**能离线跑**的一条命令（`pnpm rehearse:feishu`）
+
+第十二节那份手册是"第一枪"要照着走的东西，但它一直只被人**读过**：第 37/40/53 轮验过其中
+几句，没有人从头按顺序走一遍。这轮把它固化成 `scripts/rehearse-feishu-manual.sh`
+（第 8 个 shell 脚本，`check:scripts` 收编；CI 里也挂上了，2 秒）。
+
+**先量到一个卡点**：`butler run` 在没有模型 key 时会**停在"贴模型 key"那张页面上** ——
+根本走不到飞书。所以手册第 5 步的后半一直被它挡着。量出一条路：环境里给一个
+`DEEPSEEK_API_KEY`，它会说「模型 key：来自启动环境里的 DEEPSEEK_API_KEY」，跳过页面，
+**这才真的走到飞书**（内核以 `通道=feishu` 起来 → SDK `client ready` → 连不上 → `EXIT=1`）。
+
+**它替人走的部分**（16 项断言，每项对着手册里的一句承诺）：版本 ≥ 0.2.1 ｜ 没配置时
+`doctor` 说人话 ｜ `init --im feishu` 写出通道行 ｜ **引导页印出来的探针路径真的存在**、
+`--dry` 跑得通 ｜ 假凭据下 `doctor` 报出「凭据不对／应用缺权限」两种可能 + 点出
+「改配置要发版」｜ 去重表那行在（M-a 的幂等靠它）｜ `run` 以 feishu 起来、`client ready`、
+说清 `not_connected`、**自己带着 EXIT=1 退出来** ｜ 没停在贴 key 那步、没开那条带一次性
+token 的引导页 ｜ 五份输出里**没有** `app_secret` 的值 ｜ **真 `~/.butler` 指纹一字未变**
+（脚本自己核对，和本仓的绊线同一把尺子）。
+
+**写它时踩的三个坑**（都是"看着绿其实没验"那一类，记下来省得再踩）：
+
+1. `set -e` **会被子 shell 继承** —— 写成 `run; printf 'EXIT=%s' "$?"` 时，
+   `run` 一返回 1 子 shell 就当场退了，**printf 永远不执行**，于是"退出码"永远是"没有"。
+   改用 `if`（`set -e` 不拦 `if`）。
+2. 重定向要罩住**整个子 shell**；只罩 `env` 那条命令的话，`EXIT=` 会漏到脚本自己的 stdout 上。
+3. 反向控制第一版写的是 `BUTLER_CLI=/bin/true` —— **这台 macOS 上根本没有 `/bin/true`**，
+   它红的是"找不到 CLI"，**红得不是地方**。换成真存在、什么都不打印的替身，才红在
+   「版本号不像 x.y.z」—— 那才是"断言不是摆设"的判据。
+
+**没做的**：它**不碰**要真人扫码的那一下（永远走不了，手册里也照旧写明"这一步只能人来做"）；
+没在 CI 里断言输出文案的**措辞**（只断言关键短语，将来改文案不必跟着改脚本）。
+**没验**：真机验收 —— 仍然卡在这里，目标继续 active。
+
 ## 十二、真机验收手册（给"第一枪"用）
 
 三分钟，两条命令。**这一步只能人来做**（要手机扫码），所以把"看到什么 → 说明什么"
@@ -2075,6 +2108,29 @@ bash packages/channel-feishu/probe/run.sh          # ① 先验：扫码 → 长
 bash packages/channel-feishu/probe/run.sh --save   # ② 顺手把凭据装好（`butler run` 用得上 —— 但**先**把通道切过来，见第 5 步）
 bash packages/channel-feishu/probe/run.sh --sdk-log  # ③ 官方 SDK 的日志全打出来（默认只放 warn/error，见第十一节第 45 轮）
 ```
+
+**除了"拿手机扫那一下"，上面这些都能先离线走一遍**（在临时家目录里、用假凭据，不碰真
+`~/.butler`）。源码树里有条演练按手册的顺序把它走完，每一步都断言手册承诺的那句话：
+
+```bash
+# 源码树里跑（要真人扫码的那一下它不碰，其余全走 —— 第 58 轮）
+sh scripts/rehearse-feishu-manual.sh
+```
+
+它验的是：版本 ≥ 0.2.1 → `doctor` 说人话 → **引导页那条探针命令指向一个真文件**、`--dry`
+跑得通 → 写上假凭据后 `doctor` 报出那两种可能 → `butler run` 以 `feishu` 通道起来、
+官方 SDK `client ready`、连不上时说出原因、**带着 `EXIT=1` 自己退出** → 五份输出里没有
+`app_secret` 的值 → 真家指纹一字未变。自己反着验一次（把 CLI 换成什么都不打印的替身，
+它必须**红** —— 全绿但换个假 CLI 也全绿，那说明这些断言是摆设）：
+
+```bash
+# 源码树里跑：反向控制 —— 期望非零退出
+printf '#!/bin/sh\nexit 0\n' > /tmp/butler-stub.sh && chmod +x /tmp/butler-stub.sh
+BUTLER_CLI=/tmp/butler-stub.sh sh scripts/rehearse-feishu-manual.sh
+```
+
+> ⚠️ 演练会**故意**给一个假模型 key（`DEEPSEEK_API_KEY`）—— 不给的话 `butler run` 会停在
+> "贴模型 key"那张页面上，根本走不到飞书这一步（第 58 轮量出来的）。
 
 > ℹ️ 插件自己的日志（`feishu: 上线了（机器人身份：…）` 这类）**从第 46 轮起会打到终端上**，
 > 默认档只放 error / info / warn；想看官方 SDK 那一级（`client ready` 那两行）就说
