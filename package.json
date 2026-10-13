@@ -14,6 +14,7 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "check:docs": "node scripts/check-docs.mjs",
     "check:packages": "node scripts/check-packages.mjs",
+    "check:scripts": "node scripts/check-scripts.mjs",
     "mutate": "node scripts/mutate.mjs",
     "diagrams": "bash scripts/render-diagrams.sh"
   },

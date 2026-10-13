@@ -41,5 +41,8 @@ jobs:
       - name: 打包自检（装出来的包是不是完整的）
         run: pnpm check:packages
 
+      - name: 脚本自检（step/ok/bad 的标题里别放反引号 —— 那是命令替换，会把命令真跑一遍）
+        run: pnpm check:scripts
+
       - name: 跑测试（全部离线：不连网、不需要微信账号、不会真的发消息）
         run: pnpm test

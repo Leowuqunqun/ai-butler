@@ -155,6 +155,7 @@ pnpm typecheck          # type-check only, no output
 pnpm test               # every package, fully offline: no network, no WeChat account, no messages actually sent
 pnpm check:docs         # docs health check: broken links / anchors / references to gitignored files
 pnpm check:packages     # packaging health check: every entry point and build artifact ships
+pnpm check:scripts      # script health check: no backticks in step/ok/bad headings (that is command substitution)
 pnpm mutate             # mutation testing: it verifies not the code but **the tests themselves** (ten-odd minutes, run by hand)
 pnpm diagrams           # re-render docs/diagrams/*.svg
 ```

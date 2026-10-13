@@ -188,6 +188,12 @@ sends messages to nobody. CI runs the full suite on Node 20 / 22 / 24.
 > everything looks fine locally, then you push to GitHub and the image is broken.
 > Skip that check and you will miss this class of bug, every time.
 >
+> `check:scripts` was **forced into existence by real incidents** too: backticks inside a double-quoted
+> `step "… `butler run` …"` are **command substitution**, so the command really runs while the heading
+> is being built. It hung an acceptance script for 27 minutes and got misdiagnosed for two rounds
+> ("must be a quirk of backgrounding processes"). The repo has been bitten **twice** (the other one was
+> in `install.sh`'s heredoc), so it is a CI check now rather than a note in a comment.
+>
 > `check:packages` was **forced into existence by a real incident**: listing file names one by one
 > in `files`, missing one build artifact, and the symptom is "it installs, but it will not start"
 > (`Cannot find module '…/lib/sessions.js'`) — the repo looks perfectly fine, because the source is
