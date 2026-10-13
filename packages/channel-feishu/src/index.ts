@@ -49,6 +49,84 @@ import { basename, join } from 'node:path';
 /** 飞书的硬上限。超了官方包会报错，不如我们先把话说清楚 */
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
+/**
+ * 官方 SDK 要的 logger 形状：**五个方法**。
+ *
+ * 它自己没把这个类型从 `@larksuite/channel` 里导出来（运行时连 `LoggerLevel` 都没导出，
+ * 见 `sdkLoggerOf` 那段），所以照结构写一份 —— 传进去的地方 TypeScript 会替我们对一遍。
+ */
+export interface SdkLogger {
+  error: (...msg: unknown[]) => void;
+  warn: (...msg: unknown[]) => void;
+  info: (...msg: unknown[]) => void;
+  debug: (...msg: unknown[]) => void;
+  trace: (...msg: unknown[]) => void;
+}
+
+/** 我们这一侧接日志的口（Cordis 的 logger；printf 风格，`%o` 打对象） */
+type LoggerLike = NonNullable<Context['logger']>;
+
+/**
+ * 把官方 SDK 的日志接到**我们自己的 logger** 上 —— 而不是把它关掉。
+ *
+ * 起因：终端里混着一堆官方的 `[info]: [ 'client ready' ]`，我们自己那句话
+ * （"长连接已建立。机器人身份：…"）被淹在里面。
+ *
+ * ⚠️ **不能只写 `loggerLevel`**（实测，第 45 轮）：`LoggerLevel` 是个**数字**枚举
+ * （`fatal=0`、`error=1`、`warn=2`、`info=3`、`debug=4`、`trace=5`），而官方 README
+ * 那张表写的是 `info` 这种**字符串**。传字符串进去跟任何枚举值都不相等 ⇒ **一条都不打**，
+ * 连 warn/error 都没了。那不是"降噪"，是"全静音"：真出问题时用户在终端里什么都看不到 ——
+ * 正好是这个项目一直在防的那类坑（"看起来正常，其实是哑的"）。
+ * 而且 `LoggerLevel` 运行时**没有**从 `@larksuite/channel` 导出，想传对都不好传。
+ *
+ * 所以：给它一个 logger，**别传 `loggerLevel`**，级别分流由我们做：
+ *   - `error` / `warn` → 原样进用户看得见的日志（官方报的错必须看得见）
+ *   - `info` / `debug` / `trace` → 降一级到 `debug`。Cordis 的 logger 默认级别是 `info`
+ *     （实现里就是 `this.level ?? 1`），所以这一级**默认不打印** —— 实测：真管家上下文里跑
+ *     `doctor`（会构造官方通道），官方那两行 `[info]` **一行都不出现**。级别本身可调，
+ *     但**现在没有一个现成的开关**把它调细（见第十一节第 45 轮的"没做的"）。
+ */
+export function sdkLoggerOf(log: LoggerLike | undefined): SdkLogger {
+  // ⚠️ 整条消息**当对象打**（`%o`）：官方塞进来的参数里可能带 `%s`/`%d` 这类字样，
+  //    直接当格式串拼进去会被再解释一遍（printf 风格的老坑，这个仓库吃过）。
+  const at = (level: 'error' | 'warn' | 'debug') => (...msg: unknown[]): void => {
+    log?.[level]('feishu sdk: %o', msg);
+  };
+  return {
+    error: at('error'),
+    warn: at('warn'),
+    info: at('debug'),
+    debug: at('debug'),
+    trace: at('debug'),
+  };
+}
+
+/**
+ * 交给官方 `createLarkChannel` 的那份选项。
+ *
+ * 抽成**纯函数**只为可测：这里面有两条规矩值得用**用例**钉住，而不是写在注释里 ——
+ *   ① 把 `logger` 交给它（级别怎么分流见 `sdkLoggerOf`）；
+ *   ② **绝不**传 `loggerLevel`（传了就一条都不打，见 `sdkLoggerOf` 那段）。
+ * 注释挡不住下一个人顺手加一行；用例挡得住（第 45 轮就是这么立起来的）。
+ */
+export function larkOptionsOf(
+  config: FeishuChannelConfig,
+  log: LoggerLike | undefined,
+): Parameters<typeof createLarkChannel>[0] {
+  return {
+    appId: config.appId,
+    appSecret: config.appSecret,
+    logger: sdkLoggerOf(log),
+    policy: {
+      requireMention: config.requireMention,
+      ...(config.allowChats.length > 0 ? { groupAllowlist: config.allowChats } : {}),
+    },
+    // 去重分工：官方包管**进程内**（官方重推最密的那几波），
+    // 落盘表管**跨重启**（重推最远 6 小时后才来，那时内存早空了）。见 seen.ts。
+    safety: { dedup: { ttl: 60 * 60 * 1000 } },
+  };
+}
+
 export interface FeishuChannelConfig {
   /** 开发者后台或扫码注册给的 app_id（`cli_…`）。**空 = 还没填** */
   appId: string;
@@ -227,17 +305,7 @@ export class FeishuChannel extends ChannelService {
    * 有了它，适配层可以在没有网络、没有凭据的情况下被完整测一遍。
    */
   protected makeChannel(config: FeishuChannelConfig): LarkChannel {
-    return createLarkChannel({
-      appId: config.appId,
-      appSecret: config.appSecret,
-      policy: {
-        requireMention: config.requireMention,
-        ...(config.allowChats.length > 0 ? { groupAllowlist: config.allowChats } : {}),
-      },
-      // 去重分工：官方包管**进程内**（官方重推最密的那几波），
-      // 落盘表管**跨重启**（重推最远 6 小时后才来，那时内存早空了）。见 seen.ts。
-      safety: { dedup: { ttl: 60 * 60 * 1000 } },
-    });
+    return createLarkChannel(larkOptionsOf(config, this.ctx.logger));
   }
 
   /**

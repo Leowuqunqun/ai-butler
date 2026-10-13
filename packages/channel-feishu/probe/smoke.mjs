@@ -15,6 +15,7 @@
  *   bash packages/channel-feishu/probe/run.sh          # 没凭据就扫码注册
  *   bash packages/channel-feishu/probe/run.sh --save   # 顺便把凭据存进管家目录，`butler run` 直接用
  *   bash packages/channel-feishu/probe/run.sh --dry    # 只看要做什么，不联网、不建应用
+ *   bash packages/channel-feishu/probe/run.sh --sdk-log  # 把官方 SDK 的日志全打出来（默认只放 warn/error）
  *
  * 已经有凭据（比如开发者后台建的）就放进环境变量，跳过扫码：
  *   LARK_APP_ID=cli_xxx LARK_APP_SECRET=xxx bash packages/channel-feishu/probe/run.sh
@@ -28,6 +29,29 @@ import { homeOf, saveCreds, secretsFileOf } from './save.mjs';
 
 const DRY = process.argv.includes('--dry');
 const SAVE = process.argv.includes('--save');
+/** 官方 SDK 的日志全打出来（默认只放 warn/error）。查问题时用 */
+const SDK_LOG = process.argv.includes('--sdk-log');
+
+/**
+ * 官方 SDK 自己的日志往哪儿去。
+ *
+ * ⚠️ 默认**只放 warn/error**：官方的 `[info]: [ 'client ready' ]` 这类行会把我们自己的话
+ * （"长连接已建立。机器人身份：…"）淹掉 —— 而探针的产出恰恰是那几句话。
+ *
+ * ⚠️ **别改成传 `loggerLevel`**（第 45 轮实测）：`LoggerLevel` 是个**数字**枚举
+ * （`fatal=0` … `info=3` … `trace=5`），而官方 README 那张表写的是 `info` 这种**字符串** ——
+ * 字符串跟任何枚举值都不相等 ⇒ **一条都不打**，连 warn/error 都没了（那不是降噪，是全静音）。
+ * 而且 `LoggerLevel` 运行时**没有**从 `@larksuite/channel` 导出。给了 logger 就够，级别在我们这儿分。
+ *
+ * 想全看：`--sdk-log`。
+ */
+const sdkLogger = {
+  error: (...msg) => console.error('[官方 SDK]', ...msg),
+  warn: (...msg) => console.error('[官方 SDK]', ...msg),
+  info: (...msg) => { if (SDK_LOG) console.error('[官方 SDK]', ...msg); },
+  debug: (...msg) => { if (SDK_LOG) console.error('[官方 SDK]', ...msg); },
+  trace: (...msg) => { if (SDK_LOG) console.error('[官方 SDK]', ...msg); },
+};
 /**
  * **真的**存进去了没有。
  *
@@ -92,6 +116,7 @@ if (DRY) {
   console.log('  4. channel.connect() —— WebSocket 长连接，连上后打印机器人身份');
   console.log('  5. 等你用手机飞书发一条消息（单聊；群里要 @ 它），收到就回复；Ctrl-C 退出');
   if (SAVE) console.log('  ＋ --save：把凭据写进 ' + secretsFileOf(HOME) + '（0600），`butler run` 直接用它');
+  console.log('  ＋ 官方 SDK 自己的日志：默认只放 warn/error 出来（想全看就加 --sdk-log）');
   console.log('');
   warnTwoConnections();
   console.log('');
@@ -174,6 +199,9 @@ if (SAVE) {
 const channel = createLarkChannel({
   appId,
   appSecret,
+  // 官方 SDK 的日志：默认只放 warn/error（见 sdkLogger 那段）。
+  // ⚠️ **不要**改成传 `loggerLevel`，那会把官方日志整个静音。
+  logger: sdkLogger,
   // 群里要 @ 它才理（跟管家那条路的习惯一致）；单聊不受影响
   policy: { requireMention: true },
 });

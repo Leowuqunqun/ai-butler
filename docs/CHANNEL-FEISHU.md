@@ -1409,6 +1409,52 @@ const configPath = opts.configPath ?? join(home, '.butler', 'config.json');
 > `cd … && …` 都丢进后台，后面的 `grep` 就在原目录里跑了（"没有那个文件"）。全量要用**托管**后台
 > 任务起。
 
+### 第 45 轮：官方 SDK 的日志 —— 别用"全静音"冒充"降噪"
+
+终端里混着一堆官方的 `[info]: [ 'client ready' ]`，我们自己那句话（"长连接已建立。机器人身份：…"）
+被淹在里面。看着像"把 `loggerLevel` 调成 `warn` 就行了" —— 官方 README 那张表就是这么写的
+（`logger` / `loggerLevel`，默认 `info`）。**照着做会把官方日志整个弄哑。**
+
+**实测**（源码树里真跑出来的，不是推理）：
+
+| 传什么 | 我们的 logger 收到 |
+| --- | --- |
+| 什么都不传 | 2 条 `info`（`client ready`、`event-dispatch is ready`）—— 走的是 `console.info` |
+| 只传 `logger` | 同样那 2 条，**送进我们的 logger** ✓ |
+| `logger` + `loggerLevel: 'warn'` | **0 条** |
+| `logger` + `loggerLevel: 'info'` | **0 条** |
+
+根子：`LoggerLevel` 是个**数字**枚举（`fatal=0`、`error=1`、`warn=2`、`info=3`、`debug=4`、`trace=5`），
+而 README 那张表写的是 `info` 这种**字符串**。字符串跟任何枚举值都不相等 ⇒ 一条都不打，连 warn/error
+都没了。而且 `LoggerLevel` 运行时**没有**从 `@larksuite/channel` 导出（`import { LoggerLevel }` 直接
+`SyntaxError`），想传对都不好传。
+
+所以这一轮的做法是：**给它一个 logger，不碰 `loggerLevel`**，级别分流由我们做 ——
+
+- `error` / `warn` → 原样进 `ctx.logger`（官方报的错必须看得见）；
+- `info` / `debug` / `trace` → 降一级到 `debug`。Cordis 的 logger 默认级别是 `info`（实现里就是
+  `this.level ?? 1`），所以这一级**默认不打印** —— 实测：真管家上下文里跑 `doctor`（那一步会构造
+  官方通道），官方那两行 `[info]` **一行都不出现**。级别本身是可调的，但**现在没有一个现成的开关**
+  把它调细（见下面"没做的"）。
+
+`larkOptionsOf(config, log)` 是交给官方的那份选项，抽成**纯函数**只为可测：注释挡不住下一个人顺手加
+一行 `loggerLevel`，用例挡得住。探针（它没有 Cordis 的 logger）用同一套规矩，另外加了 `--sdk-log`
+把官方日志全放出来（查问题时用）。
+
+**验证**：新文件 `test/sdk-log.mjs` 4 条 —— ① 分流表（顺带钉住"整条当对象打"：官方参数里可能带
+`%s`/`%d`，当格式串拼进去会被再解释一遍）；② 没有 logger 也不炸；③ **交给官方的选项里有 logger、
+没有 `loggerLevel`**（顺手钉住既有的"空白名单不传 groupAllowlist"）；④ **钉住官方行为** —— 它真会
+把日志送进传入的 logger，而多一个 `loggerLevel` 就全灭（哪天官方把字符串也认了，这条会红，我们
+就知道可以简化）。真造一个适配层通道时，终端里**一行 `[info]` 都没有**。
+
+**没做的（这一轮）**：
+- 探针的 `registerApp`（扫码注册）那段**不认** `logger` 选项，所以扫码过程中官方可能还是插一两行
+  —— 那是它自己的 logger，我们够不着（**没验**：真连一次才知道它到底打不打）。
+- 没给"日志级别"加配置项：默认安静、warn/error 照出已经够用，再多一个旋钮等于多一处会漂的地方。
+  ⚠️ 代价说清楚：`info`/`debug`/`trace` 那三级现在**递到了** logger，而这台机器的默认级别（`info`）
+  会把它们压掉，`butler run` 又没有一个开关能临时调细 —— 所以真要看官方那几行，眼下只有探针的
+  `--sdk-log` 这一条路。要补的话，是给 `run`/环境变量加一个级别开关（那属于下一件事）。
+
 ## 十二、真机验收手册（给"第一枪"用）
 
 三分钟，两条命令。**这一步只能人来做**（要手机扫码），所以把"看到什么 → 说明什么"
@@ -1441,6 +1487,7 @@ curl -fsSL https://github.com/Leowuqunqun/ai-butler/releases/latest/download/ins
 # 源码树里这么跑（`install.sh` 装的机器上没有 packages/ —— 那种机器看下面那段）
 bash packages/channel-feishu/probe/run.sh          # ① 先验：扫码 → 长连接 → 收一条 → 回一条
 bash packages/channel-feishu/probe/run.sh --save   # ② 顺手把凭据装好（`butler run` 用得上 —— 但**先**把通道切过来，见第 5 步）
+bash packages/channel-feishu/probe/run.sh --sdk-log  # ③ 官方 SDK 的日志全打出来（默认只放 warn/error，见第十一节第 45 轮）
 ```
 
 > **装出来的机器**（`install.sh`）上没有 `packages/` —— 那种机器上，**上面第 0 步跑过的
