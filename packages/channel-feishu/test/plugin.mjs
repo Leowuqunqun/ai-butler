@@ -289,6 +289,47 @@ test('★ 自检被拒时给两种可能，而且**绝不吐出那个一次性�
   assert.ok(!all.includes('consoleUrl'), '连字段名都不带出来');
 });
 
+test('★★ 给探针出路的那几句，家不在默认位置时**每一处**都要带 --home=', async () => {
+  // 第 53 轮补的。这一族已经踩过四次：
+  //   · 第 35 轮修了 `check()`（没凭据那条）和 `start()`（没凭据那条）两处漏传管家目录；
+  //   · 同一族里 `connectFailed` 是"第三处"（注释里点过名，补了断言）；
+  //   · 第 53 轮拿假凭据真跑 `butler doctor`，家故意不在默认位置 —— 复现出**第四处**：
+  //     `check()` 里"拿应用信息没成功"那条 fix 只摆两种可能，**压根没给"重扫一次"的命令**。
+  // 与其再补一条针对单句的断言（下次还会有第五处），不如把**这一族**一次钉住：
+  // 把插件在四种状态下会吐给用户的每一段话都拿出来，凡是给了 `smoke.mjs` 命令的，
+  // 就必须带 `--home=`。
+  const home = '/tmp/别处的管家目录';   // 故意不是默认家
+  const texts = [];
+
+  // ① 还没填凭据：check + start 各一句
+  const empty = makeFeishu({ appId: '', appSecret: '', home });
+  for (const c of await empty.channel.check()) texts.push(c.detail ?? '', c.fix ?? '');
+  texts.push(String((await empty.channel.start().then(() => null, (e) => e))?.message ?? ''));
+
+  // ② 凭据在、探活被拒（就是真机复现命中的那条）
+  const { channel, fake } = makeFeishu({ home });
+  fake.appInfoFails = 'permission denied';
+  for (const c of await channel.check()) texts.push(c.detail ?? '', c.fix ?? '');
+
+  // ③ 连不上长连接
+  fake.connectError = 'boom';
+  texts.push(String((await channel.start().then(() => null, (e) => e))?.message ?? ''));
+
+  const withHint = texts.filter((t) => t.includes('smoke.mjs'));
+  for (const t of withHint) {
+    assert.ok(
+      t.includes(`--home="${home}"`),
+      `这句给了探针命令却没带 --home=，用户照抄会把凭据存到别的家（实际：${t}）`,
+    );
+  }
+  // ⚠️ 防沉默：上面那个循环一条都不查也算"过"。这一族**必须**有好几处探针出路，
+  //    数量对不上就说明这段话没被收集到（比如字段改名了）。
+  assert.ok(
+    withHint.length >= 4,
+    `该有 4 处以上探针出路（没凭据×2、探活被拒、连不上），实际只收到 ${withHint.length} 处 —— 检查收集逻辑`,
+  );
+});
+
 test('自检：探活超时就如实说，不许挂着不动', async () => {
   const { channel, fake } = makeFeishu({ home: freshHome(), checkTimeoutMs: 5 });
   fake.appInfoHangs = true;
