@@ -12,7 +12,10 @@ import { existsSync, mkdtempSync, readdirSync, truncateSync, writeFileSync } fro
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { Context } from '@deepseek-ai/cordis';
+
 import { makeFeishu, normalized } from './fake-lark.mjs';
+import { FeishuChannel } from '../lib/index.js';
 
 /** 让 void 出去的异步处理跑完（`handleIncoming` 里有一次取引用的 await） */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -330,4 +333,26 @@ test('★ 附件超过上限：不交给 agent，而且不留在收件箱里', a
   assert.equal(got.length, 1, '消息本身还是要走的');
   assert.equal(got[0].files, undefined, '太大的不能交出去（agent 多半会整个读进上下文）');
   assert.deepEqual(readdirSync(join(home, 'state', 'files', 'feishu')), [], '落了盘发现太大，要删掉');
+});
+
+test('★★ 没凭据也要能装载（真机第一枪之前，就是这个状态）', async () => {
+  // 这条用**真的** FeishuChannel（不走假通道）。它曾经会崩：
+  // 官方包在构造时就校验凭据（`createLarkChannel({ appId: '' })` 直接抛 `appId is needed`），
+  // 而我们原来在**构造函数**里就把它造出来了。插件是**装载时**构造的 —— 于是"还没填凭据"
+  // 变成了**插件装载失败**：doctor 只说"配置里一行都没有"、`butler run` 直接起不来，
+  // 而 check() / start() 里那两段人话永远到不了。
+  // 凭据是 `butler run` 从 state/secrets.json 注入的，所以"还没填"是**正常状态**，不是错误状态。
+  const ctx = new Context();
+  let ch;
+  assert.doesNotThrow(
+    () => { ch = new FeishuChannel(ctx, { appId: '', appSecret: '', home: freshHome() }); },
+    '没凭据时构造函数绝不能抛 —— 抛了插件就装不上，用户看到的是"配置里一行都没有"',
+  );
+
+  const checks = await ch.check();
+  assert.equal(checks[0].ok, false, '自检要如实报 ✗');
+  assert.match(checks[0].detail, /app_id/);
+  assert.match(checks[0].fix, /probe\/run\.sh/, '出路要指向**真会开二维码**的那条（探针）');
+
+  await assert.rejects(() => ch.start(), /probe\/run\.sh/, '启动时给同一句人话');
 });

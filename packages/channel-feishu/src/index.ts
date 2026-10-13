@@ -69,6 +69,31 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   });
 }
 
+/**
+ * 没凭据时的那句人话。
+ *
+ * 抽成一个函数，是因为它要在**两个**地方出现：`check()`（doctor 里那一行）和
+ * `start()`（`butler run` 的"起不来：…"）。两处各写一遍，迟早有一处开始说谎 ——
+ * 这句原来就说过一次谎："跑 `butler run` 选飞书，它会开二维码给你扫"。
+ * 而 `butler run` 只会让你**粘贴** app_id；会开二维码的是**探针**（`registerApp`）。
+ * 一个不会发生的事写进 fix 里，比不写更坏：用户会照着做，然后卡在那儿。
+ *
+ * 另外要说清**去哪儿找过**：用户最常踩的坑是"存到了另一个管家目录"
+ * （凭据按"配置所在目录"找，用了 `--config` 就未必是 `~/.butler`）。
+ */
+function missingCreds(home: string): Error {
+  const secretsAt = join(home, 'state', 'secrets.json');
+  return new Error(
+    `还没有飞书应用的 app_id / app_secret（我在 ${secretsAt} 里没找到）。两条路都行：`
+    + '① 扫码最省事：`bash packages/channel-feishu/probe/run.sh --save` —— 它会开一个二维码，'
+    + '扫码就能建应用并把凭据装好；'
+    + '② 或去 open.feishu.cn 建一个「企业自建应用」，在「凭证与基础信息」里抄下 app_id / app_secret，'
+    + '等 `butler run` 提示时粘贴（也可以直接写进上面那个文件）。'
+    + '⚠️ 最常见的坑是**存到了另一个管家目录**：如果你用 `--config` 把家安在别处，'
+    + '给探针也要加 `--home=<那个目录>`。',
+  );
+}
+
 export class FeishuChannel extends ChannelService {
   // 全部给 default、不用 .required() —— 本项目的既定写法（见 ARCH-technical §5）：
   // static Config 拦不住漏填，必填在构造函数里拦。
@@ -88,8 +113,8 @@ export class FeishuChannel extends ChannelService {
 
   private readonly home: string;
   private readonly seen: SeenStore;
-  /** 官方那个通道实例。**测试里用 makeChannel 覆写掉**（见 test/） */
-  private readonly lark: LarkChannel;
+  /** 官方那个通道实例。**懒造** —— 为什么不能在这儿就造好，见 `lark` getter */
+  private larkCache?: LarkChannel;
   private off?: () => void;
   private running = false;
 
@@ -124,9 +149,34 @@ export class FeishuChannel extends ChannelService {
         'feishu: 去重表写不进去（内存里照样管事，跨重启那层暂时没有）: %o', error,
       ),
     );
-    this.lark = this.makeChannel(this.config);
+    this.larkCache = undefined;   // 官方通道**不在这儿造**（没凭据也要能装载）—— 见 `lark` getter
     // 收尾一律走 effect（cordis 4 没有 'dispose' 事件）
     ctx.effect(() => () => this.stop(), 'feishu.stop');
+  }
+
+  /** 凭据填了没有。**这是"能不能造官方通道"的前置条件**：官方包在构造时就校验它 */
+  private get hasCreds(): boolean {
+    return Boolean(this.config.appId.trim() && this.config.appSecret.trim());
+  }
+
+  /**
+   * 官方的通道实例，**第一次真的要用才造**。
+   *
+   * ⚠️ 为什么不能像原来那样在构造函数里就造好：官方包在**构造时**就校验凭据
+   * （`createLarkChannel({ appId: '' })` 直接抛 `appId is needed`）。而插件是**装载时**
+   * 就构造的 —— 于是"还没填凭据"这个**最该看到友好提示**的状态，变成了**插件装载失败**：
+   * `doctor` 只说"配置里一行都没有"，`butler run` 直接起不来，而 `check()` / `start()`
+   * 里那两段人话永远到不了。
+   *
+   * 凭据是 `butler run` 从 `state/secrets.json` 注入的，所以"还没填"是一个**正常状态**，
+   * 不是错误状态：插件该装得上，只是在自检里报 ✗、在启动时说一句人话。
+   */
+  private get lark(): LarkChannel {
+    if (!this.larkCache) {
+      if (!this.hasCreds) throw missingCreds(this.home);
+      this.larkCache = this.makeChannel(this.config);
+    }
+    return this.larkCache;
   }
 
   /**
@@ -153,18 +203,9 @@ export class FeishuChannel extends ChannelService {
    */
   async start(): Promise<void> {
     if (this.running) return;
-    if (!this.config.appId.trim() || !this.config.appSecret.trim()) {
-      // 这条错会原样出现在 `butler run` 的"起不来：…"里，所以要写成人话。
-      // 而且要说清**去哪儿找过**：用户最常踩的坑是"存到了另一个管家目录"
-      // （凭据按"配置所在目录"找，用了 `--config` 就未必是 `~/.butler`）。
-      const secretsAt = join(this.home, 'state', 'secrets.json');
-      throw new Error(
-        `还没有飞书应用的 app_id / app_secret（我在 ${secretsAt} 里没找到）。两条路都行：`
-        + '① 跑一次 `butler run` 选飞书 —— 它会开一个二维码给你扫，扫码就能建应用并授权；'
-        + '② 用探针扫码并顺手存下：`bash packages/channel-feishu/probe/run.sh --save`。'
-        + '⚠️ 最常见的坑是**存到了另一个管家目录**：如果你用 `--config` 把家安在别处，'
-        + '给探针也要加 `--home=<那个目录>`。',
-      );
+    if (!this.hasCreds) {
+      // 这条错会原样出现在 `butler run` 的"起不来：…"里，所以要写成人话（见 missingCreds）
+      throw missingCreds(this.home);
     }
     // 先订阅、再连：连上之后立刻到达的消息不能漏。
     const off = this.lark.on('message', (msg) => {
@@ -380,7 +421,9 @@ export class FeishuChannel extends ChannelService {
         name: '飞书登录态',
         ok: false,
         detail: '还没有填 app_id / app_secret',
-        fix: '跑一次 `butler run` 选飞书 —— 它会开一个二维码给你扫，扫码就能建应用并授权',
+        // 出路必须是**真会发生**的那件事：会开二维码的是探针，不是 `butler run`
+        fix: '先跑 `bash packages/channel-feishu/probe/run.sh --save`（扫码最省事，会把凭据装好）；'
+          + '也可以去 open.feishu.cn 建「企业自建应用」抄下 app_id / app_secret，等 `butler run` 提示时粘贴',
       });
       out.push({ name: '飞书去重表', ok: true, detail: dedupAt });
       return out;
