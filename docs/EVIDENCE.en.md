@@ -146,7 +146,10 @@ they keep growing with the feature set — **treat the total on this line as aut
   `init` afterwards tops up missing rows **without** switching the receive row, and that
   `init --im feishu` switches only that row and the row then really loads. (That `butler run`
   brings up the **Feishu** onboarding page and that Ctrl-C makes it exit on its own is in the
-  script too, as of round 30.) A **lived-in house** is
+  script too, as of round 30.) As of round 31 it also asserts that the program **itself** really
+  changed version — the CLI must be `0.1.0` before the upgrade and must not be afterwards, and no
+  `0.1.0` package may be left under `@butler/*` (or in the unscoped one); a merge-style install is
+  exactly where "the new files arrived but the old code still runs" would hide. A **lived-in house** is
   the normal case for users, and "clean machine, first install" can never cover it.
 - `channel-wechat/test/login.mjs` really **starts a local HTTP QR page** (127.0.0.1 only) and
   feeds a fake client through the whole login: the code really reaches the page, the browser is
