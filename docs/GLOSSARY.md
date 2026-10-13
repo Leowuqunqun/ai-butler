@@ -119,9 +119,10 @@
 | 形态与目标 | [`VISION.md`](VISION.md) | [`VISION.en.md`](VISION.en.md) |
 | 产品架构 | [`ARCH-product.md`](ARCH-product.md) | [`ARCH-product.en.md`](ARCH-product.en.md) |
 | 技术架构 | [`ARCH-technical.md`](ARCH-technical.md) | [`ARCH-technical.en.md`](ARCH-technical.en.md) |
+| 验收证据 | [`EVIDENCE.md`](EVIDENCE.md) | [`EVIDENCE.en.md`](EVIDENCE.en.md) |
 
 包级 README（`packages/*/README.md`）目前只有中文 —— 它们是挨着代码的 API 文档，
-增量补齐即可。**没有它们的英文版不影响阅读上面四份。**
+增量补齐即可。**没有它们的英文版不影响阅读上面五份。**
 
 [`GETTING-STARTED.md`](GETTING-STARTED.md)（三步上手 + 验收清单）也**故意只有中文**：
 它是给"完全不懂技术的中文用户"看的一页纸，不是开发文档 —— 它要能直接发给用户、
