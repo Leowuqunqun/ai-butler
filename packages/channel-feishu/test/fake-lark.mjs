@@ -40,6 +40,12 @@ export class FakeLark {
   downloadContentType = 'image/png';
   /** 设了就让下载抛错 —— 用来测"一个附件失败不拖累整条消息" */
   downloadFails = null;
+  /** 自检那次 REST 探活（`getAppInfo`）的三种状态：正常 / 被拒 / 永不作答 */
+  appInfo = { appName: '管家的测试应用', ownerId: 'ou_owner' };
+  appInfoFails = null;
+  appInfoHangs = false;
+  /** 被拒时挂上来的 context —— 真实错误里那是**签了名的一次性授权链接** */
+  appInfoContext = undefined;
 
   /** connect() 之前是 undefined —— 和官方包的行为一致 */
   get botIdentity() {
@@ -73,6 +79,18 @@ export class FakeLark {
 
   async fetchMessage(messageId) {
     return this.fetched.get(messageId);
+  }
+
+  /** 自检用的那次便宜 REST 调用（不需要先连长连接） */
+  async getAppInfo() {
+    if (this.appInfoHangs) return new Promise(() => {});
+    if (this.appInfoFails) {
+      const error = new Error(this.appInfoFails);
+      error.code = 'permission_denied';
+      if (this.appInfoContext) error.context = this.appInfoContext;
+      throw error;
+    }
+    return this.appInfo;
   }
 
   /**

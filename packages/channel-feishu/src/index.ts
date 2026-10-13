@@ -49,6 +49,24 @@ export interface FeishuChannelConfig {
   seenLimit: number;
   /** 单文件上限（MB）：收进来的超过它不落盘，发出去的超过它直接报错。飞书自己也是 30 */
   maxFileMb: number;
+  /** 自检里那次探活的时限（毫秒）。doctor 不能挂着不动 */
+  checkTimeoutMs: number;
+}
+
+/**
+ * 给一次网络调用加时限。
+ *
+ * 自检（`doctor`）**不能挂着不动** —— 用户是来问"哪儿没配好"的，
+ * 不是来看着光标转圈的。超时就当"这次没问出来"，如实报。
+ */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`超过 ${ms} 毫秒没有回应`)), ms);
+    p.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
 }
 
 export class FeishuChannel extends ChannelService {
@@ -62,6 +80,7 @@ export class FeishuChannel extends ChannelService {
     allowChats: z.array(z.string()).default([]),
     seenLimit: z.number().default(1000),
     maxFileMb: z.number().default(30),
+    checkTimeoutMs: z.number().default(5000),
   });
 
   readonly id = 'feishu';
@@ -83,7 +102,12 @@ export class FeishuChannel extends ChannelService {
     // 才生效，而这个类是能被直接 `new` 出来的（测试就是那么干的）。少了这一行，
     // 上限会变成 `NaN` —— 而 `size > NaN` 永远是 false，**限流被静默关掉**。
     // 这种"默认失效"不该靠调用方守规矩。
-    this.config = { ...config, home: this.home, maxFileMb: config.maxFileMb || 30 };
+    this.config = {
+      ...config,
+      home: this.home,
+      maxFileMb: config.maxFileMb || 30,
+      checkTimeoutMs: config.checkTimeoutMs || 5000,
+    };
     this.seen = new SeenStore(join(this.home, 'state', 'feishu-seen.json'), config.seenLimit);
     this.lark = this.makeChannel(this.config);
     // 收尾一律走 effect（cordis 4 没有 'dispose' 事件）
@@ -314,12 +338,17 @@ export class FeishuChannel extends ChannelService {
   /**
    * 自检。规矩照接缝写的来：**不抛错**、**不做重活**。
    *
-   * 所以这里**不探活**：真探一次要把长连接连起来，那是"重活"。凭据在不在、
-   * 去重表放哪，这两件光看文件就能回答的事，才是 doctor 该报的。
-   * （一次有时限的 REST 探活是下一步的事，先如实说"没查"。）
+   * 凭据那一条**真的探一次活**：`getAppInfo()` 是一次免费的 REST 调用
+   * （`application.v6.application.get`），不需要连长连接 —— 相当于 Telegram 那边的
+   * `getMe`。有了它，`butler doctor` 能在**什么都没启动**的时候回答"这串凭据到底对不对"。
+   *
+   * 但判词必须小心：这个接口要 application 那类权限，**被拒不等于凭据错**。
+   * 所以这里只报事实（code + message），把两种可能都摆出来，不替用户下结论。
    */
   override async check(): Promise<HealthCheck[]> {
     const out: HealthCheck[] = [];
+    const dedupAt = join(this.home, 'state', 'feishu-seen.json');
+
     if (!this.config.appId.trim() || !this.config.appSecret.trim()) {
       out.push({
         name: '飞书登录态',
@@ -327,19 +356,35 @@ export class FeishuChannel extends ChannelService {
         detail: '还没有填 app_id / app_secret',
         fix: '跑一次 `butler run` 选飞书 —— 它会开一个二维码给你扫，扫码就能建应用并授权',
       });
-    } else {
-      const me = this.lark.botIdentity;
+      out.push({ name: '飞书去重表', ok: true, detail: dedupAt });
+      return out;
+    }
+
+    try {
+      const info = await withTimeout(this.lark.getAppInfo(), this.config.checkTimeoutMs);
       out.push({
         name: '飞书登录态',
         ok: true,
-        detail: me ? `已连上：${me.name}（${me.openId}）` : '凭据已填；这次没探活（doctor 不做重活）',
+        detail: info.appName ? `凭据有效：${info.appName}` : '凭据有效（这个应用没返回名字）',
+      });
+    } catch (error) {
+      const e = error as { code?: unknown; message?: unknown };
+      // ⚠️ **绝不打印 `context`**：权限类失败的 `context.consoleUrl` 是一条签了名的
+      //    一次性授权链接（官方类型声明里写明"是凭据，别写进日志 / 工单 / 聊天"）。
+      //    这里只取 code 和 message —— 顺手也挡住了"把凭据 echo 进终端"这条路。
+      const code = typeof e.code === 'string' ? e.code : '（没有 code）';
+      const message = typeof e.message === 'string' ? e.message : String(error);
+      out.push({
+        name: '飞书登录态',
+        ok: false,
+        detail: `拿应用信息没成功：${code} ${message}`,
+        fix: '两种可能，对一下就知道是哪种：① 凭据不属于这个应用（扫码注册的凭据只对刚建的那个有效）；'
+          + '② 应用缺权限 —— 去开发者后台的权限页面加上「读取应用信息」那类权限，'
+          + '而且**改动要发新版才生效**（直接改配置不生效，很容易被当成代码写错了）',
       });
     }
-    out.push({
-      name: '飞书去重表',
-      ok: true,
-      detail: join(this.home, 'state', 'feishu-seen.json'),
-    });
+
+    out.push({ name: '飞书去重表', ok: true, detail: dedupAt });
     return out;
   }
 

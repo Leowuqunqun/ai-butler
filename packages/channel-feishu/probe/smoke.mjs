@@ -73,26 +73,55 @@ if (DRY) {
 }
 
 let appId = process.env.LARK_APP_ID ?? '';
+/**
+ * 连不上 / 注册失败时，打一段**能对症**的东西，而不是一坨堆栈。
+ *
+ * ⚠️ **绝不打印 `error.context`**：权限类失败的 `context.consoleUrl` 是一条**签了名的
+ * 一次性授权链接** —— 官方类型声明里写明"是凭据，别写进日志 / 工单 / 聊天"。
+ * 这里只取 `code` 和 `message`，并且把"有一条链接但我不打"说出来（免得你以为没这回事）。
+ */
+function reportFailure(what, error) {
+  console.error(`\n✗ ${what}\n`);
+  console.error(`  code    : ${error?.code ?? '（没有 code）'}`);
+  console.error(`  message : ${error?.message ?? error}`);
+  if (error?.context) {
+    console.error('  （错误里还带了一条一次性授权链接 —— 那是凭据，这里不打印）');
+  }
+  console.error('\n最可能的三件事，按概率排：');
+  console.error('  1. 凭据不属于这个应用 —— 扫码注册拿到的凭据只对刚建的那个应用有效');
+  console.error('  2. 应用没在「事件与回调」里把订阅方式选成**长连接**；或者选的时候');
+  console.error('     本地客户端还没在线（官方原文：保存长连接配置时客户端必须已在线，顺序反了会一直失败）');
+  console.error('  3. 应用缺权限：收消息至少要有「接收消息」那类权限，而且**改动要发新版才生效** ——');
+  console.error('     直接改配置不生效，很容易被当成"代码没写对"');
+  console.error('\n把 code / message 这两行原样贴出来就能对症（细节见 docs/CHANNEL-FEISHU.md 第二、三节）。\n');
+}
+
 let appSecret = process.env.LARK_APP_SECRET ?? '';
 
 if (!appId || !appSecret) {
   console.log('没有凭据 → 走扫码注册。手机飞书在手边就行。\n');
-  const creds = await registerApp({
-    onQRCodeReady: async ({ url, expireIn }) => {
-      console.log('用手机飞书扫这个二维码（或把下面的链接发到手机上点开）：\n');
-      // 有 qrcode 就画在终端里；没有就直接给链接 —— 不因为少一个可选依赖就走不下去
-      try {
-        const { toString } = await import('qrcode');
-        console.log(await toString(url, { type: 'terminal', small: true }));
-      } catch {
-        console.log('（没装 qrcode，直接打开链接）');
-      }
-      console.log(`  ${url}`);
-      if (expireIn) console.log(`  ${expireIn} 秒内有效`);
-      console.log('');
-    },
-    onStatusChange: (s) => console.log(`  扫码状态：${s.status}`),
-  });
+  let creds;
+  try {
+    creds = await registerApp({
+      onQRCodeReady: async ({ url, expireIn }) => {
+        console.log('用手机飞书扫这个二维码（或把下面的链接发到手机上点开）：\n');
+        // 有 qrcode 就画在终端里；没有就直接给链接 —— 不因为少一个可选依赖就走不下去
+        try {
+          const { toString } = await import('qrcode');
+          console.log(await toString(url, { type: 'terminal', small: true }));
+        } catch {
+          console.log('（没装 qrcode，直接打开链接）');
+        }
+        console.log(`  ${url}`);
+        if (expireIn) console.log(`  ${expireIn} 秒内有效`);
+        console.log('');
+      },
+      onStatusChange: (s) => console.log(`  扫码状态：${s.status}`),
+    });
+  } catch (error) {
+    reportFailure('扫码注册没成', error);
+    process.exit(1);
+  }
   appId = creds.client_id;
   appSecret = creds.client_secret;
   console.log('拿到凭据了（不打印内容）。下次想免扫码，把它们放进环境变量：');
@@ -142,9 +171,36 @@ channel.on('message', async (msg) => {
   }
 });
 
-await channel.connect();
-const me = channel.botIdentity;
-console.log(`长连接已建立。机器人身份：${me ? `${me.name}（${me.openId}）` : '未知'}`);
+try {
+  await channel.connect();
+} catch (error) {
+  reportFailure('连不上飞书的长连接', error);
+  process.exit(1);
+}
+
+// `connect()` 返回 ≠ 已经连上：官方包的握手是异步的，而且它自己会重连，
+// 所以"没连上"很可能表现为**静静地挂着**，而不是抛错。
+//
+// 这里等的信号是 `botIdentity` —— 官方类型声明里写明它是**连接过程中解析出来的**，
+// 所以它出现了就说明飞书真的认了这串凭据（比看某个内部状态字符串更靠得住）。
+// 等不到就报一段能对症的话：总比让终端一直转圈强。
+const deadline = Date.now() + 20000;
+let me = channel.botIdentity;
+if (!me) {
+  console.log('正在等长连接握手（最多 20 秒）…');
+  while (!me && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    me = channel.botIdentity;
+  }
+}
+if (!me) {
+  reportFailure(
+    '长连接 20 秒内没握上手',
+    new Error('没在时限内拿到机器人身份（凭据错 / 订阅方式不是长连接 / 权限没发版，都可能长这样）'),
+  );
+  process.exit(1);
+}
+console.log(`长连接已建立。机器人身份：${me.name}（${me.openId}）`);
 console.log('现在用手机飞书给它发一条消息（单聊；群聊里记得 @ 它）。Ctrl-C 退出。\n');
 
 for (const sig of ['SIGINT', 'SIGTERM']) {

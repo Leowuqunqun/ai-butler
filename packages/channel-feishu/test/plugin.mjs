@@ -175,20 +175,44 @@ test('stop() 在没 start 过时也能调（doctor、卸载、启动失败回滚
   assert.equal(fake.subscribed, false, '停掉之后不该还挂着订阅');
 });
 
-test('自检：没凭据时说清怎么拿，有凭据时不假装探过活', async () => {
+test('自检：没凭据时说清怎么拿；有凭据时**真探一次活**', async () => {
   const { channel } = makeFeishu({ appId: '', appSecret: '', home: freshHome() });
   const bad = await channel.check();
   assert.equal(bad[0].ok, false);
   assert.match(bad[0].fix, /butler run/);
 
+  // 探活走 REST（getAppInfo），所以**不用先 start** 就能验凭据 —— 这正是 doctor 要的：
+  // 什么都没启动的时候，回答"这串凭据到底对不对"
   const { channel: ok, fake } = makeFeishu({ home: freshHome() });
-  const before = await ok.check();
-  assert.equal(before[0].ok, true);
-  assert.match(before[0].detail, /没探活/, 'doctor 不做重活，就别假装做了');
+  const got = await ok.check();
+  assert.equal(got[0].ok, true);
+  assert.match(got[0].detail, new RegExp(fake.appInfo.appName), '要说清是哪个应用');
+});
 
-  await ok.start();
-  const after = await ok.check();
-  assert.match(after[0].detail, new RegExp(fake.identity.name));
+test('★ 自检被拒时给两种可能，而且**绝不吐出那个一次性授权链接**', async () => {
+  const { channel, fake } = makeFeishu({ home: freshHome() });
+  fake.appInfoFails = 'permission denied';
+  fake.appInfoContext = { consoleUrl: 'https://open.feishu.cn/one-click?sign=SECRET-TOKEN' };
+
+  const out = await channel.check(); // 接缝规矩：check 不许抛
+  assert.equal(out[0].ok, false);
+  assert.match(out[0].detail, /permission denied/, '把事实（code / message）如实报出来');
+  assert.match(out[0].fix, /缺权限/);
+  assert.match(out[0].fix, /凭据不属于这个应用/);
+
+  // `context.consoleUrl` 是**签了名的一次性授权链接** —— 官方类型声明里写明
+  // "是凭据，别写进日志 / 工单 / 聊天"。所以自检输出里一个字都不许有
+  const all = JSON.stringify(out);
+  assert.ok(!all.includes('SECRET-TOKEN'), '授权链接是凭据，不许出现在自检输出里');
+  assert.ok(!all.includes('consoleUrl'), '连字段名都不带出来');
+});
+
+test('自检：探活超时就如实说，不许挂着不动', async () => {
+  const { channel, fake } = makeFeishu({ home: freshHome(), checkTimeoutMs: 5 });
+  fake.appInfoHangs = true;
+  const out = await channel.check();
+  assert.equal(out[0].ok, false);
+  assert.match(out[0].detail, /超过 5 毫秒/);
 });
 
 // ───────────────────────── M-b：入站附件落盘 ─────────────────────────
