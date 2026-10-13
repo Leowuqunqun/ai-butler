@@ -28,8 +28,30 @@ import { homeOf, saveCreds, secretsFileOf } from './save.mjs';
 
 const DRY = process.argv.includes('--dry');
 const SAVE = process.argv.includes('--save');
+/**
+ * **真的**存进去了没有。
+ *
+ * 不能拿 `SAVE` 代替：`reportFailure` 在**扫码注册失败**那条路上也会被调 —— 那时什么都
+ * 还没写 ✗。失败信息里一句错话比不说更坏（用户会以为凭据在手，其实没有）。
+ */
+let saved = false;
 /** 管家目录（`--home=` > `BUTLER_HOME` > `~/.butler`）。dry 里也要说真话，所以在这儿算一次 */
 const HOME = homeOf();
+
+/**
+ * 第一枪最容易查错方向的那件事 —— **一份文本，两处用**（`--dry` 的说明、连上之前再说一遍）。
+ *
+ * 同一个应用开两条长连接时，飞书把事件在两条之间**分流投递** —— 表现是"消息偶尔不回"，
+ * 而两边看起来都正常。最常见的顺序就是：探针验通了没关，又起了 `butler run`。
+ * 文档里写着，但用户在终端里盯的是探针 —— 所以这句必须由探针自己说。
+ *
+ * 只写一份是为了**不漂移**：抄两遍，就迟早有一遍过期（这条教训上一轮刚吃过）。
+ */
+function warnTwoConnections() {
+  console.log('  ⚠️ 全程别让管家（`butler run`）也连着同一个应用。');
+  console.log('     同一个应用开两条长连接时，飞书会把事件在两条之间**分流投递** ——');
+  console.log('     表现是"消息偶尔不回"，而两边看起来都正常，最容易查错方向。');
+}
 
 if (DRY) {
   console.log('— dry run：下面这些是"真跑时会做的事"，现在什么都没发出去 —');
@@ -40,6 +62,8 @@ if (DRY) {
   console.log('  4. channel.connect() —— WebSocket 长连接，连上后打印机器人身份');
   console.log('  5. 等你用手机飞书发一条消息（单聊；群里要 @ 它），收到就回复；Ctrl-C 退出');
   if (SAVE) console.log('  ＋ --save：把凭据写进 ' + secretsFileOf(HOME) + '（0600），`butler run` 直接用它');
+  console.log('');
+  warnTwoConnections();
   console.log('');
   console.log('  通了就证明五件事：凭据、长连接、事件投递、权限点、回复 —— 全对。');
   process.exit(0);
@@ -66,7 +90,14 @@ function reportFailure(what, error) {
   console.error('     本地客户端还没在线（官方原文：保存长连接配置时客户端必须已在线，顺序反了会一直失败）');
   console.error('  3. 应用缺权限：收消息至少要有「接收消息」那类权限，而且**改动要发新版才生效** ——');
   console.error('     直接改配置不生效，很容易被当成"代码没写对"');
-  console.error('\n把 code / message 这两行原样贴出来就能对症（细节见 docs/CHANNEL-FEISHU.md 第二、三节）。\n');
+  console.error('\n把 code / message 这两行原样贴出来就能对症（细节见 docs/CHANNEL-FEISHU.md 第二、三节）。');
+  // 这一趟**不白跑**：`--save` 是存盘在连接之前的（失败也留住了凭据）。
+  // 不说这句，用户会以为白扫了一次、又去重扫 —— 而重扫解决不了上面那三件事。
+  if (saved) {
+    console.error('\n凭据**已经存好了**（存盘在连接之前）：上面那几件事改完，直接 `butler run` 就行，');
+    console.error('不用重扫。想确认就去 ' + secretsFileOf(HOME) + ' 看（别贴给别人）。');
+  }
+  console.error('');
 }
 
 let appSecret = process.env.LARK_APP_SECRET ?? '';
@@ -103,6 +134,7 @@ if (!appId || !appSecret) {
 
 if (SAVE) {
   const file = saveCreds(HOME, appId, appSecret);
+  saved = true;
   console.log(`凭据已存进 ${file}（0600）—— 下次 \`butler run\` 选飞书时会直接用它，不用再扫。`);
   console.log('（不打印凭据本身：要看就去那个文件里看。）\n');
 }
@@ -139,6 +171,10 @@ channel.on('message', async (msg) => {
     console.error(`回复失败：${error?.message ?? error}\n`);
   }
 });
+
+// ⚠️ 就在连上之前再说一遍（终端是用户真正盯着的东西，文档里的警告他多半没开着）
+warnTwoConnections();
+console.log('');
 
 try {
   await channel.connect();

@@ -101,3 +101,23 @@ test('★ --dry 里的 --save 必须说**真**路径（用 --home= 时最容易�
     `要说真路径，别写死 ~/.butler —— 用户用 --home= 就是怕存错地方。实际输出：\n${r.stdout}`,
   );
 });
+
+/**
+ * 第一枪最容易让人查错方向的那件事，探针必须**当面说**。
+ *
+ * 同一个应用开两条长连接时，飞书把事件在两条之间**分流投递** —— 表现是"消息偶尔不回"，
+ * 而两边看起来都正常。最常见的顺序就是：探针验通了没关，又起了 `butler run`。
+ * 文档里写着（第十二节），但用户在终端里盯的是探针，不是文档 —— 所以这句必须由探针自己说。
+ */
+test('★ --dry 里必须警告"别让管家同时连着同一个应用"（两条长连接会分流）', () => {
+  const home = freshHome();
+  const r = spawnSync('bash', [join(pkgRoot, 'probe', 'run.sh'), '--dry', '--home=' + home], {
+    encoding: 'utf8',
+    timeout: 30_000,
+  });
+
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /别让管家/, '要指名道姓说"别让管家也连着"');
+  assert.match(r.stdout, /分流/, '要说清机制：事件被分流投递，不是"坏了"');
+  assert.match(r.stdout, /偶尔不回/, '要说清症状 —— 不然遇到时会往错的方向查');
+});
