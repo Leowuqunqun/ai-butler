@@ -1749,6 +1749,58 @@ README/LICENSE/package.json），再拿包 README 里的相对链接去对。**1
 `tag` 链接不在范围里（要翻 git 历史，不值当）；自检里的"路径在不在"是用**假仓库**回答的，
 真实现那条 `reallyExists` 由上面第三道真文件控制组看着 —— 这两者要是哪天走岔了，自检看不出来。
 
+### 第 51 轮：包自己的依赖清单，第一次跟源码对得上
+
+`check:packages` 守的是"**装出来的包是不是完整的**"，可它只查**文件带没带走**（`files` 覆盖没覆盖），
+没查**依赖声明对不对**。那是同一个病根的另一半，而且更阴：
+
+- `files` 漏了产物 ⇒ 装出来**立刻** `Cannot find module`（响亮）；
+- 依赖只写在 `devDependencies` ⇒ **本地永远跑得通**（仓库里装着、宿主也恰好声明了），换台机器或被
+  别人当包用才炸（安静）。
+
+先量源码：把 `src/` 里**值导入**的外部包，跟 `dependencies`/`peerDependencies` 对一遍。结果：**7 个包**
+在运行时用了 `@deepseek-ai/schemastery`，却只写在 `devDependencies` 里 —— 而**同一批包**对
+`@deepseek-ai/cordis`（一样是宿主提供的）写的是 `peerDependencies`。一样东西，仓库里有**三种**写法：
+
+| 写法 | 谁 | 对不对 |
+| --- | --- | --- |
+| `peerDependencies`（＋dev） | 11 个包对 `cordis`、`dsh-plugin` 对 `schemastery` | ✓ 宿主提供的东西就该这么写 |
+| `dependencies` | `channel-feishu`、`channel-telegram`、`cli`、`wechat-agent-bridge` 对 `schemastery` | 能跑，但不统一（可能多一份副本） |
+| **只有 `devDependencies`** | 7 个包对 `schemastery` | ✗ 清单没说实话 |
+
+改法：那 7 个包补 `peerDependencies` 里的 `"@deepseek-ai/schemastery": "^3.18.4"`（照 `dsh-plugin` 的
+写法），`devDependencies` 留着（本地构建测试还要用）。
+
+⚠️ **说清楚**：现在装出来的系统**本来就是好的** —— CLI 自己把 schemastery 声明成了 `dependencies`。
+补的是**包自己的清单**，不是救火。这也正是它一直没被发现的原因。
+
+**规则怎么写**（用语法树，跟 `check:user-facing` 同一套）：
+
+- 静态 `import ... from 'x'` / `export ... from 'x'` ⇒ **必须**在 `dependencies` 或 `peerDependencies` 里；
+- `import type ...` / `import { type A, type B } ...` ⇒ 不算（编译后不留痕，dev 就够）；
+- `try { await import('x') } catch {}` ⇒ **不算** —— 那是 ESM 里明写"这个可以没有"，本仓 `dsh-plugin`
+  对 `@deepseek-ai/dsh-agent` 正是这么用的（注释："拿不到就只传 agentOptions，插件不该整个起不来"）。
+
+**验证**（自检 17 条 + 两道真文件控制组，都用 sha 断言"确实改到了"）：
+
+| 控制组 | 期望 | 实测 |
+| --- | --- | --- |
+| 抽掉 `core` 新加的那条 peer | 报出该包 | ✅ `@butler/core` |
+| 把 `dsh-plugin` 那处的 try/catch 拿掉 | 报出 `@deepseek-ai/dsh-agent` | ✅ 报了（**豁免是承重的**） |
+| 不再认"全是 type"的命名导入（规则内部） | 自检点名 | ✅ 那条 |
+| 不再看有没有被 try 包着（规则内部） | 自检点名 | ✅ 两条 optional 用例 |
+
+⚠️ 这一轮两次"咬到自己"都值得记：
+
+1. **语法树比我手写的正则审计多找到一处**（`dsh-plugin` 里那个**动态** `import()`）—— 结果它是**故意
+   可缺**的 ⇒ 不是仓库的错，是**我的规则太严** ⇒ 补上 try/catch 豁免。两个方向都学到了。
+2. 自检漏了 `export { A }`（没有 `from`、`moduleSpecifier` 是 `undefined`）这个形状 ⇒ **真跑时崩了**
+   （自检 15 条全绿也没拦住）⇒ 补成第 15 条。第 49 轮那句"自检验语义、真跑验形状"又应验一次。
+
+**没做的**：没把那 4 个写 `dependencies` 的包也改成 peer（它们能跑，动它是另一件事）；没查
+"`dependencies` 里声明了却没用到"的（**会误报**：CLI 用**字符串**装配插件，那些名字不是 import）；
+`peerDependenciesMeta`（optional peer）没管。
+
 **没验**：真机验收（真飞书企业里扫码、长连接、回一条消息）—— 仍然卡在这里，目标继续 active。
 
 ## 十二、真机验收手册（给"第一枪"用）

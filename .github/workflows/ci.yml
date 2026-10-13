@@ -38,7 +38,7 @@ jobs:
       - name: 文档体检（断链 / 锚点 / 被 gitignore / 出包文档的链接读者够得着 / 本仓地址指得到）
         run: pnpm check:docs
 
-      - name: 打包自检（装出来的包是不是完整的）
+      - name: 打包自检（装出来的包是不是完整的：入口、编译产物、运行时依赖声明）
         run: pnpm check:packages
 
       - name: 脚本自检（会印字的函数标题里、以及不带引号的 heredoc 里，别放反引号 —— 那是命令替换）

@@ -59,7 +59,7 @@ memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 258）。
 | **出事之后有一根绳子可以抓**（`butler report` 生成一份报告：版本/系统、文件清单、配置有哪些行、补丁、自检、日志尾巴 —— **里面一个 key 都不许有**，连「名字像密钥的字段」都在源头标掉、整份再过一遍扫描器；隐去的地方**明说隐去**了，而且**只读**） | ✅ 7 个测试 |
 | **跨网那台也能「配对」收进来**（原话要的正是"遥控**远端**电脑"：中枢和节点不在一个 WiFi 时走尾巴网络。以前这条路要用户**在两台机器上把同一把密钥抄对**，名册还只活在内存里（中枢一重启就不认识那台了）。现在跟局域网同一套：节点屏幕上打出一行「地址 + 一次性配对码」，**发到微信里就收下了**，密钥由节点自己交给中枢、**每台一把**（一台泄漏不等于全都泄漏）、当场落盘 0600，重启还在，说「忘掉」能撤回。顺带修掉两个真 bug：连接时写死链路的默认端口（节点不在 41338 上就永远连不上）、`localAddresses()` 把 `utun` 滤掉（macOS 上尾巴地址就在那儿 —— 节点屏幕上根本打不出那句能抄的话，跨网就没法指路）） | ✅ 12 个测试 |
 | **人格随包发**（`agent-dsh` 带一份 patch 模板：输出原样进微信所以禁止 Markdown、发文件走 `[[file:…]]`、不许点界面、headless 批准策略 `never`） | ✅ |
-| **打包体检**（`pnpm check:packages` + CI：`files` 漏产物这类事故不可能再发生） | ✅ |
+| **打包体检**（`pnpm check:packages` + CI：`files` 漏产物这类事故不可能再发生；第 51 轮起还管"运行时用到的包声明了没有"） | ✅ |
 | **`butler run` 自己去登录**（没有登录态时起本地扫码页 + **自动打开浏览器** + 等扫码 + 落盘，中间不要第二条命令；没浏览器的地方关 `qrPage` 就退回老行为） | ✅ 10 个测试 |
 | **模型 key 变成一个输入框**（`butler run` 先起一个只监听回环的引导页：去哪儿拿写着、粘一下、写进 0600 的凭据库；**用户不再需要改那个 YAML**） | ✅ 18 + 14 个测试 |
 | **补丁模板不再要用户改**（默认 DeepSeek 通道 + `deepseek-flash`，`apiKeyEnv` 钉住引用名，key 由引导页写进凭据库） | ✅ 防漂移用例 |
@@ -100,6 +100,7 @@ memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 258）。
 | ★ **"会打印给用户看的话"那把尺子，量出自己太窄；并且从这一轮起每次自证**（第 47 轮只认 `console.*` + `process.std*.write` + "logger 家族"。这一轮把全仓打印调用**按基名分组数了一遍**（`console` 224、`this` 65、`logger` 19、`opts` 14、`store`/`state`/`res`/`handle` 各 1），才看见漏了两类**真存在**的东西：`packages/cli/src/onboarding.ts` 里 **14 处 `opts.log(…)`** —— 引导页的打印口是**注入进来**的（`log: (line: string) => void`），把地址和提示送到用户眼前的正是它；以及 `channel-wechat/src/login.mjs` 的**裸 `log(…)`**（扫码提示，没有接收者）。`.write` **不能**一起放宽：`handle`/`store`/`state`/`res` 那四处是写流写盘。新规则＝任何 `.log/.info/.warn/.error/.debug(…)` 都算（不看接收者叫什么）＋裸 `log(…)` ＋ `process.stdout/stderr.write`。另外脚本里加了 `SELF_TEST` 15 条与 `--self-test`：正常跑时**先验尺子再量仓库**，尺子坏了报的是"**规则自己坏了（不是仓库里有违规）**"并逐条给出"应该 N 处、实际 M 处"和那段源码） | ✅ 放宽后重扫，仓库**仍然是干净的**（那 20 处新覆盖的行没有违规 —— 所以这一半是**防未来**、不是修现行问题，文档里如实写了）；自检本身被咬过两道：关掉"方法名就是打印"那一支 ⇒ 5 条红（`console.log`/`opts.log`/`ctx.logger`/拼接/模板，各报"实际 0 处"），让 `maskUrls` 失效 ⇒ 只 URL 那条红（报"应该 0 处，实际 1 处"），把 `ok` 从 shell 动词表里删掉 ⇒ 只那条红，还原后 15/15 绿；四个 `check:*` 同绿 |
 | ★ **"会真执行的反引号"那把尺子也量出自己太窄：只认 3 个函数名，而且根本没看 heredoc**（第 30 轮那次事故留了**两道**疤，一道就在 `install.sh` 的 heredoc —— 抬头写着，规则却扫不到；谁删掉 `make-installer-bundle.sh:95` 那个转义反斜杠都不会有人喊。第 49 轮改成**从源码里认**：体内含 `printf`/`echo` 的函数 ＋ 调了它们的**传递闭包**（`die()` 自己一个 `printf` 都没有，但它调 `say()`），于是 `install.sh` 的 `say`/`die`、`make-installer-bundle.sh` 的 `say` 全都进了网；另查**不带引号的 heredoc** 体内的裸反引号（`<<'EOF'` 不展开，整段跳过）。同时补 `SELF_TEST` 10 条与 `--self-test`，再加一条**对账守卫**：源码里数 `name() {` 和取到的函数体对不上就出声） | ✅ 两道**真文件**控制组：删掉 `make-installer-bundle.sh:95` 那道历史疤里的反斜杠 ⇒ 报出 `scripts/make-installer-bundle.sh:95` 那一行；往 `install.sh:340` 的 `say "③ …"` 里塞一对反引号 ⇒ 报出 `install.sh:340`（两次都用 sha 断言"确实改到了文件"，还原后逐字节一致、复跑绿）。规则内部三道：关掉 heredoc 半边 ⇒ 自检点名那条 heredoc 承诺；去掉传递闭包 ⇒ 点名 `die` 那条；退回"用行首 `}` 找函数结尾"的旧写法 ⇒ **自检仍绿、真扫描红**，对账守卫报出 `verify-upgrade.sh` 丢了 `perm butler doctor` 三个函数 —— 那就是它当场抓到的 bug；四个 `check:*` 同绿 |
 | ★ **两份"发出去的东西"里的链接，第一次有人管：包 README 在 npm 上是死链，本仓地址写错也不响**（第 50 轮。① 审计：把每个 `packages/*/package.json` 的 `files` 展开成"这个包真发什么"，再拿包 README 里的相对链接去对 ⇒ **14 处**指向没出包的东西（`../cli`、`../../docs/GETTING-STARTED.md`、`test/fixtures/consumer.ts` …）—— 在 GitHub 上点得开、在 npm 页面上按"包"解析全断。全换成完整地址。② 新规矩：指向**本仓**的 `blob`/`tree` 地址，路径必须真在（`blob` ⇒ 文件、`tree` ⇒ 目录）—— 第 41 轮只把这句话写在文档里，现在它是个检查） | ✅ 规则自检 14 条（新规则两条各 7 条）；**真文件**控制组三道：把 `seam-memory` 的地址改回 `../memory-file` ⇒ 报出该文件；`GETTING-STARTED.md` 写错一个字符 ⇒ 报出 `packages/cli/README.md`；`blob` 写成 `tree` ⇒ 同样报出（种类不对也算）—— 三次都用 sha 断言"确实改到了"、还原后逐字节一致、复跑绿。规则内部两道：去掉"跑到包外面"那一支 ⇒ 自检点名 `../b/README.md`；不再问"这个路径在不在" ⇒ 自检点名三条 URL 用例；四个 `check:*` 同绿 |
+| ★ **包自己的依赖清单第一次跟源码对得上：7 个包运行时用 `schemastery`，却只写在 `devDependencies` 里**（第 51 轮。同样宿主提供的 `cordis` 它们写的是 `peerDependencies` —— 同一样东西三种写法并存：peer / dependencies / 只有 dev。规则：**静态值导入的东西必须在 `dependencies` 或 `peerDependencies` 里**；`import type` / `{ type X }` 不算（编译后不留痕）；`try { await import('x') } catch {}` 也不算 —— 那是 ESM 明写"可以没有"，本仓 `dsh-plugin` 对 `@deepseek-ai/dsh-agent` 正是这么用的。用语法树判，不用正则 —— 我手写的那份正则审计就漏掉了那个动态 import） | ✅ 规则自检 17 条；**真文件**控制组两道：抽掉 `core` 新加的 peer ⇒ 报出该包；把 `dsh-plugin` 那处的 try/catch 拿掉 ⇒ 报出 `@deepseek-ai/dsh-agent`（证明那条豁免是承重的）—— 都用 sha 断言"确实改到了"、还原后逐字节一致；规则内部两道：不再认"全是 type"的命名导入 ⇒ 自检点名那条；不再看 try ⇒ 点名两条 optional 用例；⚠️ 自检一开始漏了 `export { A }`（没有 `from`、`moduleSpecifier` 是 `undefined`）这个形状，真跑时崩了 —— 补成第 15 条自检；`pnpm-lock.yaml` 没变（workspace importer 不记 peer），CI 的 `--frozen-lockfile` 不受影响 |
 
 ## 最有分量的几条证据
 
@@ -214,6 +215,16 @@ memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 258）。
 > `check:packages` 是**被真事故逼出来的**：`files` 里一个一个列文件名，漏掉一个编译产物，
 > 现象是"装得上、装完起不来"（`Cannot find module '…/lib/sessions.js'`）——
 > 仓库里一切正常，因为源码就在手边。现在规矩是**整目录进包**，由这个脚本守。
+>
+> ⚠️ **（第 51 轮补）它只管"文件带没带走"，没管"依赖声明得对不对"** —— 那是同一个病根的另一半，而且
+> 更阴：`files` 漏了产物，装出来**立刻** `Cannot find module`；可依赖只写在 `devDependencies` 里，
+> 本地永远跑得通（仓库里装着、宿主也恰好声明了），换台机器或被别人当包用时才炸。量出来 **7 个包**在
+> 运行时**值导入**了 `@deepseek-ai/schemastery`，却只写在 `devDependencies` 里 —— 而同一个包对
+> `@deepseek-ai/cordis`（一样是宿主提供的）写的是 `peerDependencies`。宿主提供的东西写 peer，清单才
+> 算说了实话。规则用语法树判"这是值导入还是 `import type`"（类型不留痕，dev 就够），并且**不认**
+> `try { await import('x') } catch {}` —— 那是 ESM 里明写"这个可以没有"的办法，本仓 `dsh-plugin` 对
+> `@deepseek-ai/dsh-agent` 正是这么用的。⚠️ 顺带说清：现在装出来的系统**本来就是好的**（CLI 自己把
+> schemastery 声明成了 `dependencies`），补的是**包自己的清单**，不是救火。
 >
 > `check:user-facing` 是**被同一句话逼出来的第三次**：装出来的机器上没有 `packages/`、`docs/`、
 > `scripts/`，而提示里前后三次出现了这些路径（第 40 轮探针路径、第 41 轮手册地址、第 43 轮包内路径）。
