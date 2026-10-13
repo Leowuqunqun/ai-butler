@@ -281,7 +281,7 @@ M-c 引导页 / `doctor` / 文档 / GETTING-STARTED。
   钉住"我们传下去的 policy"和"官方接住了什么"一致
 - **依赖表就是"没重写协议"的证据**：运行时只 import `@larksuite/channel` + 接缝 + cordis/schemastery，
   没有 HTTP 客户端、没有 protobuf、没有 WebSocket
-- 全仓库 **914 个用例**通过、17 个包、`check:docs` 33 个 md 全绿
+- 全仓库 **915 个用例**通过、17 个包、`check:docs` 33 个 md 全绿
 
 **还没做**（下一步的顺序）：
 
@@ -405,6 +405,14 @@ M-c 引导页 / `doctor` / 文档 / GETTING-STARTED。
 原来是**靠人眼对**的（两边各自的测试都绿，合起来不通的话谁也不知道）。现在写的那半在
 `test/probe.mjs` 钉着，读的那半在 `packages/cli/test/secrets.mjs` 钉着，改任何一边另一边会红。
 
+**但"两半各自钉住"还不等于"合起来通"。** 所以又加了一条**真的跑一次**的集成测试
+（`packages/cli/test/probe-contract.mjs`）：拿假凭据**真的把探针跑起来写一遍**，再用
+CLI 自己的读法读回来、并走一遍 `butler run` 的注入那一步。它不断言退出码 ——
+连不上飞书是意料之中的（这一步验的是"存下来"，不是"连上"）。
+
+顺带钉住一个**用户能感觉到**的性质：**凭据写盘发生在连长连接之前**。所以"新应用权限还没配齐、
+第一次连不上"时，**凭据已经存好了** —— 修完权限直接 `butler run`，不用重扫。
+
 顺手修掉 dry 里的一个小谎：`--dry --save` 原来固定打印 `~/.butler/...`，而你用 `--home=`
 时它说的就是个**错地方** —— 偏偏"存到另一个管家目录"是这条路上最常见的坑。现在说真路径。
 
@@ -447,7 +455,7 @@ bash packages/channel-feishu/probe/run.sh --save   # ② 顺手把凭据装好�
 
 | 你看到的 | 大概率是 | 怎么办 |
 | --- | --- | --- |
-| `code: not_connected` + `could not resolve bot identity via /open-apis/bot/v3/info`（外面会包一层中文：事实 + 出路） | **凭据不对**（这句原话是实测抓到的：拿假凭据真连了一次） | 重跑一次扫码；或确认环境变量里那两串属于这个应用 |
+| `code: not_connected` + `could not resolve bot identity via /open-apis/bot/v3/info`（外面会包一层中文：事实 + 出路） | **凭据不对**（这句原话是实测抓到的：拿假凭据真连了一次） | 重跑一次扫码；或确认环境变量里那两串属于这个应用。**注意 `--save` 那次已经把凭据存好了**（存盘在连接之前），修完权限直接 `butler run`，不用重扫 |
 | `doctor` 里飞书报 `failed to get tenant_access_token, code: 10003, msg: invalid param` | 凭据**填了但不对**（手抄时少了字符最常见） | 重扫最省事：`probe/run.sh --save`（原话是实测抓到的；`10003` = 参数无效） |
 | 连上了，但发消息**毫无反应** | 订阅方式不是长连接 / 没订「接收消息 v2.0」/ 权限改完没发版 | 按第四节那六步对一遍；**改动必须发新版才生效** |
 | 保存长连接配置时一直失败 | 官方原文：**保存时长连接客户端必须已经在线**，顺序反了就一直失败 | 先把探针跑起来连上，再去后台保存 |
