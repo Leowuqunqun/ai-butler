@@ -646,3 +646,20 @@ test('★ check：PATH 里没有 butler → ✗，并给出"重跑安装器"这�
     });
   } finally { await t.cleanup(); }
 });
+
+test('★ 入队那一步抛错不会变成 unhandled rejection（通道不该因此掉线）', async () => {
+  const t = await setup();
+  try {
+    // 让"入队"这一步自己炸 —— 最像的真实形状是认主 / 写状态文件失败
+    t.core.onMessage = async () => { throw new Error('入队时就炸了'); };
+
+    // 真走接缝那条路：通道 emit → 接缝的 try/catch → 内核注册的那个 wrapper。
+    // 接缝**只接得住同步抛错**，所以这条 async 链以前没有落点：rejection 变成 unhandled，
+    // 而 `node --test` 会把它升级成失败 —— 也就是说这个用例本身就是判据。
+    const msg = { channel: 'fake', fromId: 'ou_someone', text: '在吗', contextToken: '{}' };
+    assert.doesNotThrow(() => t.channel.emitMessage(msg));
+    await sleep(30);
+  } finally {
+    await t.cleanup();
+  }
+});

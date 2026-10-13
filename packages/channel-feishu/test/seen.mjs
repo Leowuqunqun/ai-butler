@@ -7,7 +7,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -65,4 +65,23 @@ test('落盘的文件是 0600（这张表里有用户的 messageId，不是公�
   new SeenStore(f).add('om_secret');
   assert.equal(statSync(f).mode & 0o777, 0o600);
   assert.deepEqual(JSON.parse(readFileSync(f, 'utf8')).ids, ['om_secret']);
+});
+
+test('★ 落盘失败不往外抛：内存里照样管事，但要叫一声', () => {
+  const f = file();
+  // 让 save() 必失败：把 `state` 这个"目录"换成一个普通文件
+  //（只读挂载、磁盘满、权限不对，都是同一个形状的失败）
+  const dir = dirname(f);
+  rmSync(dir, { recursive: true, force: true });
+  writeFileSync(dir, 'not a directory');
+
+  const errors = [];
+  const store = new SeenStore(f, 1000, (e) => errors.push(e));
+  assert.doesNotThrow(() => store.add('om_1'), '写不进去就抛出去，等于把这条消息吞了');
+  assert.equal(store.has('om_1'), true, '内存里照样记着：进程内去重还在');
+  assert.equal(errors.length, 1, '要叫一声 —— 跨重启那层保护现在没了');
+  assert.ok(errors[0] instanceof Error);
+
+  store.add('om_1'); // 重复的不再写，也就不再叫
+  assert.equal(errors.length, 1);
 });

@@ -116,7 +116,14 @@ export class FeishuChannel extends ChannelService {
       maxFileMb: config.maxFileMb ?? 30,
       checkTimeoutMs: config.checkTimeoutMs ?? 5000,
     };
-    this.seen = new SeenStore(join(this.home, 'state', 'feishu-seen.json'), this.config.seenLimit);
+    this.seen = new SeenStore(
+      join(this.home, 'state', 'feishu-seen.json'),
+      this.config.seenLimit,
+      // 落盘去重失败要说一声，但不能拦路 —— 见 seen.ts 里 add() 的取舍
+      (error) => this.ctx.logger?.warn(
+        'feishu: 去重表写不进去（内存里照样管事，跨重启那层暂时没有）: %o', error,
+      ),
+    );
     this.lark = this.makeChannel(this.config);
     // 收尾一律走 effect（cordis 4 没有 'dispose' 事件）
     ctx.effect(() => () => this.stop(), 'feishu.stop');
@@ -161,7 +168,12 @@ export class FeishuChannel extends ChannelService {
     }
     // 先订阅、再连：连上之后立刻到达的消息不能漏。
     const off = this.lark.on('message', (msg) => {
-      void this.handleIncoming(msg);
+      // ⚠️ `.catch` 不是装饰：这条链漏出去的异常会变成 **unhandled rejection**，
+      //    而 Node 默认把它升级成进程退出 —— 一条消息处理失败不该把管家带走。
+      //    （官方包不 await 我们这个回调，接缝也只接得住**同步**抛错，所以只能自己兜。）
+      void this.handleIncoming(msg).catch((error) => {
+        this.ctx.logger?.error('feishu: 处理这条消息时出错（下一条不受影响）: %o', error);
+      });
     });
     this.off = off;
     try {

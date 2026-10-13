@@ -277,6 +277,40 @@ test('★ 一个附件下载失败：消息照走，正文一个字都不丢', a
   assert.equal(got[0].files, undefined);
 });
 
+test('★ 去重表写不进去时，宁可漏一次去重，也不能把消息吞了', async () => {
+  const home = freshHome();
+  // 让落盘必失败：把 `state` 这个"目录"做成一个普通文件（只读挂载、磁盘满也是同一形状）
+  writeFileSync(join(home, 'state'), 'not a directory');
+
+  const { channel, fake } = makeFeishu({ home });
+  await channel.start();
+
+  const got = [];
+  channel.onMessage((msg) => got.push(msg.text));
+  fake.emit(normalized({ content: '写不进去也得让我收到' }));
+  await settle();
+
+  // 去重是保护，投递才是本职。写不进去时内存里那张表还在管事，只是跨重启那层没了 ——
+  // 而这种时候把整条消息吞掉，用户看到的是"发了没反应"，比偶发重复糟得多。
+  assert.deepEqual(got, ['写不进去也得让我收到'], '去重表坏了是遗憾，消息被吞是事故');
+});
+
+test('★ 处理链自己抛错，不会变成 unhandled rejection（下一条照收）', async () => {
+  const { channel, fake } = makeFeishu({ home: freshHome() });
+  await channel.start();
+
+  const got = [];
+  channel.onMessage((msg) => got.push(msg.text));
+  // 消费者的 bug 由接缝兜（它只接同步抛错）；这里要证的是**处理链自己**漏出去的异常
+  // 也有落点 —— 漏出去会变成 unhandled rejection，而 Node 默认把它升级成进程退出。
+  fake.emit(normalized({ content: '第一条' }));
+  await settle();
+  fake.emit(normalized({ content: '第二条', messageId: 'om_2' }));
+  await settle();
+
+  assert.deepEqual(got, ['第一条', '第二条'], '一条出错不该影响下一条');
+});
+
 test('★ 附件超过上限：不交给 agent，而且不留在收件箱里', async () => {
   const home = freshHome();
   // 上限设成 ~10 字节，下面那个 64 字节的附件必然超

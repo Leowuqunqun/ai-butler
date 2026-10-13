@@ -174,7 +174,17 @@ export class ButlerCore extends Service {
     this.sessions = new SessionStore(config.stateFile);
     this.grantsFile = grantsFileOf(config.stateFile, homedir());
 
-    this.onInbound = (msg) => { void this.onMessage(msg); };
+    this.onInbound = (msg) => {
+      // ⚠️ `.catch` 不是装饰：`onMessage` 是 async，而接缝的 `emitMessage` 只接得住
+      //    **同步**抛错（见 seam-channel/src/index.ts 那句注释）。这里漏出去会变成
+      //    unhandled rejection —— Node 默认把它升级成进程退出，也就是"某条消息入队时
+      //    出错，整个管家没了"。
+      //    注意分工：agent **干活**那条路另有保护（`loop()` 里 try/catch，还会回用户一句
+      //    "我这边出错了"）；这里兜的是**入队**这一步 —— 认主、写状态文件都可能在这一步失败。
+      void this.onMessage(msg).catch((error) => {
+        this.log(`收信这一步出错了（这条先丢掉）：${errText(error)}`);
+      });
+    };
     ctx.channel.onMessage(this.onInbound);
 
     ctx.effect(() => () => {

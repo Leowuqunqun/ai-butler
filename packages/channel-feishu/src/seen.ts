@@ -37,12 +37,15 @@ interface SeenFile {
 export class SeenStore {
   private readonly file: string;
   private readonly limit: number;
+  /** 落盘失败时叫一声（不传就闭嘴）—— 见 `add()` 里的取舍 */
+  private readonly onError: (error: unknown) => void;
   private ids: string[];
   private readonly known: Set<string>;
 
-  constructor(file: string, limit = 1000) {
+  constructor(file: string, limit = 1000, onError?: (error: unknown) => void) {
     this.file = file;
     this.limit = Math.max(1, limit);
+    this.onError = onError ?? (() => {});
     const loaded = this.load();
     this.ids = loaded;
     this.known = new Set(loaded);
@@ -56,6 +59,11 @@ export class SeenStore {
   /**
    * 记下一条。**先记账再干活**：`emitMessage` 不可阻塞（接缝规则 3），
    * 而我们要保证"同一条不会被处理两次"这个判断在干活之前就已经成立。
+   *
+   * ⚠️ **落盘失败不往外抛。** 去重是保护，投递才是本职：写不进去（家目录只读、
+   * 磁盘满、`state` 被占成了一个文件）时，内存里那张表照样在管事，只是跨重启那层
+   * 保护暂时没了 —— 这时**宁可漏一次去重，也不能把这条消息吞掉**。
+   * 读不出来时"按空表 + 大声记一笔"，是同一个取舍的另一面（见文件头）。
    */
   add(messageId: string): void {
     if (this.known.has(messageId)) return;
@@ -65,7 +73,12 @@ export class SeenStore {
       const dropped = this.ids.splice(0, this.ids.length - this.limit);
       for (const id of dropped) this.known.delete(id);
     }
-    this.save();
+    try {
+      this.save();
+    } catch (error) {
+      // 由调用方决定怎么叫（适配层会记一条 warn）——但绝不往上抛
+      this.onError(error);
+    }
   }
 
   /** 载入。读不出来（文件不在 / JSON 坏了 / 形状不对）一律当空表 —— 见文件头 */
