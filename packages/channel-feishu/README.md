@@ -46,7 +46,7 @@ ByteDance 账号，飞书改协议他们先知道）。我们只做它不做的�
 - **不做入站语音转写**。微信那条路是平台已经转好的文字；飞书要自己接 ASR，还没做
 - **没有"正在输入"**。飞书没有这个概念，接缝上是默认的空实现
 - **还没做卡片/按钮审批**。真要做审批，飞书这块比微信强得多（按钮能回传），值得专门做
-- **真机还没验收过**。代码和 55 个离线用例都在，但"在真飞书里收发一条"还没跑过
+- **真机还没验收过**。代码和 56 个离线用例都在，但"在真飞书里收发一条"还没跑过
 
 ## "我们没重写协议"这句话的证据
 
@@ -108,7 +108,7 @@ butler run                 # 凭据已经存过 → 它自动跳过问凭据那�
 ## 测试
 
 ```bash
-pnpm --filter @butler/channel-feishu test    # tsc + 55 个离线用例
+pnpm --filter @butler/channel-feishu test    # tsc + 56 个离线用例
 ```
 
 其中 9 条是**探针的**（`test/probe.mjs`）：凭据落盘的形状、0600、合并写（不碰别人的 token）、
@@ -138,6 +138,10 @@ pnpm --filter @butler/channel-feishu test    # tsc + 55 个离线用例
 ## 没验的
 
 - 真机全流程：扫码注册、长连接、事件投递、权限点、群里的行为
-- 话题群（`chatMode: 'topic'`）与 `threadId` 的实际取值
-- 入站附件下载（官方有 `downloadResourceToFile`，我们还没接）
+- 话题群（`chatMode: 'topic'`）里 `threadId` 的**实际取值**（代码这一侧是确定的：官方从
+  target 的 `threadId` 推出 `reply_in_thread`，我们按合同把它传下去并且钉了测试 ——
+  没验的只是"真飞书的话题群到底给不给 `thread_id`"）
+- 入站附件的**真机实测**（代码接好了：官方 `downloadResourceToFile` → `state/files/feishu/` →
+  折成 `LocalFile` 交给大脑，离线用例在 `test/files.mjs` 与 `packages/cli/test/m1-feishu-e2e.mjs`；
+  没验的是"真飞书的各种附件类型喂进来会怎样"）
 - 长时间运行的稳定性（重连与心跳归官方包管，我们没压过）

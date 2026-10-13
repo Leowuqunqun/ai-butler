@@ -1,7 +1,7 @@
 # 飞书通道调研（第三个 IM 通道）
 
 > **状态：已开工（M-a）。** 适配层 `packages/channel-feishu` 已落地：文本、原生引用回复、
-> 跨重启的 `messageId` 去重（端到端证据：`packages/cli/test/m1-feishu-e2e.mjs`，把去重表的落盘去掉它就会红）、入站图片/文件落盘、`doctor` 真探一次活，55 个离线用例通过 —— **但真机还没验收**（见第十一节，跑法见第十二节）。
+> 跨重启的 `messageId` 去重（端到端证据：`packages/cli/test/m1-feishu-e2e.mjs`，把去重表的落盘去掉它就会红）、入站图片/文件落盘、`doctor` 真探一次活，56 个离线用例通过 —— **但真机还没验收**（见第十一节，跑法见第十二节）。
 > 这份文档原本只回答三件事：**能不能做**、**要付什么代价**、**开工前必须先定什么**。
 >
 > **取证方式（先说清楚，因为这条决定了下面的话能不能信）**：飞书官方文档站有个口子 ——
@@ -315,12 +315,12 @@ M-c 引导页 / `doctor` / 文档 / GETTING-STARTED。
 | `src/seen.ts` | 落盘去重 | `messageId` **跨重启**去重（飞书"至少一次" + 重推最远 6 小时后到） |
 | `src/index.ts` | 适配层 | 5 个方法 + 机器人消息过滤 + 原生引用回复 + 自检 |
 
-- **55 个离线用例**通过；边界假在"官方通道的接口"上（`test/fake-lark.mjs`），不是假飞书服务器 ——
+- **56 个离线用例**通过；边界假在"官方通道的接口"上（`test/fake-lark.mjs`），不是假飞书服务器 ——
   协议不是我们的代码，该证明的是我们这层翻译对不对。另外 `test/policy.mjs` **故意用真的官方包**，
   钉住"我们传下去的 policy"和"官方接住了什么"一致
 - **依赖表就是"没重写协议"的证据**：运行时只 import `@larksuite/channel` + 接缝 + cordis/schemastery，
   没有 HTTP 客户端、没有 protobuf、没有 WebSocket
-- 全仓库 **927 个用例**通过、17 个包、`check:docs` 33 个 md 全绿
+- 全仓库 **928 个用例**通过、17 个包、`check:docs` 33 个 md 全绿
 
 **还没做**（下一步的顺序）：
 
@@ -561,6 +561,31 @@ CLI 自己的读法读回来、并走一遍 `butler run` 的注入那一步。�
 → `normalize()` → 我们这层，断言"官方给了内容，我们就不能给空"（附件那几种反过来断言
 `text` 留空、资源在）。反验是把规则退回旧白名单 —— 量这件事的两条立刻红，而 `post` 那条
 依然绿：这说明它量的正是**差异**，不是别的。
+
+### 第 19 轮：查"话题群里的回复会落到哪儿" —— 结论是我们本来就对，但把证据钉住了
+
+上一轮是"读官方实现 → 找到 bug"，这一轮同一个办法得到的答案是**没有 bug** —— 那也得说清楚，
+而且要把"为什么对"钉成回归，不然下次谁动一下就可能踩坏：
+
+- 我们的 `reply()` 传的是 `{ chatId, messageId, threadId }`（`sendText` / `sendFile` 两处）。
+  官方的签名正是 `reply(msg: Pick<NormalizedMessage, 'chatId' | 'messageId' | 'threadId'>, …)`
+  —— **在合同里**，不是我们自己塞的字段；
+- 官方不会替我们找会话：`reply(msg, input, opts)` 里写着
+  `replyInThread: opts?.replyInThread ?? Boolean(msg.threadId)` ——
+  **target 上带 `threadId` 就会 `reply_in_thread`，不带就不会**。
+  所以话题里的回复落回同一个话题，普通群里也不会凭空开出一朵话题。
+
+于是这轮只做两件小事：
+
+1. `test/policy.mjs` 开头那份"查过官方实现、写在这里免得下次再查"的清单加了第 3 条（上面那句推导）；
+2. `test/plugin.mjs` 加一条只钉**正向**的用例（反向早就被那句
+   `deepEqual(fake.replies[0].target, {…})` 钉住了：我们是用 `...(ctx.threadId ? … : {})` 省键的，
+   凭空加键它就会红）。反验**只改 `sendFile` 那一处**调用 —— 测试正好红在
+   "`sendFile` 那条路也要带"这句上：两处调用各自都有牙，不是一条断言顺带过的。
+
+顺手修掉 README"没验的"里两处**低估自己**的过期话：入站附件下载（M-b 早就接了，代码在
+`src/files.ts` + `index.ts`）和话题群的 `threadId`（代码这侧已确定，没验的只是"真飞书的话题群
+到底给不给 `thread_id`"）。
 
 ---
 

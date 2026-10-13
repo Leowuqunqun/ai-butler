@@ -144,7 +144,7 @@ test('被引用的原文取得到就带上，取不到就照常送（少一段�
   assert.equal(got[1].text, '还是照这个来');
 });
 
-test('非文本消息不硬塞 text（图片/文件是下一步的事，别假装收下了）', async () => {
+test('附件承载的类型不硬塞 text（图片的信息在附件上；其余类型的正文必须带上，见第 18 轮）', async () => {
   const { channel, fake } = makeFeishu({ home: freshHome() });
   await channel.start();
 
@@ -159,6 +159,38 @@ test('非文本消息不硬塞 text（图片/文件是下一步的事，别假�
   await settle();
 
   assert.equal(got[0].text, undefined);
+});
+
+/**
+ * 话题群 / 线程：我们**必须**把 `threadId` 传下去 —— 官方就是靠它决定要不要 `reply_in_thread`：
+ *
+ *     reply(msg, input, opts) {
+ *       return this.send(msg.chatId, input, {
+ *         ...opts,
+ *         replyTo: opts?.replyTo ?? msg.messageId,
+ *         replyInThread: opts?.replyInThread ?? Boolean(msg.threadId),
+ *       });
+ *     }
+ *
+ * （这条是读官方实现记下来的，同一条也记在 `test/policy.mjs` 开头。）
+ * 少了它，话题里的回复会**落到话题外面**；凭空多一个，普通群里每条回复都会被开成一朵话题。
+ *
+ * 反向（没有话题时不能凭空造）已由上面那句 `deepEqual(fake.replies[0].target, {…})` 钉着：
+ * 我们是用 `...(ctx.threadId ? { threadId } : {})` 省掉那个键的，凭空加键会让它红。
+ */
+test('★ 话题里的消息，回文本和回文件都要带 threadId（两处调用会各自漂移）', async () => {
+  const { channel, fake } = makeFeishu({ home: freshHome() });
+  await channel.start();
+
+  const token = JSON.stringify({ chatId: 'oc_topic', messageId: 'om_1', threadId: 'omt_1' });
+
+  await channel.sendText('ou_alice', '好的', { contextToken: token });
+  assert.equal(fake.replies[0].target.threadId, 'omt_1', '在话题里问的，回复要落回同一个话题');
+
+  const file = join(freshHome(), '小文件.txt');
+  writeFileSync(file, 'x');
+  await channel.sendFile('ou_alice', file, { contextToken: token });
+  assert.equal(fake.replies[1].target.threadId, 'omt_1', 'sendFile 那条路也要带 —— 两处调用会各自漂移');
 });
 
 test('文件超过飞书上限时给一句人话，而不是让官方包报一个看不懂的错', async () => {

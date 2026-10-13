@@ -19,6 +19,11 @@
  * - **`dmMode` 默认 `'open'`**（实现里是 `dmMode ?? "open"`）。这个默认值不在类型
  *   声明里 —— 想收紧成白名单，就得先把 `dmMode` / `dmAllowlist` 透出来（现在没做，
  *   见 README 的"它不做什么"）。
+ * - **话题/线程靠 `threadId` 推出来，官方不会自己找**。`reply(msg, input, opts)` 的实现是
+ *   `{ ...opts, replyTo: opts?.replyTo ?? msg.messageId, replyInThread: opts?.replyInThread ?? Boolean(msg.threadId) }`
+ *   —— 也就是说：**target 上带 `threadId` 就会 reply_in_thread，不带就不会**。
+ *   所以我们只要照合同把 `threadId` 传下去（`sendText` / `sendFile` 两处都传，
+ *   `test/plugin.mjs` 钉着这两条），普通群里也不会凭空多出话题。
  *
  * @module @butler/channel-feishu/test/policy
  */
