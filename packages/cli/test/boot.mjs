@@ -147,15 +147,25 @@ test('failures 里的 message 是**一行**（给用户看的，不是一棵栈�
   const b = await boot({ configPath: t.file, configDir: FIX });
   try {
     assert.equal(b.failures[0].message.includes('\n'), false, '不能带换行');
+    // 另一半：**别乱说**。这个失败不是"包没装"，就不许叫人去重装 —— 那会把他带去修一个不存在的问题。
+    assert.equal(
+      /不在这台机器已安装的依赖里/.test(b.failures[0].message),
+      false,
+      '别的装不上原因，别一律叫人重装/升级',
+    );
   } finally { await b.dispose(); t.cleanup(); }
 });
 
-test('模块名拼错 → 报错里带上"找的位置"，不然用户没法查', async () => {
+test('模块名拼错 → 报错里带上"找的位置"，而且**指出是没装、不是配置写错**', async () => {
   const t = tmpConfig([{ id: 'x', name: '这个包根本不存在-zzz' }]);
   const b = await boot({ configPath: t.file, selfDir: join(here, '..') });
   try {
     assert.equal(b.failures.length, 1);
     assert.match(b.failures[0].message, /装不上插件/);
+    // 装得早的机器上，升级后新加的通道（第 23 轮那个飞书场景）就是这样：包不在 prefix 里。
+    // 只报 Node 那句英文，用户会一直以为是配置写错了。
+    assert.match(b.failures[0].message, /不在这台机器已安装的依赖里/, '要说清"是这个包没装"');
+    assert.match(b.failures[0].message, /重跑一遍安装/, '要给出路：重装/升级那条命令');
   } finally { await b.dispose(); t.cleanup(); }
 });
 

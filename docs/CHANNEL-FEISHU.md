@@ -741,12 +741,57 @@ README / `docs/EVIDENCE.md`。）
 
 反验：把 `--dry` 里那句调用删掉（并确认变异在位）→ 新用例红在"先把症状说出来"。
 
+### 第 25 轮：`ERR_MODULE_NOT_FOUND` 要说成"这个包没装"，不是一句英文行话
+
+接着上一轮的走法往下走，这次看**用户那台机器上的形态**（不是源码树）。他装的是 `install.sh` →
+`~/.butler/prefix`，而手册让装好的机器跑 `node <包内路径>/probe/smoke.mjs --save`。
+
+核了两件，都**没有洞**：打包脚本是 `for d in packages/*/`（**全带上**，不是硬编码清单），
+`real-composition` 那两格也早就在。真正的洞在**装的版本**上：
+
+- 用户那台的 `prefix/app` 是**十月**装的 —— 那时还没有飞书通道，`prefix/app/node_modules` 里
+  **没有** `channel-feishu`。⇒ 探针文件根本不在那儿；就算跳过探针，`init --im feishu` 写进配置那行，
+  `butler run` 时那个包也**装不上**。
+- 而装不上时，两条路（`run` / `doctor`）其实**都拦住了**、也**都说了是哪一行** —— 机制是好的。
+  但给出的出路是"**修好再启动**"：面对 `Cannot find package '@butler/channel-feishu'`，
+  用户只会去翻配置，不会想到"我这台装的版本里压根没有这个包"。
+
+改法：`resolve.ts` 里把 `ERR_MODULE_NOT_FOUND` 单独认出来（Node 给的 `code`），补上
+"这个包**不在这台机器已安装的依赖里** —— 最常见的是"升级后新加了通道/能力，还没重装""，
+并给出路：**重跑一遍安装那条命令**（README 开头那条 `curl … | sh`），源码树里则
+`pnpm install && pnpm build`。**别的装不上原因不接这句**（语法错也叫人重装，就是把人带偏）——
+测试两面都钉住了：该说的说 ✓、不该说的不说 ✓。
+
+§十二 也加了**第 0 步**：先确认这台的版本里有飞书这个包（`butler doctor` 里 channel 那行是不是
+`@butler/channel-feishu`），没有就先重装/升级 —— 这一步以前**完全没人提**。
+
+反验：把 `notInstalled` 那句判断去掉（并确认变异在位）→ 两条断言各自变红。
+
 ---
 
 ## 十二、真机验收手册（给"第一枪"用）
 
 三分钟，两条命令。**这一步只能人来做**（要手机扫码），所以把"看到什么 → 说明什么"
 写在这里，免得卡住的时候只能对着屏幕猜：
+
+### 第 0 步：先确认这台的版本里有飞书这个包
+
+飞书是**后加的**通道。装得早的机器（`~/.butler/prefix`）里可能**根本没有** `channel-feishu`
+这个包 —— 那时探针文件不在那儿，`butler run` 也只会说"装不上插件"。先看一眼：
+
+```bash
+butler doctor | grep -A1 channel      # channel 那行是什么、以及为什么
+```
+
+- 是 `@butler/channel-feishu` → 版本没问题，往下走。
+- 是 `wechat-agent-bridge/plugin`（`init --im feishu` 会把它换掉），或者报**"装不上插件"**
+  → 先升级，重跑一遍安装那条命令就行（它会把新版本换上）：
+
+```bash
+curl -fsSL https://github.com/Leowuqunqun/ai-butler/releases/latest/download/install.sh | sh
+```
+
+> 从源码树里跑的话，升级是 `git pull && pnpm install && pnpm build`。
 
 ```bash
 bash packages/channel-feishu/probe/run.sh          # ① 先验：扫码 → 长连接 → 收一条 → 回一条

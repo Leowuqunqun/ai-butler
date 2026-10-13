@@ -54,9 +54,18 @@ export async function importPlugin(name: string, ctx: ResolveContext): Promise<P
   try {
     mod = await import(url);
   } catch (error) {
+    // 分两种：**这个包压根不在这台机器上**（升级后新加的通道/能力最常见），和其他装不上的原因。
+    // 前者必须给出"去重装/升级"这条出路 —— 只报 Node 那句英文，用户会一直以为是配置写错了。
+    // （实测过：装得早的机器上，`channel-feishu` 这个包根本不在 `prefix/app/node_modules` 里。）
+    const notInstalled = (error as { code?: unknown })?.code === 'ERR_MODULE_NOT_FOUND';
     throw new ResolveError(
       `装不上插件 ${JSON.stringify(name)}：${(error as Error).message}\n` +
-      `  找的位置：${where}`,
+      `  找的位置：${where}` +
+      (notInstalled
+        ? '\n  这个包**不在这台机器已安装的依赖里** —— 最常见的是"升级后新加了通道/能力，还没重装"。' +
+          '\n  出路：重跑一遍安装那条命令，它会把新版本换上（README 开头那条 `curl … | sh`）；' +
+          '源码树里则 `pnpm install && pnpm build`。'
+        : ''),
     );
   }
 
