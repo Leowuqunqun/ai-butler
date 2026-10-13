@@ -63,7 +63,7 @@ ByteDance 账号，飞书改协议他们先知道）。我们只做它不做的�
 ## 怎么跑（真机冒烟，五分钟）
 
 ```bash
-bash packages/channel-feishu/probe/run.sh
+bash packages/channel-feishu/probe/run.sh        # 源码树里；装完之后用 CLI 给的那条完整命令
 ```
 
 > 上面是**源码树里**的写法。探针现在跟着包一起发（`package.json` 的 `files` 里带着 `probe`），
@@ -74,13 +74,13 @@ bash packages/channel-feishu/probe/run.sh
 也不需要公网 IP，手机飞书在手边就行。想先看要做什么而不联网：
 
 ```bash
-bash packages/channel-feishu/probe/run.sh --dry
+bash packages/channel-feishu/probe/run.sh --dry  # 源码树里
 ```
 
 加 `--save` 就不只是验一遍，而是**直接把凭据装好**：
 
 ```bash
-bash packages/channel-feishu/probe/run.sh --save
+bash packages/channel-feishu/probe/run.sh --save # 源码树里；装完之后用 CLI 给的那条完整命令
 ```
 
 它把 `app_id` / `app_secret` 按 CLI 认的格式写进 `<管家目录>/state/secrets.json`
@@ -94,7 +94,7 @@ bash packages/channel-feishu/probe/run.sh --save
 > "消息偶尔不回"，而两边看起来都正常。
 
 ```bash
-bash packages/channel-feishu/probe/run.sh --save --home=/srv/butler
+bash packages/channel-feishu/probe/run.sh --save --home=/srv/butler  # 源码树里
 ```
 之后：
 
