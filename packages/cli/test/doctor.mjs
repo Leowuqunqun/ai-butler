@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { doctor, formatDoctor } from '@butler/cli';
+import { doctor, formatDoctor, saveSecret, secretsFileOf } from '@butler/cli';
 import { credentialsFileOf } from '../lib/credentials.js';
 import { useButlerShim, withoutButler } from './fixtures/path-shim.mjs';
 
@@ -68,6 +68,28 @@ test('一切正常时 ok=true，结论是一句能照做的事', async () => {
     const r = await run(t.file);
     assert.equal(r.ok, true, JSON.stringify(r.checks.filter((c) => !c.ok), null, 2));
     assert.match(r.verdict, /butler run/, '结论要告诉用户下一步干什么，不是"自检通过"');
+  } finally { t.cleanup(); }
+});
+
+/**
+ * ★★ 第 44 轮：验收路上最容易走进的那个死胡同，必须由 doctor 自己说出来。
+ *
+ * 探针把飞书凭据存好了，但配置里没有那条通道 —— 这一路**没有任何一步会报错**：
+ * doctor 一片 ✓、`butler run` 正常起来、消息发出去没人应。用户最容易怀疑的是
+ * "是不是我权限没配好"，然后去开发者后台折腾半天（修之前实测：doctor 里「飞书」0 次）。
+ */
+test('★★ 盘上有完整凭据、配置里却没那条通道：doctor 要说出"跑 butler init --im feishu"', async () => {
+  const t = tmpConfig(spine());  // 脊梁齐的最小配置 —— 故意没有飞书那一行
+  try {
+    const file = secretsFileOf(t.dir);
+    saveSecret(file, 'feishu', 'appId', 'cli_fake_for_doctor_test');
+    saveSecret(file, 'feishu', 'appSecret', 'fake_secret');
+
+    const r = await run(t.file);
+    assert.deepEqual(r.unplugged, [{ channel: 'feishu', label: '飞书', im: 'feishu' }]);
+    const text = formatDoctor(r);
+    assert.match(text, /盘上已经有飞书的凭据/, '报告里要有这一句');
+    assert.match(text, /butler init --im feishu/, '而且要给出能照抄的命令');
   } finally { t.cleanup(); }
 });
 

@@ -23,6 +23,8 @@ import {
   saveSecret,
   secretOf,
   secretsFileOf,
+  unpluggedChannels,
+  unpluggedHint,
 } from '@butler/cli';
 
 function sandbox() {
@@ -33,6 +35,58 @@ function sandbox() {
 const TGM = { name: '@butler/channel-telegram', config: { botToken: '' } };
 const WECHAT = { name: 'wechat-agent-bridge/plugin', config: {} };
 const FEISHU = { name: '@butler/channel-feishu', config: { appId: '', appSecret: '' } };
+
+/**
+ * ★★ 第 44 轮：验收入口上最容易走进的那个死胡同 —— **凭据存好了，配置里却没那条通道**。
+ *
+ * 这一路上没有任何一步会报错：doctor 一片 ✓、run 正常起来、消息发出去没人应。
+ * 修之前实测复现过：盘上有**完整**的飞书凭据时，`doctor` 里「飞书」出现 0 次。
+ */
+test('★★ 凭据齐了但配置里没那条通道 → 指名道姓说出下一步；没齐 / 已有那一行 → 一个字都不说', () => {
+  const s = sandbox();
+  const half = sandbox();
+  try {
+    const file = secretsFileOf(s.dir);
+    saveSecret(file, 'feishu', 'appId', 'cli_fake_for_test');
+    saveSecret(file, 'feishu', 'appSecret', 'fake_secret');
+
+    // ① 齐了 + 配置里没有 → 报出来，而且给出**能照抄**的命令
+    const got = unpluggedChannels({ butlerDir: s.dir, rows: [WECHAT] });
+    assert.deepEqual(got, [{ channel: 'feishu', label: '飞书', im: 'feishu' }]);
+    assert.match(unpluggedHint(got[0]), /butler init --im feishu/, '要给出能照抄的那条命令');
+    assert.match(unpluggedHint(got[0]), /凭据不用重扫/, '他刚存过，得说清不用再扫一遍');
+
+    // ② 配置里已经有那一行 → 闭嘴
+    assert.deepEqual(unpluggedChannels({ butlerDir: s.dir, rows: [WECHAT, FEISHU] }), []);
+    // ③ 关掉的行也算"配置里有它"：用户是**主动**关的，不该再催他 init
+    assert.deepEqual(
+      unpluggedChannels({ butlerDir: s.dir, rows: [WECHAT, { ...FEISHU, disabled: true }] }),
+      [],
+    );
+
+    // ④ 只扫了一半（少了 app_secret）→ 不催：他手上的事还没做完
+    const halfFile = secretsFileOf(half.dir);
+    saveSecret(halfFile, 'feishu', 'appId', 'cli_fake_for_test');
+    assert.deepEqual(unpluggedChannels({ butlerDir: half.dir, rows: [WECHAT] }), []);
+
+    // ⑤ 认不出来的通道（微信那条插件不靠 `--im` 换）→ 不瞎指路
+    assert.deepEqual(unpluggedChannels({ butlerDir: s.dir, rows: [] }).length, 1, '只报认得出的那种');
+  } finally {
+    s.cleanup();
+    half.cleanup();
+  }
+});
+
+test('★ 凭据齐了但配置里没那条通道：Telegram 也照样指名道姓', () => {
+  const s = sandbox();
+  try {
+    const file = secretsFileOf(s.dir);
+    saveSecret(file, 'telegram', 'botToken', '123:fake');
+    assert.deepEqual(unpluggedChannels({ butlerDir: s.dir, rows: [] }), [
+      { channel: 'telegram', label: 'Telegram', im: 'telegram' },
+    ]);
+  } finally { s.cleanup(); }
+});
 
 test('落点：<管家目录>/state/secrets.json', () => {
   assert.equal(secretsFileOf('/home/x/.butler'), join('/home/x/.butler', 'state', 'secrets.json'));

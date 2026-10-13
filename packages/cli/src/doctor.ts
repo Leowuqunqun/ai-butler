@@ -30,6 +30,7 @@ import { approvalsDir } from '@butler/approval-im';
 import { boot, type BootFailure, type BootOptions } from './boot.js';
 import type { PluginRow } from './config.js';
 import { keyState, credentialsFileOf, keyRefOf } from './credentials.js';
+import { unpluggedChannels, unpluggedHint, type UnpluggedChannel } from './secrets.js';
 import { dshAgentHome } from './onboarding.js';
 
 /** 一条检查，外加"是哪一层报的" */
@@ -61,6 +62,12 @@ export interface DoctorReport {
   disabled: PluginRow[];
   failures: BootFailure[];
   slots: DoctorSlot[];
+  /**
+   * 盘上凭据齐了、配置里却没这一条通道的那些通道。
+   *
+   * 空数组是常态；有值就说明用户停在"探针存好了、但没接上"那一步（见 `unpluggedChannels`）。
+   */
+  unplugged: UnpluggedChannel[];
   /** 一句话结论。永远有值 —— 没结论的自检等于没做 */
   verdict: string;
 }
@@ -116,6 +123,7 @@ export async function doctor(options: DoctorOptions): Promise<DoctorReport> {
   let disabled: PluginRow[] = [];
   let failures: BootFailure[] = [];
   let files: string[] = [];
+  let unplugged: UnpluggedChannel[] = [];
   let ctx: Context | null = null;
 
   try {
@@ -125,6 +133,13 @@ export async function doctor(options: DoctorOptions): Promise<DoctorReport> {
     failures = b.failures;
     files = b.config.files;
     ctx = b.ctx;
+
+    // 「凭据存好了、配置里却没这条通道」—— 验收路上最容易走进的死胡同。
+    // 关掉的行也算"配置里有它"（用户是主动关的，不该再催他 init）。
+    unplugged = unpluggedChannels({
+      butlerDir: dirname(options.configPath),
+      rows: [...b.config.rows, ...b.config.disabled],
+    });
 
     for (const slot of [...SPINE, ...OPTIONAL_SLOTS]) {
       slots.push({
@@ -201,7 +216,7 @@ export async function doctor(options: DoctorOptions): Promise<DoctorReport> {
   const ok = bad.length === 0 && missing.length === 0 && failures.length === 0;
 
   return {
-    ok, checks, files, loaded, disabled, failures, slots,
+    ok, checks, files, loaded, disabled, failures, slots, unplugged,
     verdict: verdictOf(bad, missing, failures),
   };
 }
@@ -408,6 +423,7 @@ export function formatDoctor(r: DoctorReport): string {
   for (const row of r.disabled) lines.push(`  ·  ${row.id}  ${row.name}（配置里关掉了）`);
   for (const row of r.loaded) lines.push(`  ${TICK}  ${row.id}  ${row.name}`);
   if (!r.loaded.length && !r.disabled.length) lines.push('  （配置里一行都没有）');
+  for (const u of r.unplugged) lines.push(`  ⚠️  ${unpluggedHint(u)}`);
 
   section('能力位');
   for (const s of r.slots) {

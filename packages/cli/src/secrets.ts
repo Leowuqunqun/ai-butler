@@ -83,6 +83,56 @@ const NEEDS: Record<string, ChannelSecretNeed[]> = {
 };
 
 /** 这一行插件需要哪些凭据？不需要就返回空数组 */
+/** 盘上凭据齐了、配置里却没这一条通道 —— 见 `unpluggedChannels` */
+export interface UnpluggedChannel {
+  /** 凭据文件里的通道名（`feishu`） */
+  channel: string;
+  /** 给用户看的名字（"飞书"） */
+  label: string;
+  /** `butler init --im <这个>` */
+  im: string;
+}
+
+/**
+ * 「凭据存好了，但配置里没有这条通道」—— 一次验收里最容易走进的那个死胡同。
+ *
+ * 探针那条路的最后一步是把凭据存进 `state/secrets.json`，而通道要在**配置里有一行**
+ * 才会被装载。少跑一次 `butler init --im feishu` 的后果不是报错，是**悄无声息**：
+ * `butler doctor` 一片 ✓、`butler run` 正常起来、消息发出去没人应 —— 用户最容易怀疑的
+ * 是"是不是我权限没配好"，然后去开发者后台折腾半天（第 44 轮实测复现过：盘上有完整的
+ * 飞书凭据时，`doctor` 里「飞书」出现 **0** 次）。
+ *
+ * 所以：一条通道的凭据**齐了**（每一项都非空），配置里却没有它的行 → 明说下一步。
+ * 只认「齐了」—— 扫了一半的凭据不该催他去 init（那时候他手上的事还没做完）。
+ */
+export function unpluggedChannels(opts: {
+  butlerDir: string;
+  rows: readonly { name: string }[];
+}): UnpluggedChannel[] {
+  const file = secretsFileOf(opts.butlerDir);
+  const present = new Set(opts.rows.map((r) => r.name));
+  const out: UnpluggedChannel[] = [];
+  for (const [pkg, needs] of Object.entries(NEEDS)) {
+    if (present.has(pkg)) continue;
+    // 不是"换个 `--im` 就能接上"的那种通道（比如微信那条插件）就不在这儿瞎指路
+    const match = /^@butler\/channel-(.+)$/.exec(pkg);
+    const first = needs[0];
+    if (!match?.[1] || !first) continue;
+    if (!needs.every((n) => secretOf(file, n.channel, n.key))) continue;
+    out.push({ channel: first.channel, label: first.label, im: match[1] });
+  }
+  return out;
+}
+
+/**
+ * 那句提示 —— **一份文本两处用**（`butler doctor` 和 `butler run` 都要说同一句话）。
+ * 抄两遍就迟早有一遍过期，而这句话说错的后果正是它要防的那个死胡同。
+ */
+export function unpluggedHint(u: UnpluggedChannel): string {
+  return `盘上已经有${u.label}的凭据，配置里却没有那一条通道 —— 跑一次 `
+    + `butler init --im ${u.im} 把它接上（凭据不用重扫）。`;
+}
+
 export function channelSecretNeeds(row: { name: string }): ChannelSecretNeed[] {
   return NEEDS[row.name] ?? [];
 }

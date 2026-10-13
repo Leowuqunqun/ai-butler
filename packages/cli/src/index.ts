@@ -34,7 +34,10 @@ export {
   saveSecret,
   secretOf,
   secretsFileOf,
+  unpluggedChannels,
+  unpluggedHint,
   type ChannelSecretNeed,
+  type UnpluggedChannel,
 } from './secrets.js';
 
 export {

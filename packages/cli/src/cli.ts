@@ -32,7 +32,7 @@ import { autostartOff, autostartOn, autostartPlan, autostartStatus, formatPlan }
 import { dshAgentHome, ensureChannelSecrets, ensureModelKey } from './onboarding.js';
 import { loadConfig } from './config.js';
 import { scanHint } from '@butler/channel-feishu/probe-path';
-import { injectChannelSecrets, secretsFileOf } from './secrets.js';
+import { injectChannelSecrets, secretsFileOf, unpluggedChannels, unpluggedHint } from './secrets.js';
 import { keyRefOf } from './credentials.js';
 
 /**
@@ -301,6 +301,13 @@ async function run(args: Args): Promise<number> {
       ...(args.open ? {} : { autoOpen: false }),
       ...(args.again ? { force: true } : {}),
     });
+
+    // 「凭据存好了、配置里却没这条通道」—— 这种状态**不报错**：管家照常起来，只是消息
+    // 发出去没人应。所以必须在这儿先说，别让用户对着安静的终端猜（见 `unpluggedChannels`）。
+    for (const u of unpluggedChannels({ butlerDir: dirname(args.config), rows })) {
+      console.log(`\n⚠️  ${unpluggedHint(u)}`);
+    }
+
     b = await boot({ configPath: args.config, patches: args.patches, rows });
   } catch (error) {
     console.error(`\n配置读不了：${(error as Error).message}`);
