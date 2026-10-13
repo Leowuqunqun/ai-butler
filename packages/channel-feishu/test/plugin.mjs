@@ -441,7 +441,9 @@ test('★★ 没凭据也要能装载（真机第一枪之前，就是这个状�
  * 所以这里也按"算出来的路径真的存在"来验。
  */
 function assertRunnableProbeHint(text) {
-  const m = /`node ([^`]+?) --save`/.exec(text);
+  // ⚠️ `--save` 后面**还允许有别的东西**：家不在默认位置时，命令会带上 `--home=<那个目录>`
+  //    （不带的话探针会把凭据存到另一个目录，而 CLI 在别处读）。所以别把闭引号钉死在 `--save` 上。
+  const m = /`node ([^`]+?) --save([^`]*)`/.exec(text);
   assert.ok(m, `出路里要有一条能照着敲的命令，实际：${text}`);
   assert.ok(existsSync(m[1]), `命令里的探针路径必须真的存在：${m[1]}`);
 }
@@ -462,6 +464,16 @@ test('★★ 探针命令：算出来的路径真的在，而且 `files` 里必�
   assert.ok(
     pkg.files.includes('probe'),
     'package.json 的 files 少了 probe：装完之后用户就拿不到探针了',
+  );
+
+  // ⚠️ 家不在默认位置（`--config` 安在别处）时，那条命令必须**自己**带上 `--home=` ——
+  //    否则探针把凭据存进 `~/.butler`，CLI 却在别处读：用户看见"探针说存好了、
+  //    `butler run` 却说还没有 app_id"。默认位置则不加，让最常见那句话保持最短。
+  assert.ok(!cmd.includes('--home='), `默认的家不必带 --home=（实际：${cmd}）`);
+  const custom = probeCommand('/tmp/别处的家');
+  assert.ok(
+    custom?.includes('--home="/tmp/别处的家"'),
+    `别处的家必须带上 --home=（实际：${custom}）`,
   );
 });
 

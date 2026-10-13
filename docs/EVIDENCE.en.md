@@ -108,6 +108,12 @@ they keep growing with the feature set — **treat the total on this line as aut
   Plus one **product path** (`packages/cli/test/secrets.mjs`): credentials saved by the probe go
   through read → fill → install and really land on the **plugin instance** — misspell that item's
   `key` by one letter and it goes red at once.
+  And it is pinned when the **home is not the default** too (round 32): with `--config` pointing
+  elsewhere, the probe command on the onboarding page carries its own `--home=`, and
+  `packages/cli/test/probe-contract.mjs` hands that command **straight to a shell** (quoting and
+  all) before reading the result back with the CLI's own reader. It used not to: copy-pasting it
+  wrote the credentials into `~/.butler` while the CLI read somewhere else — exactly the "the probe
+  says it saved, `butler run` says there is no app_id yet" failure the test exists to prevent.
   And one that asks the **real official package** (`packages/channel-feishu/test/types.mjs`):
   14 raw Feishu events go through the official `normalize()`, then through our layer, to see whether
   we drop anything. It caught a bug that made messages **vanish** — text-only types (a forwarded

@@ -382,7 +382,7 @@ export async function ensureChannelSecrets(
         channel: need.channel,
         key: need.key,
         name: need.name,
-        hint: need.hint,
+        hint: need.hint(opts.butlerDir),
         log: opts.log,
         ...pageOptionsOf(opts),
         ...(opts.force === undefined ? {} : { force: opts.force }),

@@ -37,8 +37,15 @@ export interface ChannelSecretNeed {
   label: string;
   /** 日志和页面标题里怎么称呼它（"Telegram 的 bot token"） */
   name: string;
-  /** 这个字段为空时，去哪儿让用户拿到它（一句话，带 @BotFather） */
-  hint: string;
+  /**
+   * 这个字段为空时，去哪儿让用户拿到它（一句话，带 @BotFather）。
+   *
+   * 是**函数**而不是字符串：飞书那条提示里嵌着"照着敲"的探针命令，而那条命令要不要带
+   * `--home=` 取决于**这个家的位置**（用 `--config` 安在别处就必须带，不然探针会把凭据
+   * 存到另一个目录，用户看到"探针说存好了、`butler run` 却说还没有 app_id"）。
+   * 写成常量的话，它在**模块加载时**就定型了 —— 那时候家在哪还不知道。
+   */
+  hint: (butlerDir: string) => string;
 }
 
 /**
@@ -53,7 +60,7 @@ const NEEDS: Record<string, ChannelSecretNeed[]> = {
     key: 'botToken',
     label: 'Telegram',
     name: 'Telegram 的 bot token',
-    hint: '在 Telegram 里找 @BotFather 发 /newbot 建一个机器人，把它给你的那串 token 贴进来',
+    hint: () => '在 Telegram 里找 @BotFather 发 /newbot 建一个机器人，把它给你的那串 token 贴进来',
   }],
   '@butler/channel-feishu': [
     {
@@ -61,7 +68,7 @@ const NEEDS: Record<string, ChannelSecretNeed[]> = {
       key: 'appId',
       label: '飞书',
       name: '飞书应用的 app_id',
-      hint: `两种办法（挑一个）：① ${scanHint()}，`
+      hint: (butlerDir) => `两种办法（挑一个）：① ${scanHint(butlerDir)}，`
         + '它不需要开发者后台、不需要公网 IP，扫完直接把两个值存进这台电脑；'
         + '② 或去 open.feishu.cn 建一个「企业自建应用」，在「凭证与基础信息」里抄下 app_id',
     },
@@ -70,7 +77,7 @@ const NEEDS: Record<string, ChannelSecretNeed[]> = {
       key: 'appSecret',
       label: '飞书',
       name: '飞书应用的 app_secret',
-      hint: '和 app_id 在同一页（「凭证与基础信息」）。扫码那条路会自动填好，不用手抄',
+      hint: () => '和 app_id 在同一页（「凭证与基础信息」）。扫码那条路会自动填好，不用手抄',
     },
   ],
 };

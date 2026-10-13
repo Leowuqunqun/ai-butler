@@ -10,7 +10,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import {
@@ -88,7 +88,7 @@ test('哪个通道要凭据：Telegram 要，微信不要（它靠扫码）', ()
   assert.equal(need?.channel, 'telegram');
   assert.equal(need?.key, 'botToken');
   assert.match(need?.name ?? '', /Telegram/);
-  assert.match(need?.hint ?? '', /BotFather/, '要告诉他去哪儿拿');
+  assert.match(need?.hint('') ?? '', /BotFather/, '要告诉他去哪儿拿');
   assert.equal(channelSecretNeed(WECHAT), null);
 });
 
@@ -125,8 +125,14 @@ test('飞书要**两项**凭据：一个包可以不止一项', () => {
   assert.deepEqual(needs.map((n) => n.key), ['appId', 'appSecret']);
   assert.ok(needs.every((n) => n.channel === 'feishu'));
   // 第一项必须把"怎么拿"说全：扫码是首选（不用开发者后台），后台是退路
-  assert.match(needs[0].hint, /扫码/);
-  assert.match(needs[0].hint, /open\.feishu\.cn/);
+  const hintDefault = needs[0].hint(join(homedir(), '.butler'));
+  assert.match(hintDefault, /扫码/);
+  assert.match(hintDefault, /open\.feishu\.cn/);
+  // ★ 家不在默认位置时，那条"照着敲"的命令必须**自己**带上 --home=：不然探针把凭据存进
+  //   ~/.butler，CLI 却在别处读 —— 用户看到"探针说存好了、butler run 却说还没有 app_id"。
+  const hintElsewhere = needs[0].hint('/tmp/别处的家');
+  assert.match(hintElsewhere, /--home="\/tmp\/别处的家"/, '别处的家要带上 --home=');
+  assert.ok(!hintDefault.includes('--home='), '默认位置就别加，让最常见那句话保持最短');
   // 只要一项的老问法仍然能用（日志里想简短称呼这个通道时）
   assert.equal(channelSecretNeed(FEISHU)?.key, 'appId');
 });

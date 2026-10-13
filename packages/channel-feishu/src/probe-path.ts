@@ -14,14 +14,19 @@
  * （`package.json` 的 `files` 里必须带着 `probe`，否则装完之后这里永远是 null ——
  *  这条约定有测试守着。）
  *
- * 为什么用 `node <路径> --save` 而不是 `bash probe/run.sh --save`：不依赖 bash，
- * 不依赖可执行位，两个平台都一样。
+ * ── 为什么命令里要带 `--home=` ──────────────────────────────────────
+ *
+ * 凭据按**配置所在目录**找：`butler init --config /别处/config.json` 的家庭就在 `/别处`，
+ * CLI 去 `/别处/state/secrets.json` 读。而探针默认往 `~/.butler` 写 —— 于是用户扫码、
+ * 探针说"存好了"，`butler run` 还是问他要 app_id。两个包各自的测试都是绿的，
+ * 合起来却不通：这条路上最难查的故障。**家不在默认位置时，那条命令必须自己带上 `--home=`。**
  *
  * @module @butler/channel-feishu/probe-path
  */
 
 import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /** 探针脚本的绝对路径（**不检查存在**，只算位置） */
@@ -30,13 +35,38 @@ export function probePath(): string {
 }
 
 /**
+ * 默认的管家目录：`~/.butler`。
+ *
+ * 三个地方必须是同一条约定（探针的 `homeOf`、CLI 的 `--config` 默认值、这里）——
+ * `packages/cli/test/probe-contract.mjs` 把它们真的凑在一起跑一遍。
+ */
+export function defaultHome(): string {
+  return join(homedir(), '.butler');
+}
+
+/** 这个管家目录是不是默认那个（是的话，命令里不必加 `--home=`，保持最短） */
+export function isDefaultHome(butlerDir: string): boolean {
+  return resolve(butlerDir) === resolve(defaultHome());
+}
+
+/** 拼进命令里的 `--home=<路径>`：带引号，路径里有空格或 `"` `$` 反引号也不会散架 */
+function homeFlag(butlerDir: string): string {
+  return ` --home="${butlerDir.replace(/([\\"$`])/g, '\\$1')}"`;
+}
+
+/**
  * 给用户照着敲的那条命令；**探针不在这个安装里就返回 null**。
+ *
+ * 传了管家目录、且不在默认位置时，命令会带上 `--home=` —— 不然存到別处，
+ * 用户会看见"探针说存好了，`butler run` 却说还没有 app_id"。
  *
  * 返回 null 时不要硬提探针 —— 那正是这一路最容易犯的错。
  */
-export function probeCommand(): string | null {
+export function probeCommand(butlerDir?: string): string | null {
   const file = probePath();
-  return existsSync(file) ? `node ${file} --save` : null;
+  if (!existsSync(file)) return null;
+  const flag = butlerDir && !isDefaultHome(butlerDir) ? homeFlag(butlerDir) : '';
+  return `node ${file} --save${flag}`;
 }
 
 /**
@@ -44,8 +74,8 @@ export function probeCommand(): string | null {
  * 和凭据提示都指同一件事）。放在这里是为了不让它们各自漂移：一句用户照着敲的话，
  * 抄两遍就迟早有一遍过期。
  */
-export function scanHint(): string {
-  const probe = probeCommand();
+export function scanHint(butlerDir?: string): string {
+  const probe = probeCommand(butlerDir);
   return probe
     ? `扫码最省事：\`${probe}\``
     : '扫码最省事（这个安装里没带探针，要在源码里跑）：`bash packages/channel-feishu/probe/run.sh --save`';

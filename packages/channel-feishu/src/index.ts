@@ -38,7 +38,7 @@ import {
 } from '@larksuite/channel';
 
 import { toInbound, toQuoteLine, decodeContext, type FeishuContext } from './map.js';
-import { scanHint } from './probe-path.js';
+import { isDefaultHome, scanHint } from './probe-path.js';
 import { SeenStore } from './seen.js';
 import { destFor, downloadTypeOf, guessMime, kindOf } from './files.js';
 
@@ -99,11 +99,14 @@ function missingCreds(home: string): Error {
   const secretsAt = join(home, 'state', 'secrets.json');
   return new Error(
     `还没有飞书应用的 app_id / app_secret（我在 ${secretsAt} 里没找到）。两条路都行：`
-    + `① ${scanHint()} —— 它会开一个二维码，扫码就能建应用并把凭据装好；`
+    + `① ${scanHint(home)} —— 它会开一个二维码，扫码就能建应用并把凭据装好；`
     + '② 或去 open.feishu.cn 建一个「企业自建应用」，在「凭证与基础信息」里抄下 app_id / app_secret，'
     + '等 `butler run` 提示时粘贴（也可以直接写进上面那个文件）。'
-    + '⚠️ 最常见的坑是**存到了另一个管家目录**：如果你用 `--config` 把家安在别处，'
-    + '给探针也要加 `--home=<那个目录>`。',
+    // 家不在默认位置时，`scanHint` 给的命令**自己**带着 `--home=` —— 提醒他别删掉。
+    // 默认位置则一个字都不加，免得把最常见的情况说复杂。
+    + (isDefaultHome(home)
+      ? ''
+      : `⚠️ 你的家不在默认位置：上面那条命令里的 \`--home=\` 就是为这个目录带的（${home}），别删。`),
   );
 }
 

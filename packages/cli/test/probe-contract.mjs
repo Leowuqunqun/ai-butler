@@ -76,3 +76,46 @@ test('★ 探针 --save 存下的凭据，CLI 读得到、也能填进配置行�
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+/**
+ * 两个半球之间**多出来的那条缝**：命令本身。
+ *
+ * 上一条验的是"写进去的、CLI 读得出来" —— 但它**手写**了 `--home=` 传给探针。
+ * 用户不会手写：他照抄的是**引导页给的那条命令**。家不在默认位置（用 `--config`
+ * 把配置安在别处）时，那条命令必须**自己**带上 `--home=`，否则探针把凭据存进
+ * `~/.butler`，CLI 却在别处读 —— 用户看到的是"探针说存好了，`butler run` 却说还没有 app_id"。
+ *
+ * 所以这条把**算出来的命令原样交给 shell 跑一遍**（连引号一起验，用户就是这么做的）。
+ */
+test('★ 家不在默认位置时：引导页那条命令（原样照抄）存下的凭据，CLI 读得到', async () => {
+  const { probeCommand } = await import('@butler/channel-feishu/probe-path');
+  const home = mkdtempSync(join(tmpdir(), 'butler-probe-home-'));
+
+  try {
+    const cmd = probeCommand(home);
+    assert.ok(cmd, '源码树里必须算得出来（探针就在包内）');
+    assert.ok(cmd.includes(`--home="${home}"`), `别处的家必须带上 --home=（实际：${cmd}）`);
+
+    // 原样交给 shell —— 就是用户把这句话粘进终端的动作
+    const r = spawnSync('bash', ['-c', cmd], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        LARK_APP_ID: 'cli_contract_home',
+        LARK_APP_SECRET: 'secret_contract_home',
+        BUTLER_HOME: '',
+      },
+      timeout: 4000,
+    });
+
+    const file = join(home, 'state', 'secrets.json');
+    assert.ok(
+      existsSync(file),
+      '凭据必须落在**这个**家里（不是 ~/.butler）——'
+        + `实际 stdout:\n${r.stdout}\n实际 stderr:\n${r.stderr}`,
+    );
+    assert.equal(secretOf(file, 'feishu', 'appId'), 'cli_contract_home');
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
