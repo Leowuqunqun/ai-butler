@@ -26,7 +26,7 @@ import { boot, type Booted } from './boot.js';
 import { doctor, formatDoctor } from './doctor.js';
 import { collectReport, writeReport } from './report.js';
 import {
-  DEFAULT_CONFIG_PATH, IM_NAMES, LINK_NAMES, initButlerHome, missingAbilityRows,
+  DEFAULT_CONFIG_PATH, IM_NAMES, LINK_NAMES, coreStateFileMissing, initButlerHome, missingAbilityRows,
   type ImName, type LinkName,
 } from './setup.js';
 import { autostartOff, autostartOn, autostartPlan, autostartStatus, formatPlan } from './autostart.js';
@@ -280,6 +280,13 @@ async function run(args: Args): Promise<number> {
     console.log(`\n  ⚠️ 配置里少了 ${missing.length} 样：${missing.map(rowLabel).join('、')}`);
     console.log('  跑一次 butler init 就会补上（没补上之前，要动你电脑的事它会一律拒绝）。');
     console.log('  你原来改过的东西一个都不会动。\n');
+  }
+  // 老配置的内核行没有 `stateFile`：账本只在内存里 —— **认主重启就忘**（企业租户里
+  // `dmMode` 默认 open，"谁先说话谁当家"会一次次重来）。`run` 不写文件，但要说一句，
+  // 不然用户会照着手册去改一个根本不存在的 `state/state.json`。
+  if (coreStateFileMissing(args.config)) {
+    console.log('\n  ⚠️ 这份配置的内核行没有 stateFile：认主只在内存里 —— 重启之后第一个说话的人又会成为主人。');
+    console.log('  跑一次 butler init 会把它补上（你改过的值一个都不会动）。\n');
   }
 
   let b: Booted;
@@ -661,6 +668,10 @@ function runInit(args: Args): number {
   if (r.added.length) {
     console.log(`\n  又补上了 ${r.added.length} 样：${r.added.map(rowLabel).join('、')}`);
     console.log('  （新版本里多出来的东西。你原来改过的，一个字都没动）');
+  }
+  if (r.stateFileAdded) {
+    console.log('\n  顺手把内核行的 stateFile 补上了 —— 从此"谁是主人"会落盘，重启不会被别人顶掉。');
+    console.log('  （原来缺这个字段：认主只在内存里，重启之后第一个说话的人又会成为主人）');
   }
   if (r.topUpSkipped) {
     console.log(`\n  ⚠️ 有该补的行没补上：${r.topUpSkipped}`);

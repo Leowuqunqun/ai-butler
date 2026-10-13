@@ -255,7 +255,15 @@ export function defaultConfigText(opts: DefaultConfigOptions = {}): string {
         // 就在哪儿 —— 换个目录启动就得重新扫码，而且没人会想到是这个原因。
         channelRow(opts.im ?? 'wechat', butlerHomeDir),
         agent,
-        { id: 'core', name: '@butler/core', config: { workspace } },
+        // ⚠️ 账本（**谁是主人** + 谁→上次那个会话）也必须落盘，理由和上面那行一模一样：
+        // 不给它，`SessionStore` 就是**纯内存**（见 sessions.ts 顶上那段）—— 重启之后"主人"
+        // 没了，**谁先发消息谁又成为主人**。企业租户里 `dmMode` 默认是 open（同一家公司谁都
+        // 能单聊它），这不是小事。老配置由 `topUpRows` 补上缺的这一个字段。
+        {
+          id: 'core',
+          name: '@butler/core',
+          config: { workspace, stateFile: join(butlerHomeDir, 'state', 'state.json') },
+        },
         ...abilityRows(butlerHomeDir, opts.link ?? 'lan'),
       ];
 
@@ -289,6 +297,13 @@ export interface InitResult {
    * 空数组 = 什么都没补（新装的、或者早就补齐了）。
    */
   added: string[];
+  /**
+   * 这次给**老配置**的内核行补上了 `stateFile`（账本落盘路径）。
+   *
+   * 补它的理由：没这个字段时 `SessionStore` 是纯内存 —— **认主重启就忘**，
+   * 而手册教人改的 `state/state.json` 根本不存在。只补**缺**的，用户写过的值一个字不动。
+   */
+  stateFileAdded?: boolean;
   /** 想补却没敢动的原因（配置坏了之类）—— 要如实说出来，不能装没事 */
   topUpSkipped?: string;
 }
@@ -360,6 +375,22 @@ export function missingAbilityRows(configPath: string): string[] {
   return missingIn(readConfigShape(configPath), dirname(configPath));
 }
 
+/**
+ * 这份配置的内核行是不是缺 `stateFile`（账本路径）。**只读，一个字节都不写。**
+ *
+ * 给 `butler run` 用，和上面 `missingAbilityRows` 同一个理由：`run` 不写文件（刻意的），
+ * 但"认主重启就忘"这种事必须说出来 —— 不然他会照着手册去改一个**根本不存在**的文件
+ * （`SessionStore` 拿不到路径时是纯内存，一个字都不落盘）。
+ */
+export function coreStateFileMissing(configPath: string): boolean {
+  const shape = readConfigShape(configPath);
+  if (!shape || 'skipReason' in shape) return false;
+  if (!shape.ids.has('core') || shape.ids.has('node')) return false;  // 同一道门：只认我们自己生成的那份
+  const core = (shape.plugins as { id?: unknown; config?: Record<string, unknown> }[])
+    .find((r) => r?.id === 'core');
+  return !!core && typeof core.config === 'object' && core.config !== null && !('stateFile' in core.config);
+}
+
 /** 通道行的包名 → IM 名。三个 IM 的通道行 `id` **都是** `channel`，所以认这一行只看 id。 */
 const CHANNEL_PKG: Record<string, ImName> = {
   'wechat-agent-bridge/plugin': 'wechat',
@@ -379,7 +410,7 @@ function topUpRows(
   configPath: string,
   home: string,
   wantedIm: ImName,
-): { added: string[]; switchedFrom?: string; skipReason?: string } {
+): { added: string[]; switchedFrom?: string; stateFileAdded?: boolean; skipReason?: string } {
   const shape = readConfigShape(configPath);
   if (shape && 'skipReason' in shape) return { added: [], skipReason: shape.skipReason };
   if (!shape || 'skipReason' in shape) return { added: [] };
@@ -410,7 +441,21 @@ function topUpRows(
     }
   }
 
-  if (!missing.length && !next) return { added: [] };
+  // ⚠️ 这里**不能**提前返回：补 `stateFile` 和"缺行 / 换通道"是**两件独立的事** ——
+  //    一份行齐、通道也对的老配置，恰恰就缺这一个字段。（第一版把下面这段放在提前返回
+  //    之后，新测试当场抓住：`stateFileAdded` 是 undefined。）
+  //
+  // 老配置的内核行**没钉住账本路径** —— 这是"认主不落盘"的根源：重启之后第一个说话的人
+  // 又成了主人，而手册却教人去改一个根本不存在的文件。规矩和前两条**同一条**：只认我们自己
+  // 生成的那份（`ours`），而且**只在字段缺失时补** —— 用户写过的值（哪怕写的是空串）一个字不动。
+  let stateFileAdded = false;
+  if (ours) {
+    const core = rows.find((r) => r?.id === 'core') as { config?: Record<string, unknown> } | undefined;
+    if (core && typeof core.config === 'object' && core.config !== null && !('stateFile' in core.config)) {
+      core.config.stateFile = join(home, 'state', 'state.json');
+      stateFileAdded = true;
+    }
+  }
 
   // 只追加缺的那几行；`root` 原样带着走，**别的键一个都不许丢**
   if (missing.length) {
@@ -421,8 +466,13 @@ function topUpRows(
     if (at >= 0) rows[at] = next;
     else rows.push(next);
   }
+  if (!missing.length && !next && !stateFileAdded) return { added: [] };
   writeFileSync(configPath, `${JSON.stringify(shape.root, null, 2)}\n`, { mode: 0o600 });
-  return { added: missing, ...(switchedFrom ? { switchedFrom } : {}) };
+  return {
+    added: missing,
+    ...(switchedFrom ? { switchedFrom } : {}),
+    ...(stateFileAdded ? { stateFileAdded } : {}),
+  };
 }
 
 /**
@@ -470,7 +520,7 @@ export function initButlerHome(opts: InitOptions = {}): InitResult {
   // 完全不懂技术的人就卡死在这里。
   const topUp = existed && !opts.force
     ? topUpRows(configPath, home, wantedIm)
-    : { added: [] as string[], ...({} as { switchedFrom?: string; skipReason?: string }) };
+    : { added: [] as string[], ...({} as { switchedFrom?: string; stateFileAdded?: boolean; skipReason?: string }) };
 
   // 节点那台不需要补丁：它不跑 agent 的对话，只是把 agent 摊给中枢用。
   // 但**给它也没坏处**，而且用户以后可能把这台改成中枢 —— 所以照写。
@@ -480,6 +530,7 @@ export function initButlerHome(opts: InitOptions = {}): InitResult {
     configPath, im: wantedIm, written, kept,
     added: topUp.added,
     ...(topUp.switchedFrom ? { switchedFrom: topUp.switchedFrom } : {}),
+    ...(topUp.stateFileAdded ? { stateFileAdded: true } : {}),
     ...(topUp.skipReason ? { topUpSkipped: topUp.skipReason } : {}),
   };
 }

@@ -10,10 +10,10 @@
 
 ## 用例总数（以此为准）
 
-**合计 937 个用例，全部离线可跑**（十七个包：seam-channel 12 / seam-agent 12 /
-seam-link 15 / seam-approval 7 / seam-memory 6 / core 162 / channel-wechat 134 /
+**合计 946 个用例，全部离线可跑**（十七个包：seam-channel 12 / seam-agent 12 /
+seam-link 15 / seam-approval 7 / seam-memory 6 / core 166 / channel-wechat 134 /
 channel-telegram 51 / channel-feishu 60 / agent-dsh 40 / agent-exec 26 / approval-im 18 /
-memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 249）。
+memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 254）。
 （下面两张明细里的用例数是**各条目落地当时**的数，会随功能继续长 —— **当前总数以这一行为准**。）
 
 ## M1 明细
@@ -75,6 +75,7 @@ memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 249）。
 | ★ **URL 抓取被正则截停在端口**（`http://127\.0\.0\.1:[0-9]*` 会把后面的路径/token 一起吃掉，于是我拿着"根路径"去敲门、拿回一个空页面 —— 空不能说成"页面坏了"，得先怀疑自己抓错了地址；改成抓整条 + 跟随跳转 + 限时 5 秒） | ✅ 验收第 17 项 —— 从今往后每次都会**真敲一次引导页** |
 | ★ **微信通道的自检把"存过登录态"报成了"已登录"**（token 文件在 ≠ 现在还有效：真掉线的时候报告还是绿的，而主人手上的现象恰恰是"发消息没反应"，两边对不上。现在它只敢说"存过"，并明说这代表不了现在还有效） | ✅ 2 个用例 + 1 处变异 |
 | ★ **长期授权能带期限了**（原来「以后这类都行 2」只有"永远"一种给法 —— 而它按整类算（`dsh:bash` = 所有 bash 命令），这是全仓唯一一处"一句话换走一整个工具"的地方。现在可以回「…，一小时」（也认 30 分钟 / 两小时 / 一天 / 3 天，最多 7 天），**到点自己回到"每次都问"**，不用他记着来收。为什么不去细抠"只允许某条命令"：按命令前缀授权是陷阱 —— 「以后 `ls` 不用问」挡不住 `ls; rm -rf ~`，给的是**假的安全感**。期限读不懂时**一条都不记**（没看懂当永远是最坏的猜法），老记录没期限的照旧永远算数） | ✅ 8 个用例 + 4 处变异 |
+| ★ **手册教人改的那个文件根本不存在**（§十二 第 5 步让人把探针打印的 `senderId` 写进 `<管家目录>/state/state.json` 的 `owner` 来钉死主人 —— 可真装的 `state/` 里只有 `cursor.json`／`memory.json`／`token.json`：生成的配置里内核那行**只有 `workspace`**，而 `SessionStore` 拿不到路径就是**纯内存**。于是"钉死"是一句空话，更要紧的是**认主本身不持久** —— 重启之后第一个说话的人又成了主人，而 `dmMode` 默认是 `open`（同一家公司谁都能单聊它）。现在生成的配置钉住 `<管家目录>/state/state.json`，老配置由 `butler init` 补上缺的这个字段（**只在缺失时补**，用户写过的值哪怕是一个空串也一个字不动），`doctor` 和 `run` 在缺的时候当场说破。为什么一直没被发现：**每一处测试都自己传了 `stateFile`**，生产一个字节都没传） | ✅ 7 个用例 + 3 处变异（这个类以前**一条直接用例都没有**） |
 | 双击安装（`.dmg` / `.exe`） | 📐（要 Apple $99/年 + Windows 代码签名，否则 Gatekeeper/SmartScreen 会拦；`install.command` 现在只能右键→打开） |
 | 引导页扫码（不用开终端） | 📐 |
 | **第二个 IM 通道（Telegram）**（只多一个包 + 配置里换一行 `name`：`butler init --im telegram`；核心层和 doctor 一个字没改） | ✅ 通道 48 个测试 + 换通道 8 个 |

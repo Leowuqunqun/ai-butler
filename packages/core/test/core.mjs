@@ -601,6 +601,24 @@ test('check：认了主之后要说清"别人发消息它会一声不吭"（这�
   } finally { await t.cleanup(); }
 });
 
+/**
+ * ⚠️ `stateFile` 为空 = 账本**只在内存里**（`SessionStore` 拿不到路径）。
+ * 这时说"已认主"是**不完整**的：重启之后第一个说话的人又会成为主人 ——
+ * 企业租户里 `dmMode` 默认 open，这不是小事。而手册教人去改的
+ * `<管家目录>/state/state.json` 在**根本不存在**的那一边。
+ */
+test('★ check：认主**没落盘**时要当场说破（不然重启之后谁先说话谁当家）', async () => {
+  const t = await setup({ stateFile: '' });
+  try {
+    t.channel.push('在吗');
+    await waitFor(() => t.core.owner, '认主');
+    const c = byName(t.core.check(), '谁能指挥它');
+    assert.match(c.detail, /没落盘/, '不落盘这件事必须说出来');
+    assert.match(c.detail, /重启/, '而且要说清后果');
+    assert.match(c.fix, /stateFile/, '还要给一条能照着做的出路 —— 光说"有问题"等于没说');
+  } finally { await t.cleanup(); }
+});
+
 test('check：配置里写死了 allowFrom 时，报的是名单不是认主', async () => {
   const t = await setup({ allowFrom: ['a@x', 'b@x'] });
   try {

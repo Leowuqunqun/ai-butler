@@ -254,14 +254,21 @@ export class ButlerCore extends Service {
       out.push({
         name: '谁能指挥它',
         ok: true,
-        detail: `已认主（第一个跟它说话的人）。别人发消息它会一声不吭`,
-        fix: `换人用的话：把配置里的 allowFrom 写上新的微信号，或者删掉 ${this.config.stateFile || 'state.json'} 重新认主`,
+        detail: this.config.stateFile
+          ? '已认主（第一个跟它说话的人）。别人发消息它会一声不吭'
+          : '已认主（第一个跟它说话的人）—— ⚠️ 但这次认主**没落盘**：重启之后第一个说话的人又会成为主人',
+        fix: this.config.stateFile
+          ? `换人用的话：把配置里的 allowFrom 写上新的微信号，或者删掉 ${this.config.stateFile} 重新认主`
+          : '想钉死：给 core 这一行加 `stateFile`（例如 <管家目录>/state/state.json）—— 加上之后重启也认这个主人',
       });
     } else {
       out.push({
         name: '谁能指挥它',
         ok: true,
-        detail: '还没认主 —— 第一个给它发消息的人就是主人',
+        detail: this.config.stateFile
+          ? '还没认主 —— 第一个给它发消息的人就是主人'
+          : '还没认主 —— 第一个给它发消息的人就是主人（⚠️ core 没配 stateFile，认主不会保留到重启）',
+        ...(this.config.stateFile ? {} : { fix: '想钉死：给 core 这一行加 `stateFile`（例如 <管家目录>/state/state.json）' }),
       });
     }
 

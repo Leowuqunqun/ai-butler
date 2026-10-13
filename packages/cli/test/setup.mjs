@@ -19,11 +19,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 
 import {
-  DEFAULT_CONFIG_PATH, FALLBACK_PATCH, IM_NAMES, butlerHome, defaultConfigText, defaultPatchPath,
-  initButlerHome, patchTemplate,
+  DEFAULT_CONFIG_PATH, FALLBACK_PATCH, IM_NAMES, butlerHome, coreStateFileMissing, defaultConfigText,
+  defaultPatchPath, initButlerHome, patchTemplate,
 } from '../lib/setup.js';
 import { DEFAULT_KEY_REF, credentialsFileOf, keyRefOf } from '../lib/credentials.js';
 import { runSync, tempHome } from './fixtures/node-helpers.mjs';
@@ -333,6 +333,80 @@ test('init：补行那件事要说给用户听（他从命令行知道这件事�
   }
 });
 
+/**
+ * ⚠️ 这条是这一轮的主角：**生成的配置里必须钉住账本路径**（`stateFile`）。
+ *
+ * 不给它，`SessionStore` 就是**纯内存**（见 core 的 `sessions.ts` 顶上那段）—— 认主
+ * **重启就忘**：企业租户里 `dmMode` 默认 open，谁先发消息谁又成了主人；而手册教人改的
+ * `<管家目录>/state/state.json` **根本不存在**。
+ *
+ * 为什么一直没被发现：**每一处测试都自己传了 `stateFile`**（`doctor.mjs` 的注释甚至写着
+ * "真内核要 workspace 和 stateFile"）—— 测试都写死了，生产没写。
+ */
+test('★★ 生成的配置里，账本是**落盘**的 —— 认主不许重启就忘', () => {
+  const dir = home();
+  const cfg = cfgIn(dir);
+  try {
+    initButlerHome({ configPath: cfg });
+    const core = JSON.parse(readFileSync(cfg, 'utf8')).plugins.find((x) => x.id === 'core');
+    const at = core.config.stateFile;
+    assert.ok(at, 'core 行必须钉住 stateFile —— 不给它，SessionStore 就是纯内存（认主重启就忘）');
+    assert.ok(isAbsolute(at), `必须是绝对路径（相对路径会落在当前工作目录，换个目录启动就换个人当家）：${at}`);
+    assert.equal(at, join(dir, '.butler', 'state', 'state.json'), '就在管家目录的 state/ 下（手册说的就是这个文件）');
+
+    // ★ "认主真的活过重启"这半边由 core 的用例钉着（`packages/core/test/sessions.mjs`：
+    //   给了路径就落盘、换一个实例还记得）。这儿钉的是**另外半边**：我们真的给了路径，
+    //   而且给的是绝对路径、就落在管家目录里。两个半球合起来才是完整的那句话。
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/**
+ * 老配置（core 行只有 `workspace` —— 真安装里就是这样）跑 `init` 时补上缺的 `stateFile`。
+ * 用户**在手册第 5 步**跑的就是这条命令，所以这一步是"老机器能不能被治好"的关键。
+ */
+test('★ init：老配置的内核行缺 stateFile 会被补上，而写过的值一个字都不动', () => {
+  const dir = home();
+  const cfg = cfgIn(dir);
+  const patch = patchIn(dir);
+  const setStateFile = (value) => {
+    const doc = JSON.parse(readFileSync(cfg, 'utf8'));
+    const core = doc.plugins.find((x) => x.id === 'core');
+    if (value === undefined) delete core.config.stateFile;
+    else core.config.stateFile = value;
+    writeFileSync(cfg, JSON.stringify(doc, null, 2));
+  };
+  try {
+    initButlerHome({ configPath: cfg, patchFile: patch });
+    setStateFile(undefined);                       // 装得早的那台：没有这个字段
+    assert.equal(coreStateFileMissing(cfg), true, '删掉之后要认得出"缺"');
+
+    const r = initButlerHome({ configPath: cfg, patchFile: patch });
+    assert.equal(r.stateFileAdded, true, '补了什么要说清楚（调用方要念给用户听）');
+    assert.deepEqual(r.written, [], '配置不是整份重写');
+    assert.equal(
+      JSON.parse(readFileSync(cfg, 'utf8')).plugins.find((x) => x.id === 'core').config.stateFile,
+      join(dir, '.butler', 'state', 'state.json'),
+    );
+    assert.equal(coreStateFileMissing(cfg), false, '补上了就不该再说缺');
+    assert.equal(initButlerHome({ configPath: cfg, patchFile: patch }).stateFileAdded, undefined,
+      '补完就回到幂等：第二次什么都不补');
+
+    // ⚠️ 用户自己写过的值（哪怕写的是**空串**）不许动 —— 那可能是他故意说"别落盘"
+    setStateFile('');
+    assert.equal(coreStateFileMissing(cfg), false, '字段在就不是"缺"，空串也算他写过了');
+    const r2 = initButlerHome({ configPath: cfg, patchFile: patch });
+    assert.equal(r2.stateFileAdded, undefined, '写过的值不许被当成"缺"');
+    assert.equal(
+      JSON.parse(readFileSync(cfg, 'utf8')).plugins.find((x) => x.id === 'core').config.stateFile, '',
+      '空串也要原样留着 —— 猜着改用户的配置比不补更糟',
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('init：被遥控那台不补能力行 —— 它只把本机的 agent 摊给中枢用', () => {
   const dir = home();
   const cfg = cfgIn(dir);
@@ -421,6 +495,33 @@ test('run：配置齐全时一个字都不啰嗦', () => {
     const r = runSync(['run'], { home: dir });
 
     assert.doesNotMatch(r.out, /少了 \d+ 样/, '什么都不缺就别念叨');
+    assert.doesNotMatch(r.out, /stateFile/, '新装的配置已经钉住账本了，不该再提这一句');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('★ run：老配置的内核行没有 stateFile，开局就说一句（而且一个字节都不写）', () => {
+  const dir = tempHome();
+  const cfg = join(dir, '.butler', 'config.json');
+  const dropStateFile = () => {
+    const doc = JSON.parse(readFileSync(cfg, 'utf8'));
+    delete doc.plugins.find((x) => x.id === 'core').config.stateFile;
+    writeFileSync(cfg, JSON.stringify(doc, null, 2));
+  };
+  try {
+    runSync(['init'], { home: dir });
+    dropStateFile();
+    breakChannel(cfg);
+    fakeKey(dir);
+    const before = readFileSync(cfg, 'utf8');
+
+    const r = runSync(['run'], { home: dir });
+
+    assert.match(r.out, /stateFile/, '要在他碰壁之前说：认主这会儿只在内存里');
+    assert.match(r.out, /重启/, '说清后果：重启之后第一个说话的人又会成为主人');
+    assert.match(r.out, /butler init/, '要给出那一步');
+    assert.equal(readFileSync(cfg, 'utf8'), before, 'run 一个字节都不许写');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
