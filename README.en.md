@@ -83,6 +83,7 @@ above are still being designed or built:
 | Layer | What | Status |
 | --- | --- | --- |
 | ① Connection | One-line install (double-click `install.command`) + QR login + onboarding page | ✅ **Works** (no Node to install, no admin password) |
+| ① Connection | **Third IM: Feishu** (on top of the official `@larksuite/channel`; we only write the mapping) | 📐 Skeleton + CLI wired (`--im feishu`); **not yet verified on a real device** |
 | ② Conversation | Send/receive text, voice transcription, **send files / images / videos**, quote prefix | ✅ **Works** |
 | ② Conversation | **Receiving images / files** (CDN download + decrypt + saved locally, handed to the agent) | ✅ **Works** |
 | ③ Capability | The agent does the work (pluggable backends: DSH / any command line) | ✅ **Works** |
