@@ -170,17 +170,18 @@ const CMD_MARK = /源码树|发行包|装完之后|仓库根|clone|克隆|开发
 const looksLikeCommand = (t) => CMD_BARE_SCRIPT.test(t) || (CMD_VERB.test(t) && CMD_REPO_PATH.test(t));
 
 function sourceTreeCommandViolations(text) {
-  const hits = [];
+  const hits = []; // 每项 { line, text } —— 报错要指到**行**（第 55 轮）
   let examined = 0;
   let inFence = false;
   let block = []; // 整块都留着：标记可能写在块里**任意一行**（那一行自己未必是命令）
   let cmds = []; // 块里"像命令且带仓库内路径"的行 —— 没标记时只报这些
   const flush = () => {
+    // 报**第一条**命令所在的行（不是围栏那行 —— 围栏行读者打开文件会看错地方）
     if (cmds.length && !block.some((l) => CMD_MARK.test(l))) hits.push(cmds[0]);
     block = [];
     cmds = [];
   };
-  for (const line of text.split('\n')) {
+  for (const [i, line] of text.split('\n').entries()) {
     if (/^ {0,3}```/.test(line)) {
       if (inFence) flush();
       inFence = !inFence;
@@ -191,7 +192,7 @@ function sourceTreeCommandViolations(text) {
       const t = line.trim();
       if (looksLikeCommand(t)) {
         examined++;
-        cmds.push(t);
+        cmds.push({ line: i + 1, text: t });
       }
       continue;
     }
@@ -204,7 +205,7 @@ function sourceTreeCommandViolations(text) {
       const t = m[1].trim();
       if (!looksLikeCommand(t)) continue;
       examined++;
-      if (!CMD_MARK.test(line)) hits.push(t);
+      if (!CMD_MARK.test(line)) hits.push({ line: i + 1, text: t });
     }
   }
   flush();
@@ -230,14 +231,19 @@ const isUserDoc = (rel) =>
  *
  * 那一节是**给用户照着做**的（装完的人会在 README 和 doctor 的输出里被指到这里）；
  * 它前面的开发史不是 —— 那里写 `packages/…` 是叙述，不是让人敲。
+ *
+ * ⚠️ 返回 `{ text, offset }`：`offset` 是**切掉了前面多少行**。第 55 轮加行号时踩到的 ——
+ * 从切片里数出来的行号是**相对**的，直接报出去会指向别处（比不报行号更坏：
+ * 读者会去那一行找一个根本不在那儿的命令）。所以报错时必须 `offset + 行号`。
  */
 function userDocText(rel, text) {
-  if (rel !== 'docs/CHANNEL-FEISHU.md') return text;
+  if (rel !== 'docs/CHANNEL-FEISHU.md') return { text, offset: 0 };
   const lines = text.split('\n');
   const start = lines.findIndex((l) => /^## 十二/.test(l));
-  if (start === -1) return ''; // 那节没了：宁可一条都不看，也别把整份开发史当成用户文档
+  if (start === -1) return { text: '', offset: 0 }; // 那节没了：宁可一条都不看
   const end = lines.slice(start + 1).findIndex((l) => /^## /.test(l));
-  return lines.slice(start, end === -1 ? undefined : start + 1 + end).join('\n');
+  const stop = end === -1 ? lines.length : start + 1 + end;
+  return { text: lines.slice(start, stop).join('\n'), offset: start };
 }
 
 /**
@@ -285,70 +291,70 @@ const URL_TEST = [
 
 /** 「照着敲的命令」那条的承诺：报几处，以及**看了几条**（防沉默） */
 const CMD_TEST = [
-  { why: '源码树命令、块里没标记', text: '```bash\nbash packages/a/probe/run.sh\n```', want: 1, examined: 1 },
-  { why: '块里写了"源码树里"', text: '```bash\nbash packages/a/probe/run.sh  # 源码树里\n```', want: 0, examined: 1 },
+  { why: '源码树命令、块里没标记', text: '```bash\nbash packages/a/probe/run.sh\n```', want: 1, examined: 1, wantLine: 2 },
+  { why: '块里写了"源码树里"', text: '```bash\nbash packages/a/probe/run.sh  # 源码树里\n```', want: 0, examined: 1, wantLine: null },
   {
     why: '标记在块**外面**（引用里）—— 读者翻到这儿看不见',
     text: '> 上面是源码树里的写法\n\n```bash\nbash packages/a/probe/run.sh --save\n```',
     want: 1,
-    examined: 1,
+    examined: 1, wantLine: 4,
   },
-  { why: '行内代码、同行没标记', text: '先跑 `bash packages/a/probe/run.sh --save` 就行', want: 1, examined: 1 },
-  { why: '行内代码、同行说清了', text: '源码树里跑 `bash packages/a/probe/run.sh --save`', want: 0, examined: 1 },
-  { why: '不带仓库内路径的命令（butler run 在哪儿都能敲）', text: '```bash\nbutler run\n```', want: 0, examined: 0 },
-  { why: '包内相对路径不算（读者就在包里）', text: '```bash\nnode --test test/*.mjs\n```', want: 0, examined: 0 },
-  { why: '散文里提到路径不算让人敲', text: '实现放在 packages/a/src/x.ts 里，见下节。', want: 0, examined: 0 },
+  { why: '行内代码、同行没标记', text: '先跑 `bash packages/a/probe/run.sh --save` 就行', want: 1, examined: 1, wantLine: 1 },
+  { why: '行内代码、同行说清了', text: '源码树里跑 `bash packages/a/probe/run.sh --save`', want: 0, examined: 1, wantLine: null },
+  { why: '不带仓库内路径的命令（butler run 在哪儿都能敲）', text: '```bash\nbutler run\n```', want: 0, examined: 0, wantLine: null },
+  { why: '包内相对路径不算（读者就在包里）', text: '```bash\nnode --test test/*.mjs\n```', want: 0, examined: 0, wantLine: null },
+  { why: '散文里提到路径不算让人敲', text: '实现放在 packages/a/src/x.ts 里，见下节。', want: 0, examined: 0, wantLine: null },
   {
     why: '同块里**另一行**有标记也算（微信 README 那种）',
     text: '```bash\npnpm test  # 在仓库根目录跑全部包\ncd packages/a && node --test test/*.mjs\n```',
     want: 0,
-    examined: 1,
+    examined: 1, wantLine: null,
   },
   {
     why: '两个块、只有一个带标记',
     text: '```bash\nbash packages/a/p.sh\n```\n\n```bash\nbash packages/a/p.sh --save  # 源码树里\n```',
     want: 1,
-    examined: 2,
+    examined: 2, wantLine: 2,
   },
   {
     why: '飞书手册：开发史那部分不算（§十二 之前）',
     doc: 'docs/CHANNEL-FEISHU.md',
     text: '## 一、开发\n\n```bash\nbash packages/a/p.sh\n```\n\n## 十二、真机验收\n\n```bash\nbutler run\n```',
     want: 0,
-    examined: 0,
+    examined: 0, wantLine: null,
   },
   {
     why: '飞书手册：§十二 里面要算',
     doc: 'docs/CHANNEL-FEISHU.md',
     text: '## 一、开发\n\n```bash\nbash packages/a/p.sh\n```\n\n## 十二、真机验收\n\n```bash\nbash packages/a/p.sh --save\n```',
     want: 1,
-    examined: 1,
+    examined: 1, wantLine: 10,
   },
   {
     why: '别的文档整份都算',
     doc: 'README.md',
     text: '## 一、开发\n\n```bash\nbash packages/a/p.sh\n```',
     want: 1,
-    examined: 1,
+    examined: 1, wantLine: 4,
   },
   {
     why: '第 53 轮那个形状：裸脚本路径 + 开关，没有动词、也没标记',
     text: '| 报错 | 怎么办 |\n| --- | --- |\n| `code: 10003` | 重扫：`probe/run.sh --save` |',
     want: 1,
-    examined: 1,
+    examined: 1, wantLine: 3,
   },
-  { why: '裸脚本路径 + 开关，但同行说了"源码树里"', text: '源码树里：`probe/run.sh --save`', want: 0, examined: 1 },
+  { why: '裸脚本路径 + 开关，但同行说了"源码树里"', text: '源码树里：`probe/run.sh --save`', want: 0, examined: 1, wantLine: null },
   {
     why: '散文里提一个测试文件名：不是让人敲（没开关）',
     text: '这两条测试盯着它：`packages/cli/test/probe-contract.mjs` 和 `packages/cli/test/real-composition.mjs`。',
     want: 0,
-    examined: 0,
+    examined: 0, wantLine: null,
   },
   {
     why: '缩进块里贴的"当年终端输出"：那是记录，不是让人敲',
     text: '修完之后同一个空配置：\n\n    ✗  飞书登录态    还没有填 app_id / app_secret\n        → 先跑 `bash packages/a/probe/run.sh --save`；…',
     want: 0,
-    examined: 0,
+    examined: 0, wantLine: null,
   },
 ];
 
@@ -373,13 +379,18 @@ function runSelfTest() {
       shown: c.url,
     })),
     ...CMD_TEST.map((c) => {
-      const r = sourceTreeCommandViolations(userDocText(c.doc ?? 'README.md', c.text));
+      const { text, offset } = userDocText(c.doc ?? 'README.md', c.text);
+      const r = sourceTreeCommandViolations(text);
+      // ⚠️ 行号要加回切片偏移 —— 否则飞书手册那几条会指到开发史里去
+      const gotLine = r.hits.length ? offset + r.hits[0].line : null;
       return {
         ...c,
         got: r.hits.length,
         shown: JSON.stringify(c.text).replace(/\\n/g, '⏎'),
-        // 报了几处对、但"看了几条"不对，也是规则坏了：那说明它悄悄不再看这类写法了。
-        whyWrong: r.examined === c.examined ? '' : `（另外：像命令的行应该看 ${c.examined} 条，实际 ${r.examined} 条）`,
+        // 报了几处对、但"看了几条"或"报在第几行"不对，也是规则坏了。
+        whyWrong:
+          (r.examined === c.examined ? '' : `（另外：像命令的行应该看 ${c.examined} 条，实际 ${r.examined} 条）`) +
+          (gotLine === c.wantLine ? '' : `（行号应该 ${c.wantLine}，实际 ${gotLine}）`),
       };
     }),
   ].filter((c) => c.got !== c.want || c.whyWrong);
@@ -514,12 +525,12 @@ let cmdBad = 0;
 let cmdExamined = 0;
 for (const file of files) {
   if (!isUserDoc(file)) continue;
-  const text = userDocText(file, readFileSync(resolve(ROOT, file), 'utf8'));
+  const { text, offset } = userDocText(file, readFileSync(resolve(ROOT, file), 'utf8'));
   const { hits, examined } = sourceTreeCommandViolations(text);
   cmdExamined += examined;
-  for (const raw of hits) {
+  for (const hit of hits) {
     problems.push(
-      `❌ 让读者照抄的命令，路径只在源码树里成立  ${file}\n       → ${raw}\n` +
+      `❌ 让读者照抄的命令，路径只在源码树里成立  ${file}:${offset + hit.line}\n       → ${hit.text}\n` +
         '       （`install.sh` 装出来的人没有 `packages/`：包在 `~/.butler/prefix/app/node_modules` 里，' +
         '照抄只会得到 `No such file or directory`。在这条命令后面写一句"源码树里"，' +
         '或者换成他真能敲的那条）',
