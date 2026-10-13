@@ -2,7 +2,7 @@
 /**
  * `butler` —— AI 管家的命令行入口。
  *
- *   butler init [--node] [--link lan|tailscale] [--im wechat|telegram]   第一次用：把配置写好
+ *   butler init [--node] [--link lan|tailscale] [--im wechat|telegram|feishu]   第一次用：把配置写好
  *   butler run [--config <文件>] [--patch <文件>]...
  *   butler --help
  *
@@ -102,7 +102,7 @@ const HELP = `AI 管家 —— 用微信遥控你的电脑
   --config <文件>              主配置。默认 ~/.butler/config.json
   --patch <文件>               叠加在上面的补丁，可以给多次，后写的赢
   --node                       给**被遥控的那台**写配置（只对 init 有意义）
-  --im wechat\|telegram        这一台用哪个 IM 收信（默认 wechat；一次只能上一个）
+  --im wechat\|telegram\|feishu  这一台用哪个 IM 收信（不给 = 保持现在这个；首次是 wechat）
   --link lan\|tailscale        这一台怎么找别的机器（默认 lan = 同一个 WiFi）
                                跨网（电脑在家、你在外面）选 tailscale：
                                装好 Tailscale、两台登同一个账号，然后别填密钥 ——
@@ -632,8 +632,10 @@ async function runReport(args: Args): Promise<number> {
 }
 
 function runInit(args: Args): number {
-  const im = args.im ?? 'wechat';
-  if (!IM_NAMES.includes(im)) {
+  // **不给 `--im` 就是不换**（沿用配置里原来那个，由 setup 按现有配置决定）。
+  // 给了就必须认识 —— 但别在这里替用户默认成微信：他重跑一次 init 不该被换回去。
+  const im = args.im;
+  if (im !== undefined && !IM_NAMES.includes(im)) {
     console.error(`不认识这个 IM：${im}。现在支持的是 ${IM_NAMES.join('、')}。`);
     return 2;
   }
@@ -642,11 +644,20 @@ function runInit(args: Args): number {
     console.error(`不认识这条链路：${link}。现在支持的是 ${LINK_NAMES.join('、')}。`);
     return 2;
   }
-  const r = initButlerHome({ configPath: args.config, node: args.node, im, link });
+  const r = initButlerHome({
+    configPath: args.config,
+    node: args.node,
+    ...(im === undefined ? {} : { im }),
+    link,
+  });
 
   console.log('把家安好了：\n');
   for (const f of r.written) console.log(`  写好了  ${f}`);
   for (const f of r.kept) console.log(`  已经有了，没动  ${f}`);
+  if (r.switchedFrom) {
+    console.log(`\n  收信通道换成了「${r.im}」—— 原来那一行是 ${r.switchedFrom}`);
+    console.log('  （就换了这一行，位置没动；别的东西一个字都没动）');
+  }
   if (r.added.length) {
     console.log(`\n  又补上了 ${r.added.length} 样：${r.added.map(rowLabel).join('、')}`);
     console.log('  （新版本里多出来的东西。你原来改过的，一个字都没动）');
@@ -666,7 +677,7 @@ function runInit(args: Args): number {
     console.log('  butler node');
     console.log('\n第一次会先让你贴一下模型 key（会自动开一个网页，粘一下就行），');
     console.log('然后屏幕上打出一行「配对 …」—— 把它发到微信里，中枢就认得这台了。');
-  } else if (im === 'telegram') {
+  } else if (r.im === 'telegram') {
     console.log('\n这台是「收 Telegram 的那台」。接下来：\n');
     console.log('  1. 在 Telegram 里找 @BotFather 发 /newbot，建一个机器人');
     console.log('     （它会把一串 token 给你，长这样：123456:ABC-DEF…）');
@@ -674,7 +685,7 @@ function runInit(args: Args): number {
     console.log('\n第一次它会开两个网页，**都不用你改任何文件**：');
     console.log('  1. 先让你把那串 bot token 贴进去');
     console.log('  2. 再让你贴模型 key（AI 要靠它思考）');
-  } else if (im === 'feishu') {
+  } else if (r.im === 'feishu') {
     console.log('\n这台是「收飞书的那台」。接下来：\n');
     console.log('  1. 先弄一个飞书应用（两种办法，挑一个）：');
     // 命令按这个包**实际装在哪儿**给：写死 `packages/...` 只在源码树里成立，

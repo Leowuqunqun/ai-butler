@@ -270,6 +270,15 @@ function aliasFor(workspace: string): string {
 
 export interface InitResult {
   configPath: string;
+  /**
+   * 这一台**最终**用哪个 IM 收信。
+   *
+   * `--im` 没给 = 沿用配置里原来那个（用户只是重跑一次 init，不该被悄悄切回微信）——
+   * 所以调用方要按这个值出引导文案，别看自己传了什么。
+   */
+  im: ImName;
+  /** 通道行是从哪个包换过来的（没换就没有这个字段） */
+  switchedFrom?: string;
   /** 这次写下去的文件 */
   written: string[];
   /** 已经存在、没有整份重写的文件 */
@@ -351,16 +360,69 @@ export function missingAbilityRows(configPath: string): string[] {
   return missingIn(readConfigShape(configPath), dirname(configPath));
 }
 
-function topUpRows(configPath: string, home: string): { added: string[]; skipReason?: string } {
+/** 通道行的包名 → IM 名。三个 IM 的通道行 `id` **都是** `channel`，所以认这一行只看 id。 */
+const CHANNEL_PKG: Record<string, ImName> = {
+  'wechat-agent-bridge/plugin': 'wechat',
+  '@butler/channel-telegram': 'telegram',
+  '@butler/channel-feishu': 'feishu',
+};
+
+/** 这一台现在用哪个 IM 收信。**只读，一个字节都不写。** 认不出来就是 `undefined`（那就别猜） */
+function channelImOf(configPath: string): ImName | undefined {
+  const shape = readConfigShape(configPath);
+  if (!shape || 'skipReason' in shape) return undefined;
+  const row = (shape.plugins as { id?: unknown; name?: unknown }[]).find((r) => r?.id === 'channel');
+  return typeof row?.name === 'string' ? CHANNEL_PKG[row.name] : undefined;
+}
+
+function topUpRows(
+  configPath: string,
+  home: string,
+  wantedIm: ImName,
+): { added: string[]; switchedFrom?: string; skipReason?: string } {
   const shape = readConfigShape(configPath);
   if (shape && 'skipReason' in shape) return { added: [], skipReason: shape.skipReason };
+  if (!shape || 'skipReason' in shape) return { added: [] };
+
   const missing = missingIn(shape, home);
-  if (!missing.length || !shape || 'skipReason' in shape) return { added: [] };
+  const rows = shape.plugins as { id?: unknown; name?: unknown }[];
+
+  // 通道那一行：`init --im X` 要把它**原位换成** X。
+  //
+  // 不换的话是这个下场：用户为飞书敲了 `--im feishu`，配置里那行却还是微信 —— 凭据存着、
+  // `doctor` 也不提飞书，他照着手册走到最后，跑起来的还是微信，在飞书里发消息
+  // **什么都不会发生**。（第 23 轮实测：以前这里一个字节都不改。）
+  //
+  // 规矩和补能力行**同一条**：认得出是我生成的那份才动（有内核那行、且不是被遥控的那台），
+  // 而且**包名认不出来就不猜**（那可能是他自己接的别的通道）。
+  const at = rows.findIndex((r) => r?.id === 'channel');
+  const currentName = typeof rows[at]?.name === 'string' ? (rows[at]?.name as string) : '';
+  const currentIm = CHANNEL_PKG[currentName];
+  const ours = shape.ids.has('core') && !shape.ids.has('node');
+  let next: ReturnType<typeof channelRow> | null = null;
+  let switchedFrom: string | undefined;
+  if (ours) {
+    if (at < 0) {
+      next = channelRow(wantedIm, home); // 少了通道那行，补上
+    } else if (currentIm && currentIm !== wantedIm) {
+      next = channelRow(wantedIm, home);
+      switchedFrom = currentName;
+    }
+  }
+
+  if (!missing.length && !next) return { added: [] };
 
   // 只追加缺的那几行；`root` 原样带着走，**别的键一个都不许丢**
-  (shape.plugins as { id: string }[]).push(...abilityRows(home).filter((r) => missing.includes(r.id)));
+  if (missing.length) {
+    (shape.plugins as { id: string }[]).push(...abilityRows(home).filter((r) => missing.includes(r.id)));
+  }
+  if (next) {
+    // **原位**换：不重排，别的行一个都不动
+    if (at >= 0) rows[at] = next;
+    else rows.push(next);
+  }
   writeFileSync(configPath, `${JSON.stringify(shape.root, null, 2)}\n`, { mode: 0o600 });
-  return { added: missing };
+  return { added: missing, ...(switchedFrom ? { switchedFrom } : {}) };
 }
 
 /**
@@ -396,22 +458,28 @@ export function initButlerHome(opts: InitOptions = {}): InitResult {
   };
 
   const existed = existsSync(configPath);
-  put(configPath, defaultConfigText({ ...opts, home, patchFile, dshHome }));
+  // `--im` 没给 = **保持这一台现在的样子**。用户把 init 重跑一遍（升级、补行、改链路）
+  // 不该被悄悄切回微信 —— 而"他现在用的是哪个"只有配置自己知道。
+  const wantedIm = opts.im ?? channelImOf(configPath) ?? 'wechat';
+  put(configPath, defaultConfigText({ ...opts, im: wantedIm, home, patchFile, dshHome }));
 
-  // 文件早就在的老用户：把新版本多出来的能力行**补上**。
+  // 文件早就在的老用户：把新版本多出来的能力行**补上**，顺手把 `--im` 要的那一行换过去。
   //
   // 没有这一步，`init` 只认"文件在不在" —— 文件早就在了，于是新能力永远补不上，
   // 用户被卡在一个"少了半台管家"的旧配置里，还得自己打开一份 JSON 去改。
   // 完全不懂技术的人就卡死在这里。
-  const topUp = existed && !opts.force ? topUpRows(configPath, home) : { added: [] as string[] };
+  const topUp = existed && !opts.force
+    ? topUpRows(configPath, home, wantedIm)
+    : { added: [] as string[], ...({} as { switchedFrom?: string; skipReason?: string }) };
 
   // 节点那台不需要补丁：它不跑 agent 的对话，只是把 agent 摊给中枢用。
   // 但**给它也没坏处**，而且用户以后可能把这台改成中枢 —— 所以照写。
   put(patchFile, patchTemplate());
 
   return {
-    configPath, written, kept,
+    configPath, im: wantedIm, written, kept,
     added: topUp.added,
+    ...(topUp.switchedFrom ? { switchedFrom: topUp.switchedFrom } : {}),
     ...(topUp.skipReason ? { topUpSkipped: topUp.skipReason } : {}),
   };
 }

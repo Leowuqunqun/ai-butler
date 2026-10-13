@@ -24,6 +24,7 @@ import { fileURLToPath } from 'node:url';
 
 import { runAsync, runSync, tempHome } from './fixtures/node-helpers.mjs';
 import { useButlerShim } from './fixtures/path-shim.mjs';
+import { IM_NAMES } from '../lib/setup.js';
 
 // `doctor` 会去问内核"管家自己找得到 butler 吗"（量的是**管家进程自己的** PATH）。
 // 测试机上没有 butler，给它一个真 shim —— **改环境，不改判据**。
@@ -97,6 +98,65 @@ test('init --im signal：不认识就说清楚现在支持哪些，别装作成�
   assert.ok(!existsSync(join(home, '.butler', 'config.json')), '不认识的 IM 不该写出配置');
 });
 
+/**
+ * ★★ 这条盯的是"**换**"这个动作本身。
+ *
+ * 上面那条用的是一间**空房子**，测的其实是"第一次就用某个 IM"。而用户手上是一间**住着的**
+ * 房子（微信那行已经在里面了）：他为了飞书敲 `init --im feishu`，那一行必须真的换过去。
+ *
+ * 以前不是这样 —— 通道行谁都不管，`--im` 只在**新写**一份配置时起作用。于是：用户为飞书敲了
+ * `--im feishu`、探针也把凭据存好了，配置里那行却还是微信。他照着手册走到最后，跑起来的
+ * 还是微信，在飞书里发消息**什么都不会发生**。（第 23 轮实测到的。）
+ */
+test('★★ 住着的房子也能换：init --im feishu 把微信那一行原位换成飞书', () => {
+  const home = tempHome();
+  const cfgPath = join(home, '.butler', 'config.json');
+  runSync(['init', '--im', 'wechat'], { home }); // 用户现状
+
+  const r = runSync(['init', '--im', 'feishu'], { home });
+  assert.equal(r.code, 0, `${r.out}\n${r.err}`);
+
+  const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
+  const channel = cfg.plugins.find((p) => p.id === 'channel');
+  assert.equal(channel.name, '@butler/channel-feishu', '这一行必须真换过去');
+  assert.equal(channel.config.appId, '', '两个值留空，doctor 会说缺什么');
+  assert.deepEqual(
+    cfg.plugins.map((p) => p.id),
+    ['channel', 'agent', 'core', 'memory', 'approval', 'link'],
+    '原位换：位置不重排、别的行一个都不动',
+  );
+  assert.match(r.out, /收信通道换成了「feishu」/, '换了就要说 —— 不能悄悄换');
+  assert.match(r.out, /wechat-agent-bridge\/plugin/, '还得说清原来那一行是什么');
+});
+
+test('★★ 重跑 init 不带 --im：不许把通道换回去（默认值不是"微信"）', () => {
+  const home = tempHome();
+  const cfgPath = join(home, '.butler', 'config.json');
+  runSync(['init', '--im', 'feishu'], { home });
+
+  const again = runSync(['init'], { home }); // 升级、补能力行、改链路时会这么跑
+  assert.equal(again.code, 0, `${again.out}\n${again.err}`);
+  const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
+  assert.equal(
+    cfg.plugins.find((p) => p.id === 'channel').name,
+    '@butler/channel-feishu',
+    '不带 --im = 保持原样；悄悄切回微信等于把用户刚配好的飞书废掉',
+  );
+  assert.equal(/收信通道换成了/.test(again.out), false, '没换就别报换');
+});
+
+test('★ 不认识的那份配置：一个字节都不动（通道那行也不例外）', () => {
+  const home = tempHome();
+  const cfgPath = join(home, '.butler', 'config.json');
+  mkdirSync(join(home, '.butler'), { recursive: true });
+  // 有一行 id 叫 channel，但没有内核那行 —— 不是我们生成的那份
+  const alien = { plugins: [{ id: 'channel', name: '别人的通道', config: {} }] };
+  writeFileSync(cfgPath, JSON.stringify(alien, null, 2));
+
+  runSync(['init', '--im', 'feishu'], { home });
+  assert.deepEqual(JSON.parse(readFileSync(cfgPath, 'utf8')), alien, '不是我生成的那份，就别猜着往里塞东西');
+});
+
 test('★ --config 指到别处：补丁和 dsh-home 跟着走，默认的 ~/.butler 一个字节都不许建', () => {
   const home = tempHome();
   const moved = join(home, '别处');
@@ -115,10 +175,14 @@ test('★ --config 指到别处：补丁和 dsh-home 跟着走，默认的 ~/.bu
   assert.ok(!existsSync(join(home, '.butler')), '指到别处之后，默认的家不许被建出来');
 });
 
-test('--help 里写着 --im（不然没人知道能换）', () => {
+test('--help 里写着 --im，而且**每个**能用的 IM 都列出来（不然没人知道能用它）', () => {
   const r = runSync(['--help']);
   assert.match(r.out, /--im/, '帮助里得有这一行');
-  assert.match(r.out, /telegram/, '而且得写出可选值');
+  // 钉成"列全 `IM_NAMES`"：飞书那次就是漏在**这里** —— `IM_NAMES` 早就认它了，
+  // 帮助里却只写到 telegram，照着帮助敲的人根本不知道有飞书。
+  for (const im of IM_NAMES) {
+    assert.match(r.out, new RegExp(`--im[^\\n]*\\b${im}\\b`), `--help 里要把 ${im} 列出来`);
+  }
 });
 
 /**
