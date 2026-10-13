@@ -50,6 +50,21 @@ export function butlerHome(env: NodeJS.ProcessEnv = process.env): string {
 }
 
 /**
+ * 管家目录，带一个"**操作系统家目录**"的显式覆盖。
+ *
+ * `home` 那一路是给测试和显式调用准备的 —— 它是**操作系统家目录**（`autostart` 还要拿它去
+ * 拼 `~/Library/LaunchAgents`），不是管家目录，所以后面要接一个 `.butler`。没给才轮到
+ * `butlerHome()`，也就是 `$BUTLER_HOME` > `~/.butler`。
+ *
+ * ⚠️ 传进来的必须是**原始的** `opts.home`（可能是 `undefined`），不能是 `opts.home ?? homedir()`
+ *    的结果 —— 后者在没给 `home` 时会变成一个具体的家目录字符串，于是 `BUTLER_HOME` 又被丢掉，
+ *    正好是这条规则要修的毛病（第 43 轮）。
+ */
+export function butlerDirOf(home?: string): string {
+  return home ? join(home, '.butler') : butlerHome();
+}
+
+/**
  * 什么都还没配的时候，配置在哪。`--config` 不给就用这个。
  *
  * ⚠️ 是**函数**不是常量：`BUTLER_HOME` 可能在 import 之后才被设上（测试就是这么做的），

@@ -1329,6 +1329,45 @@ CLI 与 `probe-path` 那两份**故意留着**（`probe-path` 的注释写着"�
 
 **没验**：真机验收（真飞书企业里扫码、长连接、回一条消息）。
 
+### 第 43 轮：最后两处 —— 报告和自启动
+
+第 42 轮结尾自己记下了"没做的"：`cli/src/report.ts` 和 `autostart.ts` 里还有几处把家算成
+`$HOME/.butler`。这一轮收了它们，顺带把那条规则的用法说清楚 —— 因为**坑就在用法上**。
+
+这两处都长这个样子：
+
+```ts
+const home = opts.home ?? homedir();                            // ← 操作系统家目录
+const configPath = opts.configPath ?? join(home, '.butler', 'config.json');
+```
+
+`opts.home` 是**操作系统家目录**（测试用它把家安在临时目录里；`autostart` 还要拿它去拼
+`~/Library/LaunchAgents`，那个**必须**是真家）。所以"把 `homedir()` 换成 `butlerHome()`"这种
+改法是错的 —— 它会连 `~/Library` 一起搬走。正确的改法是**新增一个 `butlerDirOf(opts.home)`**：
+给了 `opts.home` 就用 `<它>/.butler`，没给才轮到 `butlerHome()`（`$BUTLER_HOME` > `~/.butler`）。
+
+⚠️ **传进去的必须是原始的 `opts.home`（可能是 `undefined`）**，不能是 `opts.home ?? homedir()`
+的结果 —— 后者在没给 `home` 时已经是一个具体的家目录字符串了，于是 `BUTLER_HOME` 又被悄悄丢掉，
+正好是这一轮要修的毛病。这条注意写在 `butlerDirOf` 的注释里。
+
+顺带把 `.butler` 的拼接收成一处：`autostartLogFile()` 的参数从"操作系统家目录"改成"**管家目录
+本身**"（那两处显示、写盘的调用点一起改），于是"拼 `.butler`"全仓只有 `butlerDirOf` 一处。
+`report.ts` 里那两句"这一条不跟着 `--config` 走"仍然成立（日志不跟 `--config`），但**要跟
+`BUTLER_HOME`** —— 那就是"家在哪"。
+
+反向验证踩到自己一个坑，值得记下来：第一版断言写的是 `plan.content.includes(HOME)`，把
+`autostart.ts` 那行改回旧写法后**竟然还是绿的** —— 因为自启动单元里还有日志那一行，它也含
+`<家>/`。断言必须**专指**：改成 `plan.content.includes(join(HOME, 'config.json'))`（报告那条
+同理，专认 `管家目录：` 后面那一行）。改完再验：
+
+- `autostart.ts` 配置那行改回旧写法 → **3 通过 / 1 失败**（"自启动单元里的配置路径没跟着
+  BUTLER_HOME 走"）；
+- `report.ts` 默认分支改回旧写法 → **3 通过 / 1 失败**（"报告的默认家没跟着 BUTLER_HOME 走
+  （报告里 `管家目录：` 那行不是它）"）；
+- 两处都改回来 → **4 / 0**。
+
+没做的：真机验收（真飞书企业里扫码、长连接、回一条消息）。
+
 ## 十二、真机验收手册（给"第一枪"用）
 
 三分钟，两条命令。**这一步只能人来做**（要手机扫码），所以把"看到什么 → 说明什么"

@@ -34,6 +34,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { Context } from '@deepseek-ai/cordis';
 import { butlerHome, defaultConfigPath } from '../lib/setup.js';
+import { autostartPlan } from '../lib/autostart.js';
+import { collectReport, reportFilePath } from '../lib/report.js';
 import { butlerHome as coreButlerHome } from '@butler/core';
 import { approvalsDir } from '@butler/approval-im';
 import { defaultIdentityFile, defaultStateDir } from '@butler/link-lan';
@@ -147,4 +149,34 @@ test('探针的 --home= 仍然最优先（把家安在别处的人靠它）', ()
     flagged,
     '--home= 必须压过 BUTLER_HOME',
   );
+});
+
+test('★★ 报告和自启动也走同一个家（第 43 轮收的两处 CLI 层）', async () => {
+  await withHome(HOME, async () => {
+    // 报告写到哪儿（纯函数）
+    const report = reportFilePath({ now: new Date(2026, 0, 2, 3, 4, 5) });
+    assert.ok(report.startsWith(HOME), `报告文件没落在 BUTLER_HOME 里：${report}`);
+
+    // 自启动单元里写着两样跟家有关的东西：要用的配置、日志往哪儿写（纯函数）
+    // ⚠️ 断言必须**专指**：`plan.content` 里还带着日志路径，它也含 `<家>/` —— 用 `.includes(HOME)`
+    //    的话，配置那行改坏了它照样是绿的（第 43 轮反向验证时真踩到了）。
+    const plan = autostartPlan({ platform: 'darwin', cliPath: '/opt/x/cli.js' });
+    assert.ok(plan, 'darwin 上该有自启动方案');
+    assert.ok(
+      plan.content.includes(join(HOME, 'config.json')),
+      '自启动单元里的配置路径没跟着 BUTLER_HOME 走',
+    );
+    assert.ok(
+      plan.content.includes(join(HOME, 'logs', 'autostart.log')),
+      '自启动日志没落在 BUTLER_HOME 里',
+    );
+
+    // 报告的**默认分支**（没给 `--config` 时走哪个家）。自检那段换掉 —— 不然会真起容器。
+    // 同样只认专指的那一行：`管家目录：` 后面就是它算出来的家。
+    const text = await collectReport({ selfCheck: async () => '（跳过）' });
+    assert.ok(
+      text.includes(`管家目录：${HOME}`),
+      '报告的默认家没跟着 BUTLER_HOME 走（报告里 `管家目录：` 那行不是它）',
+    );
+  });
 });

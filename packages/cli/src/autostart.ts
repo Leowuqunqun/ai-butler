@@ -26,6 +26,8 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
+import { butlerDirOf } from './setup.js';
+
 /** 跑一条命令的结果。测试注入它，就能不碰真的 launchctl/systemctl */
 export type CommandRunner = (cmd: readonly string[]) => { ok: boolean; out: string };
 
@@ -89,11 +91,11 @@ export function autostartPlan(opts: AutostartOptions = {}): AutostartPlan | null
   const platform = opts.platform ?? process.platform;
   const node = opts.nodePath ?? process.execPath;
   const cli = opts.cliPath ?? '';
-  const config = opts.configPath ?? join(home, '.butler', 'config.json');
+  const config = opts.configPath ?? join(butlerDirOf(opts.home), 'config.json');
   const uid = opts.uid ?? (typeof process.getuid === 'function' ? process.getuid() : 0);
   // ⚠️ **现在**这份 PATH 才是能干活的那份，见文件头的第 1 个坑
   const path = (opts.env ?? process.env).PATH ?? '';
-  const logFile = autostartLogFile(home);
+  const logFile = autostartLogFile(butlerDirOf(opts.home));
   const args = ['run', '--config', config, '--no-open'];
 
   if (platform === 'darwin') {
@@ -205,7 +207,10 @@ function unsupported(platform: NodeJS.Platform): string {
 }
 
 /**
- * 自启动日志在哪 —— **不跟着 `--config` 走**：永远在 `~/.butler/logs` 下。
+ * 自启动日志在哪 —— **不跟着 `--config` 走**：固定在自己那个家的 `logs/` 下
+ *（那个家 = `$BUTLER_HOME` > `~/.butler`；`--config` 可以把配置放到别处，日志不跟着去）。
+ *
+ * 参数是**管家目录本身**（不是操作系统家目录）：拼 `.butler` 只在一个地方做 —— `butlerDirOf`。
  *
  * 抽成一个函数，是因为有**两处**要按同一条规则说这个文件：这儿写它（`autostartPlan` /
  * `autostartOn`），`butler report` 要把它念出来。抄两遍就迟早有一遍过期 —— 而报告指错
@@ -216,8 +221,8 @@ function unsupported(platform: NodeJS.Platform): string {
  * `scanHint` 上刚吃过一次亏 —— **可选参数 + 默认值 = 漏传了也没人吭声**，后果是"照它指的
  * 地方去找，东西在另一半"。现在编译器会替我们盯住每一个调用点。
  */
-export function autostartLogFile(home: string): string {
-  return join(home, '.butler', 'logs', 'autostart.log');
+export function autostartLogFile(butlerDir: string): string {
+  return join(butlerDir, 'logs', 'autostart.log');
 }
 
 /** 打印给人看时把家目录缩成 `~`（对默认用户，这句话和以前一个字符都不差） */
@@ -246,7 +251,7 @@ export function autostartOn(opts: AutostartOptions = {}): number {
   }
 
   mkdirSync(dirname(plan.file), { recursive: true });
-  mkdirSync(dirname(autostartLogFile(opts.home ?? homedir())), { recursive: true });
+  mkdirSync(dirname(autostartLogFile(butlerDirOf(opts.home))), { recursive: true });
   writeFileSync(plan.file, plan.content, { mode: 0o644 });
   log(`✅ 写好了自启动单元（${plan.kind}）：${plan.file}`);
 
@@ -258,7 +263,7 @@ export function autostartOn(opts: AutostartOptions = {}): number {
     return 1;
   }
   log('✅ 自启动已生效：管家会在这台电脑登录后自己起来（不用开终端）。');
-  log(`  日志：${shownPath(autostartLogFile(opts.home ?? homedir()))}`);
+  log(`  日志：${shownPath(autostartLogFile(butlerDirOf(opts.home)))}`);
   return 0;
 }
 

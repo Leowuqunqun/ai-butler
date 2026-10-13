@@ -13,12 +13,13 @@
  *      隐去的地方会**明说隐去了**，不装作没这回事：装作没有，比漏掉更危险。
  */
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { homedir, release, type } from 'node:os';
+import { release, type } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { autostartLogFile } from './autostart.js';
 import { doctor, formatDoctor } from './doctor.js';
+import { butlerDirOf } from './setup.js';
 
 export interface ReportOptions {
   /** `~` 的替代（测试用） */
@@ -39,8 +40,8 @@ export interface ReportOptions {
 const PATCH_LINES = 120;
 
 export async function collectReport(opts: ReportOptions = {}): Promise<string> {
-  const home = opts.home ?? homedir();
-  const configPath = opts.configPath ?? join(home, '.butler', 'config.json');
+  // 家在哪：`--config` 所在目录 > `opts.home`（操作系统家目录，测试用）> `$BUTLER_HOME` > `~/.butler`
+  const configPath = opts.configPath ?? join(butlerDirOf(opts.home), 'config.json');
   // ⚠️ 管家目录 = **配置所在目录** —— 和 `cli.ts` 里 `butlerDir: dirname(args.config)` 是同一条规则。
   //    用 `--config` 把家安在别处的人，报告必须说**那个**家。以前这里写死 `~/.butler`，
   //    于是报告自己跟自己打架：①段在数 `~/.butler` 里的文件，④段的 doctor 读的却是 `--config` 那份。
@@ -72,9 +73,9 @@ export async function collectReport(opts: ReportOptions = {}): Promise<string> {
     const p = join(butler, rel);
     put(`  ${what}：${describeFile(p)}`);
   }
-  // 日志这一条**不跟着管家目录走**：自启动永远写在 `~/.butler/logs`（见 `autostart.ts` 的
-  // `autostartLogFile`）。如实说，而不是顺手拼到 `butler` 后面 —— 那样会指一个不存在的文件。
-  put(`  自启动日志：${describeFile(autostartLogFile(home))}（这一条不跟着 --config 走）`);
+  // 日志这一条**不跟着管家目录走**：自启动日志固定在自己那个家的 `logs/` 下（见 `autostart.ts`
+  // 的 `autostartLogFile`）。如实说，而不是顺手拼到 `butler` 后面 —— 那样会指一个不存在的文件。
+  put(`  自启动日志：${describeFile(autostartLogFile(butlerDirOf(opts.home)))}（这一条不跟着 --config 走）`);
 
   put('\n────────── ② 配置里有哪些行 ──────────');
   configSection(configPath, put);
@@ -100,7 +101,7 @@ export async function collectReport(opts: ReportOptions = {}): Promise<string> {
   }
 
   put('\n────────── ⑤ 最近的日志尾巴 ──────────');
-  const logFile = autostartLogFile(home);  // 同上：日志不跟着 --config 走
+  const logFile = autostartLogFile(butlerDirOf(opts.home));  // 同上：日志不跟着 --config 走
   if (!existsSync(logFile)) {
     put('  没有日志文件（没用过自启动，或者刚装上）。');
   } else {
@@ -176,11 +177,10 @@ function describeFile(p: string): string {
 }
 
 export function reportFilePath(opts: { home?: string; now?: Date } = {}): string {
-  const home = opts.home ?? homedir();
   const d = opts.now ?? new Date();
   const p = (n: number): string => String(n).padStart(2, '0');
   const name = `report-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.txt`;
-  return join(home, '.butler', name);
+  return join(butlerDirOf(opts.home), name);
 }
 
 /** 写到哪儿、权限多少：跟凭据一个待遇（0600）—— 它虽然脱过敏，也不是给全机看的 */
