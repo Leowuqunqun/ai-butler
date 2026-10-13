@@ -1288,6 +1288,47 @@ const DOC = 'https://github.com/Leowuqunqun/ai-butler/blob/main/docs/CHANNEL-FEI
 
 **没验**：真机验收（真飞书企业里扫码、长连接、回一条消息）。
 
+### 第 42 轮：`BUTLER_HOME` 这条规则，所有"算管家目录"的地方都认了吗
+
+第 37 轮把"家在哪"补齐到 **4 处**（探针、CLI、`probe-path`、生成的通道行），并写下"别只改一处
+—— 改的是**那条规则**"。这一轮把这句话**当清单用**：全仓搜 `homedir()`，一处一处问"这算的是
+管家目录吗"。
+
+搜出来 21 处，分三类：
+
+- **算管家目录、当时就认这条规则的 3 处**：`probe/save.mjs` 的 `homeOf`、`channel-feishu` 的
+  `probe-path.ts`、CLI 的 `setup.ts`；
+- **算管家目录、但不认的 8 处**（这一轮修的）：
+  · 内核 `core/src/index.ts` 的 `grantsFileOf(config.stateFile, homedir())` —— 兜底落在
+    `<HOME>/state/grants.json`，在**旁边**建了一个不相干的 `state/`；
+  · 四个叶子包：`memory-file`（记忆文件）、`link-lan`（节点身份，连 `config.home` 都没有）、
+    `approval-im`（审批的家），以及 `channel-feishu` / `channel-telegram` 各自的 `home`；
+  · 探针 `save.mjs` 的 `homeOf` 少了 `trim()`（`BUTLER_HOME="   "` 会被当成一个目录名）；
+- **不是管家目录、合法的 10 处**：`~/.dsh`（DSH 自己的家）、`~/.wechat-agent-bridge`、agent 的
+  workspace、`shownPath()` 里把路径缩成 `~`，以及 `--config` / `opts.home` 那些显式覆盖。
+
+顺手把规则**收成一处实现**：新增 `@butler/core` 的 `home.ts`（`butlerHome(env)`），内核自己用它；
+CLI 与 `probe-path` 那两份**故意留着**（`probe-path` 的注释写着"这个文件不该拖进任何依赖"，
+叶子包也是 leaf）—— 焊住它们的不是共享 import，是**能跑出一条红的契约**。
+
+所以这一轮真正的交付是 `packages/cli/test/home-contract.mjs`：设一个 `BUTLER_HOME`，然后把
+**每一处**都真的问一遍"你的家在哪"，只认它算出来的路径 —— 内核、CLI、探针（含 `--home=` 最优先、
+空串/全空白算没设）、`probe-path`、记忆文件、节点身份、审批的家、两个通道（用它们自己 `check()`
+里那句"东西在哪儿"来观察，不碰网络）。叶子包不引内核，但这 9 处**必须同一个家**。
+
+反向验证：把 `link-lan` 的 `defaultStateDir()` 改回旧写法 → **2 通过 / 1 失败**，报的正是
+"局域网的节点目录没落在 BUTLER_HOME 里：`/Users/leo/.butler`"；改回来 → **3 / 0**。
+
+⚠️ 写这条测试时踩到两件，都记在现场：① 这些类都 `extends Service`，**假 ctx 会当场炸**
+（`Cannot read properties of undefined (reading 'provide')`），得用真的 `new Context()`；
+② 同一个 ctx 上同名服务只能注册一次（`channel` / `memory`），所以**每次构造都要一个新的 ctx**。
+
+没做的：`cli/src/report.ts` 和 `autostart.ts` 里还有两处把家算成 `$HOME/.butler`（`report` 会去读
+**另一个家**；`autostart` 写登录项时同理）—— 它们是 CLI 层，改法要连带 `opts.home` 的语义（那儿的
+`home` 是**操作系统家目录**，不是管家目录），留给下一轮单独收。
+
+**没验**：真机验收（真飞书企业里扫码、长连接、回一条消息）。
+
 ## 十二、真机验收手册（给"第一枪"用）
 
 三分钟，两条命令。**这一步只能人来做**（要手机扫码），所以把"看到什么 → 说明什么"

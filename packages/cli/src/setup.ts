@@ -33,12 +33,13 @@ import { dirname, join } from 'node:path';
 /**
  * 管家自己的家：`$BUTLER_HOME` > `~/.butler`。
  *
- * ⚠️ 这条规则**必须是同一条**，四处一起认：
- *   ① 探针（`probe/save.mjs` 的 `homeOf`）  ② 这里（CLI 的一切默认路径）
- *   ③ `@butler/channel-feishu/probe-path` 的 `defaultHome()`  ④ 生成的通道行里的 `home`
- * 少认一处的后果不是"路径不统一"这么轻：探针会对用户说"凭据存好了，下次 `butler run`
- * 直接用它"，而 CLI 在**另一个家里**读 —— 现象正是"探针说存好了，`butler run` 却说还没有
- * app_id"。`packages/cli/test/probe-contract.mjs` 把这几处真的凑在一起跑一遍。
+ * ⚠️ 这条规则**必须是同一条**，所有"算管家目录"的地方一起认 —— 早先是四处（探针、这里、
+ *   `@butler/channel-feishu/probe-path` 的 `defaultHome()`、生成的通道行里的 `home`），
+ *   第 42 轮全仓搜 `homedir()` 又补上了内核和四个叶子包（见 `@butler/core/src/home.ts` 的注释）。
+ *   少认一处的后果不是"路径不统一"这么轻：探针会对用户说"凭据存好了，下次 `butler run`
+ *   直接用它"，而 CLI 在**另一个家里**读 —— 现象正是"探针说存好了，`butler run` 却说还没有
+ *   app_id"。**清单在 `packages/cli/test/home-contract.mjs`**：设一个 `BUTLER_HOME`，把每一处
+ *   都真的问一遍，只认它算出来的路径。
  *
  * （第 33 轮记过这条不一致、当时判"暴露面低"没修；第 37 轮复现后发现探针那句承诺在设了
  *  `BUTLER_HOME` 时是**假的** —— 于是补齐，不再留"已知未修"。）

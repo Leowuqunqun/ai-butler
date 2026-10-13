@@ -22,10 +22,14 @@ import { join } from 'node:path';
  *
  * `--home=` 是给"用 `--config` 把家安在别处"的人准备的 —— 凭据按**配置所在目录**找，
  * 探针存错地方是这一路上最常见的坑（错误信息里会打印它去哪儿找过）。
+ *
+ * `BUTLER_HOME` 要去两头空白：`BUTLER_HOME= butler run` 是很常见的写法（清掉它），
+ * 不能因此把家搬到 `"   "` 这个目录里。另外几处都 trim，这儿也一样
+ *（`packages/cli/test/home-contract.mjs` 把这条规则的所有地方凑在一起跑）。
  */
 export function homeOf(argv = process.argv, env = process.env) {
   const flag = argv.find((a) => a.startsWith('--home='))?.slice('--home='.length);
-  return flag || env.BUTLER_HOME || join(homedir(), '.butler');
+  return flag || env.BUTLER_HOME?.trim() || join(homedir(), '.butler');
 }
 
 /** 凭据文件在哪。和 CLI 的 `secretsFileOf` 是同一条约定（`<管家目录>/state/secrets.json`） */

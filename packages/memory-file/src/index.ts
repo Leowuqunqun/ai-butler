@@ -46,7 +46,9 @@ export class FileMemory extends MemoryService {
 
   constructor(ctx: Context, config: FileMemoryConfig) {
     super(ctx);
-    const home = config.home || join(homedir(), '.butler');
+    // 家在哪：`$BUTLER_HOME` > `~/.butler` —— 和探针、CLI、内核同一条规则
+    //（`packages/cli/test/home-contract.mjs` 把算管家目录的地方凑在一起跑）
+    const home = config.home || process.env.BUTLER_HOME?.trim() || join(homedir(), '.butler');
     this.file = config.file || join(home, 'state', 'memory.json');
   }
 

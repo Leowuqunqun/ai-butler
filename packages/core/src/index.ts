@@ -45,12 +45,12 @@ import type { DeviceInfo, LinkSession } from '@butler/seam-link';
 import type { MemoryService } from '@butler/seam-memory';
 import { addGrant, grantsFileOf, kindOf, liveGrants, parseGrantWindow, readGrants, readGrantsOr, removeGrant, type Grant } from './grants.js';
 import { butlerOnPathCheck } from './butler-path.js';
+import { butlerHome } from './home.js';
 import { welcomeText } from './welcome.js';
 import {
   collectSelfCheck, formatSelfCheck, formatSelfCheckBroke,
   type Checkable, type SelfCheckReport,
 } from './selfcheck.js';
-import { homedir } from 'node:os';
 import type { ApprovalRequest, ApprovalService } from '@butler/seam-approval';
 import { SessionStore } from './sessions.js';
 import { commandHelp, describeForUser, findDevice, osName, parseCommand } from './commands.js';
@@ -86,6 +86,7 @@ export * from './text.js';
 export * from './route.js';
 export * from './commands.js';
 export * from './selfcheck.js';
+export * from './home.js';
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -172,7 +173,7 @@ export class ButlerCore extends Service {
     this.config = config;
     this.log = (m) => ctx.logger?.info?.(`[core] ${m}`);
     this.sessions = new SessionStore(config.stateFile);
-    this.grantsFile = grantsFileOf(config.stateFile, homedir());
+    this.grantsFile = grantsFileOf(config.stateFile, butlerHome());
 
     this.onInbound = (msg) => {
       // ⚠️ `.catch` 不是装饰：`onMessage` 是 async，而接缝的 `emitMessage` 只接得住

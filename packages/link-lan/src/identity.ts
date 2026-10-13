@@ -37,7 +37,9 @@ import { dirname, join } from 'node:path';
  * 要搬家、要"全忘掉重来"，只需要动这一个目录。
  */
 export function defaultStateDir(): string {
-  return join(homedir(), '.butler');
+  // 家在哪：`$BUTLER_HOME` > `~/.butler` —— 和探针、CLI、内核同一条规则
+  //（`packages/cli/test/home-contract.mjs` 把算管家目录的地方凑在一起跑）
+  return process.env.BUTLER_HOME?.trim() || join(homedir(), '.butler');
 }
 
 /** 节点身份文件的默认位置 */

@@ -91,7 +91,9 @@ export const DEFAULT_TIMEOUT_MS = 120_000;
  * "我明明问了、却没人看见"，是最难查的一类。
  */
 export function approvalsDir(config: { home?: string; dir?: string } = {}): string {
-  const home = config.home || join(homedir(), '.butler');
+  // 家在哪：`$BUTLER_HOME` > `~/.butler` —— 和探针、CLI、内核同一条规则
+  // （`packages/cli/test/home-contract.mjs` 把所有算管家目录的地方凑在一起跑）
+  const home = config.home || process.env.BUTLER_HOME?.trim() || join(homedir(), '.butler');
   return config.dir || join(home, 'state', 'approvals');
 }
 

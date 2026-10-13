@@ -163,7 +163,9 @@ export class FeishuChannel extends ChannelService {
     super(ctx);
     // `home` 空着就用默认位置。**不在 Config 里给默认值**：默认值要在运行时算
     //（会用到 homedir()），写在 schema 里会让 dump 出来的配置看起来是死的。
-    this.home = config.home || join(homedir(), '.butler');
+    // 家在哪：`$BUTLER_HOME` > `~/.butler` —— 和探针、CLI、内核同一条规则
+    //（`packages/cli/test/home-contract.mjs` 把算管家目录的地方凑在一起跑）
+    this.home = config.home || process.env.BUTLER_HOME?.trim() || join(homedir(), '.butler');
     // ⚠️ **所有默认值都在这里兜一次底。** `static Config` 里的默认值**只有经 cordis
     //    装载**才生效，而这个类是能被直接 `new` 出来的（测试会那么干，将来的工具也会）。
     //    这个坑已经咬过两次：
