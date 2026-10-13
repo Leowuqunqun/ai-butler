@@ -121,6 +121,7 @@ scripts/               图渲染 + 文档/包结构自检 + 变异测试
 | [GLOSSARY.md](docs/GLOSSARY.md) | **中英术语对照表**：翻译的规矩，也是读源码注释的对照 |
 | [docs/diagrams/](docs/diagrams/) | 18 张架构图（含源文件与配色约定）—— 先看 [整体架构](docs/diagrams/arch-00-overview.svg) |
 | [seam-channel/README.md](packages/seam-channel/README.md) | **想接一个新 IM（Telegram/飞书…）看这个**：契约、示例、踩过的坑 |
+| [CHANNEL-FEISHU.md](docs/CHANNEL-FEISHU.md) | **想知道飞书能不能接、要付什么代价看这个**：接入形态与权限点、长连接的硬约束、逐条映射到 `ctx.channel`、工作量估算、开工前要定的五件事（**调研，未开工**） |
 | [seam-agent/README.md](packages/seam-agent/README.md) | **想换掉干活的大脑看这个**：`ctx.agent` 契约、示例、实现者四条守则 |
 | [seam-link/README.md](packages/seam-link/README.md) | **想接一条新链路（Tailscale/SSH/自建中继）看这个**：`ctx.link` 契约、安全红线、为什么进度挂在请求上 |
 | [cli/README.md](packages/cli/README.md) | **想知道怎么真的跑起来看这个**：`butler init` 生成什么、配置格式、patch 语义、`butler run`、`butler doctor` |

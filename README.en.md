@@ -134,6 +134,7 @@ scripts/               diagram rendering + docs/package-structure checks + mutat
 | [GLOSSARY.md](docs/GLOSSARY.md) | **Chinese↔English term table**: the rules translations follow, and a key to the Chinese source comments |
 | [docs/diagrams/](docs/diagrams/) | 18 architecture diagrams (sources and color conventions included) — start with the [overall architecture](docs/diagrams/arch-00-overview.svg) |
 | [seam-channel/README.md](packages/seam-channel/README.md) | **Read this to wire up a new IM (Telegram/飞书…)**: contract, examples, the foot-guns we hit |
+| [CHANNEL-FEISHU.md](docs/CHANNEL-FEISHU.md) | **Read this to see whether Feishu/Lark can be wired in, and what it costs**: the access model and permission scopes, the hard limits of long-connection mode, a line-by-line mapping onto `ctx.channel`, a cost estimate, and the five decisions to make before starting (**research only, not started**; Chinese only) |
 | [seam-agent/README.md](packages/seam-agent/README.md) | **Read this to swap out the agent doing the work**: the `ctx.agent` contract, examples, the four rules for implementers |
 | [seam-link/README.md](packages/seam-link/README.md) | **Read this to add a new link (Tailscale/SSH/your own relay)**: the `ctx.link` contract, the security red line, why progress hangs off the request |
 | [cli/README.md](packages/cli/README.md) | **Read this to actually run it**: what `butler init` generates, config format, patch semantics, `butler run`, `butler doctor` |
