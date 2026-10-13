@@ -1208,6 +1208,50 @@ curl -fsSL https://github.com/Leowuqunqun/ai-butler/releases/latest/download/ins
 **没验**：真机验收（真飞书企业里建自建应用、长连接、回一条消息）—— 仍然只能由人放那一枪；
 0.2.1 只是让那一枪打在**手册描述的那份代码**上。
 
+### 第 40 轮：装完之后 `doctor` 印给你的那条探针命令，指的是**这个安装里**那份吗
+
+第 39 轮把发布包对齐了手册；这一轮问后半句：**用户照着 `doctor` 印的那条命令敲，敲得动吗**。
+
+`doctor` 里那句"先扫码最省事：`node <…>/probe/smoke.mjs --save`"不是写死的字符串 —— 它是
+`probe-path.ts` 按**包自己的位置**算出来的（`lib/probe-path.js` → `../probe/smoke.mjs`），而且
+**先确认文件真在**，不在就退到"去 open.feishu.cn 建「企业自建应用」"那条路。源码树里它永远算得
+对 —— 而源码树恰恰是装出来的人**没有**的那份。
+
+离线那半已经有用例守着（`channel-feishu/test/tarball.mjs`：`npm pack` → 解开 → `--dry`，注释里
+还记着 `files: ["lib"]` 曾经把探针漏在包外、而 11 处文字都在承诺它）；**没被守住**的是另一半：
+真装进 `prefix`、真 `init --im feishu`、`doctor` 真印出来。
+
+这一轮先照用户那条路真装一遍（`releases/latest/download/install.sh` → 临时家 + 临时前缀），
+然后把这半补进 `scripts/verify-clean-install.sh` 当**常设**检查（⚠️ 这支演练是**手动**跑的，
+和 `verify-upgrade.sh` 一样不在 CI 里 —— 但下一个人再跑它时，这一条就在）：
+
+- `doctor` 印出来的那条命令，路径必须落在**这个前缀里**（不是源码树、也不是别的地方）；
+- 那个文件必须真的在；命令必须带 `--save`（不带只会连一下，不会把凭据存下来）；
+- 真跑一次 `--dry`：不联网、不写盘，但依赖（官方 SDK）真加载一遍 —— 装出来的树里少依赖就在
+  这里炸。
+
+实测（装出来的那棵树）：`…/prefix/app/node_modules/@butler/channel-feishu/probe/smoke.mjs` 真的在
+（11955 字节），`--dry` 打出来的正是探针自己那段（五步 + 两条 ⚠️ + "通了就证明五件事"）。
+演练从 **19 项变 21 项** / `EXIT=0`。
+
+⚠️ 写这条断言时自己踩了一次：第一版用**文本**比"在不在 `${PREFIX}` 里"，于是报"探针指的不是这个
+安装里那份"—— 其实探针就在那儿。原因是 macOS 上 `mktemp -d` 给的是 `/var/…`，而包自己算出来的
+是 `/private/var/…`（`import.meta.url`）：**同一个地方、两个写法**。这个坑 `tarball.mjs` 的注释里
+就写着（"两边都取真实路径再比"），我还是踩了一次 —— 现在两边都 `pwd -P` 取真实路径，也把话留在
+了现场。
+
+顺手把第十二节那段改准：原来主文案给的是**源码树**写法（`bash packages/channel-feishu/probe/run.sh`），
+"装出来的机器怎么办"只在补注里说了一句"CLI 会在报错和引导页里给你一条能照着敲的"。可装出来的人
+手上没有 `packages/`，而**第 0 步刚跑过的 `butler doctor` 就会印出那条正确的命令** —— 现在补注
+直接点名它，并写清"同一个式子：装完指包内那份、源码树里指源码那份"。
+
+没做的：`--dry` 只走到"要做什么"；真扫码、真长连接、真收一条回一条仍然只能人来做。也没改探针
+那段文本里的一处小别扭：它说"详细对照表在 `docs/CHANNEL-FEISHU.md` 第十二节"，而装出来的人手里
+没有这个文件（那是仓库里的路径）—— 记在这儿，下一轮再收。
+
+**没验**：真机验收（真飞书企业里扫码、长连接、回一条消息）—— 这一轮验的是"那一枪之前的每一步
+都指向对的东西"，扣扳机仍然只能由人。
+
 ## 十二、真机验收手册（给"第一枪"用）
 
 三分钟，两条命令。**这一步只能人来做**（要手机扫码），所以把"看到什么 → 说明什么"
@@ -1237,13 +1281,16 @@ curl -fsSL https://github.com/Leowuqunqun/ai-butler/releases/latest/download/ins
 > 从源码树里跑的话，升级是 `git pull && pnpm install && pnpm build`。
 
 ```bash
+# 源码树里这么跑（`install.sh` 装的机器上没有 packages/ —— 那种机器看下面那段）
 bash packages/channel-feishu/probe/run.sh          # ① 先验：扫码 → 长连接 → 收一条 → 回一条
 bash packages/channel-feishu/probe/run.sh --save   # ② 顺手把凭据装好（`butler run` 用得上 —— 但**先**把通道切过来，见第 5 步）
 ```
 
-> 上面两条是**源码树里**的写法（这份文档就在源码里，读它的人手上通常有源码）。用 `install.sh`
-> 装的机器上没有 `packages/` —— 那种机器上 CLI 会**在报错和引导页里**直接给你一条能照着敲的
-> 完整命令（`node <包内路径>/probe/smoke.mjs --save`）：探针现在跟着包一起发（`files` 里带着 `probe`）。
+> **装出来的机器**（`install.sh`）上没有 `packages/` —— 那种机器上，**上面第 0 步跑过的
+> `butler doctor` 就会印出你能照着敲的那条完整命令**（`node <包内路径>/probe/smoke.mjs --save`）：
+> 路径是按**包自己的位置**算的，所以装完指包内那份、在源码树里指源码那份，同一个式子。
+> `butler run` 的报错和引导页里给的是同一条。探针跟着包一起发（`package.json` 的 `files` 里带着
+> `probe`）—— 这一条有演练盯着：装完之后那条命令指的必须是**这个安装里**那份（见第十一节第 40 轮）。
 >
 > ⚠️ **别同时开着探针和管家**。同一个应用开两条长连接时，飞书会把事件在两条之间**分流投递**
 > （官方 README 在讲 `onRawEvent` 时写明了这一点）—— 表现是"消息偶尔不回"，而两边看起来都正常。

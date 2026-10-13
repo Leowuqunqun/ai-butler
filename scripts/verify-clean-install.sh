@@ -167,6 +167,45 @@ grep -q "✓  管家自己找得到 butler" "${TMP}/doctor.log" \
   || { cat "${TMP}/doctor.log"; bad "管家自己的 PATH 里没有 butler —— 壳脚本没把 <prefix>/bin 放进去"; }
 ok "管家自己找得到 butler（判据跑在管家进程内部，doctor 里看得见）"
 
+# ★ 装完之后，doctor 印给你的那条探针命令，指的是**这个安装里**的那份吗？
+#
+#   `probe-path.ts` 按**包自己的位置**算路径（`lib/probe-path.js` → `../probe/smoke.mjs`），
+#   所以"算出来的那条路"和"用户手里真有的东西"是不是同一个，只有**真装一遍**才知道 ——
+#   源码树里永远是对的，而源码树恰恰是用户没有的那份。
+#
+#   离线那半已经有用例守着（`channel-feishu/test/tarball.mjs`：npm pack → 解开 → --dry，
+#   注释里还记着 `files: ["lib"]` 曾经把探针漏在包外，而 11 处文字都在承诺它）；
+#   这一项补的是另一半：**真装进 prefix、真 init --im feishu、doctor 真印出来**。
+${BUTLER} init --im feishu > "${TMP}/init-feishu.log" 2>&1 || { tail -10 "${TMP}/init-feishu.log"; bad "init --im feishu 失败"; }
+${BUTLER} doctor > "${TMP}/doctor-feishu.log" 2>&1 || true   # 还没填凭据/key，非零是正常的
+PROBE_CMD=$(grep -o 'node [^`]*probe/smoke\.mjs[^`]*' "${TMP}/doctor-feishu.log" | head -1 || true)
+[ -n "${PROBE_CMD}" ] || { cat "${TMP}/doctor-feishu.log"; bad "doctor 没给出探针那条命令（用户就只剩「去开放平台建应用」一条路了）"; }
+PROBE_FILE=$(printf '%s' "${PROBE_CMD}" | sed -E 's/^node (.*probe\/smoke\.mjs).*$/\1/')
+# ⚠️ 比"在不在这个前缀里"之前，两边都要先取**真实路径**：macOS 上 `mktemp -d` 给的是
+#   `/var/…`，而包自己算出来的是 `/private/var/…`（`import.meta.url`）—— 文本上不相等，
+#   其实是同一个地方。第一次写这一条时就是这么误报的：探针明明就在那儿，断言却说"不是
+#   这个安装里那份"。这个坑 `channel-feishu/test/tarball.mjs` 的注释里写着（"两边都取
+#   真实路径再比"），还是踩了一次 —— 所以这里也把话留在现场。
+PREFIX_REAL=$(cd "${PREFIX}" && pwd -P)
+PROBE_DIR_REAL=$(cd "$(dirname "${PROBE_FILE}")" 2>/dev/null && pwd -P || printf '%s' '')
+case "${PROBE_DIR_REAL}" in
+  "${PREFIX_REAL}"/*) ;;
+  *) bad "探针命令指的不是这个安装里那份（${PROBE_FILE}）—— 用户照抄只会 No such file" ;;
+esac
+[ -f "${PROBE_FILE}" ] || bad "探针命令指的文件不在（${PROBE_FILE}）"
+printf '%s' "${PROBE_CMD}" | grep -q -- '--save' || bad "探针命令没带 --save（不带只会连一下，不会把凭据存下来）"
+ok "doctor 给的探针命令指向这个安装里那份，而且真的在"
+
+# 真跑一次 `--dry`：不联网、不写盘，但会把依赖（官方 SDK）真加载一遍 ——
+# 装出来的树里少依赖、或者探针被写成了只能在源码树里跑，都在这里炸。
+if command -v node > /dev/null 2>&1; then NODE_BIN=$(command -v node); else NODE_BIN="${HOME_DIR}/.butler/runtime/bin/node"; fi
+[ -x "${NODE_BIN}" ] || bad "找不到 node 来跑探针（PATH 里没有，管家自己的 runtime 里也没有）"
+env HOME="${HOME_DIR}" "${NODE_BIN}" "${PROBE_FILE}" --dry > "${TMP}/probe-dry.log" 2>&1 \
+  || { cat "${TMP}/probe-dry.log"; bad "装出来的探针 --dry 跑不起来"; }
+grep -q "dry run" "${TMP}/probe-dry.log" || bad "探针 --dry 的输出不对（不是探针自己那段话）"
+grep -q "通了就证明五件事" "${TMP}/probe-dry.log" || bad "探针 --dry 没说清「连上之后能证明什么」"
+ok "装出来的探针真能跑（--dry：不联网不写盘，但依赖真的加载了）"
+
 # ─────────────────────── 4. 自启动：只 dry-run ───────────────────────
 
 step "4. 自启动只 dry-run（真的 on 会在本机装登录项，测试里不干）"
