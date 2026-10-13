@@ -249,7 +249,8 @@ export class FeishuChannel extends ChannelService {
           kind: kindOf(r.type),
         });
       } catch (error) {
-        // 下载失败常常是权限点没开（`im:resource`），把原始错误留着给用户看
+        // 下载失败最常见的原因是应用没开"读取消息资源"那类权限 ——
+        // 不在这里点名具体是哪一个（那个清单会变），把原始错误留着给用户看
         this.ctx.logger?.warn('feishu: 附件下载失败（跳过它，消息照走）%s: %o', name, error);
       }
     }
