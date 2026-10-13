@@ -38,7 +38,7 @@
 // 用法：`node scripts/check-user-facing.mjs [文件…]`（不传就查上面那三类）。
 // ============================================================================
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
-import { join, dirname, relative, resolve } from 'node:path';
+import { join, dirname, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import ts from 'typescript';
@@ -68,11 +68,23 @@ function walk(dir, exts, out = []) {
       if (name === 'node_modules' || name === 'lib' || name === 'test') continue;
       walk(full, exts, out);
     } else if (exts.some((e) => name.endsWith(e))) {
+      // ⚠️ 类型声明没有运行时行为，查它没意义 —— 更要紧的是它会让"这个包到底收到文件了吗"
+      //    那条守卫**假绿**：`channel-wechat/src/plugin.d.ts` 就真把一个纯 .mjs 的包挡住了
+      //    （实测：后缀只留 .ts 时，守卫只点了 dsh-plugin，没点 channel-wechat）。
+      if (/\.d\.(ts|mts)$/.test(name)) continue;
       out.push(full);
     }
   }
   return out;
 }
+
+/**
+ * 源码后缀。⚠️ 要**齐**：这个仓库里有的包源码是 `.ts`，有的直接是 `.mjs`
+ * （`channel-wechat`、`dsh-plugin`）。第一版只写了 `.ts` —— 那 17 个 `.mjs` 就被
+ * **静默跳过**了。所以下面配了一条守卫：某个包的 `src/` 一个文件都没收到就报错，
+ * 让"漏后缀"这件事出声，而不是安静地少查一半。
+ */
+const CODE_EXTS = ['.ts', '.mts', '.mjs', '.js'];
 
 function targets() {
   // 命令行给了文件就只查它们（反向验证和"单独查一个文件"都用这条路）
@@ -83,9 +95,22 @@ function targets() {
   const pkgs = join(root, 'packages');
   for (const name of readdirSync(pkgs).sort()) {
     if (name.startsWith('.')) continue;
-    files.push(...walk(join(pkgs, name, 'src'), ['.ts']));
-    files.push(...walk(join(pkgs, name, 'probe'), ['.mjs']));
+    files.push(...walk(join(pkgs, name, 'src'), CODE_EXTS));
+    files.push(...walk(join(pkgs, name, 'probe'), CODE_EXTS));
   }
+
+  // 防静默：每个"有 src/ 的包"都该至少收到一个文件；一个都没有，就是后缀名单漏了它
+  const empty = readdirSync(pkgs)
+    .filter((n) => !n.startsWith('.') && existsSync(join(pkgs, n, 'src')))
+    .filter((n) => !files.some((f) => f.startsWith(join(pkgs, n, 'src') + sep)));
+  if (empty.length) {
+    console.error(
+      `用户面文案自检：这些包的 src/ 一个文件都没收到 —— 后缀名单（${CODE_EXTS.join(' ')}）漏了它们？`,
+    );
+    for (const n of empty) console.error(`  packages/${n}/src`);
+    process.exit(1);
+  }
+
   const install = join(root, 'install.sh');
   if (existsSync(install)) files.push(install);
   return files;
