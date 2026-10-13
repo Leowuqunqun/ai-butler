@@ -10,10 +10,10 @@
 
 ## 用例总数（以此为准）
 
-**合计 920 个用例，全部离线可跑**（十七个包：seam-channel 12 / seam-agent 12 /
+**合计 922 个用例，全部离线可跑**（十七个包：seam-channel 12 / seam-agent 12 /
 seam-link 15 / seam-approval 7 / seam-memory 6 / core 162 / channel-wechat 134 /
-channel-telegram 51 / channel-feishu 50 / agent-dsh 40 / agent-exec 26 / approval-im 18 /
-memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 242）。
+channel-telegram 51 / channel-feishu 51 / agent-dsh 40 / agent-exec 26 / approval-im 18 /
+memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 243）。
 （下面两张明细里的用例数是**各条目落地当时**的数，会随功能继续长 —— **当前总数以这一行为准**。）
 
 ## M1 明细
@@ -88,9 +88,11 @@ memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 242）。
 ## 最有分量的几条证据
 
 - `agent-dsh` 的最后 7 个是**端到端**的：真 `core` 驱动真 `DshAgent` 驱动真子进程。
-- `cli` 里有 7 个是**真实组合**：真的三个插件（真微信通道 + 真内核 + 真 dsh agent）
+- `cli` 里有 8 个是**真实组合**：真的三个插件（真微信通道 + 真内核 + 真 dsh agent）
   装进同一个容器，三条能力位齐、配置端到端传到。其中一条专门盯**飞书那行没填凭据也装得上**
-  —— 这是第 8 轮那个 bug 的**产品级回归**（当时 `doctor` 会说"配置里一行都没有"，用户完全看不懂）。
+  —— 这是第 8 轮那个 bug 的**产品级回归**（当时 `doctor` 会说"配置里一行都没有"，用户完全看不懂）；
+  还有一条**真的起了一次 CLI**，看它**打印出来**的引导页里那条命令能不能照着敲 ——
+  不是查源码里有没有那行字，而是查用户看到的那一段。
 - `cli` 里还有 4 个把**飞书**从头到尾走了一遍（`m1-feishu-e2e.mjs`）：真 `FeishuChannel`
   （官方包换成假实现）+ 真 `ButlerCore` + 假大脑 —— 一条来信走到大脑、回话走**原生引用**，
   同一条 `messageId` 重推只算一次，**换个内核、同一个管家目录**重推仍然不算数（跨重启去重），

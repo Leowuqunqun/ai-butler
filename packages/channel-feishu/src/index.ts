@@ -25,6 +25,7 @@ import type { Context } from '@deepseek-ai/cordis';
 import { createLarkChannel, type LarkChannel, type NormalizedMessage } from '@larksuite/channel';
 
 import { toInbound, toQuoteLine, decodeContext } from './map.js';
+import { scanHint } from './probe-path.js';
 import { SeenStore } from './seen.js';
 import { destFor, downloadTypeOf, guessMime, kindOf } from './files.js';
 
@@ -85,8 +86,7 @@ function missingCreds(home: string): Error {
   const secretsAt = join(home, 'state', 'secrets.json');
   return new Error(
     `还没有飞书应用的 app_id / app_secret（我在 ${secretsAt} 里没找到）。两条路都行：`
-    + '① 扫码最省事：`bash packages/channel-feishu/probe/run.sh --save` —— 它会开一个二维码，'
-    + '扫码就能建应用并把凭据装好；'
+    + `① ${scanHint()} —— 它会开一个二维码，扫码就能建应用并把凭据装好；`
     + '② 或去 open.feishu.cn 建一个「企业自建应用」，在「凭证与基础信息」里抄下 app_id / app_secret，'
     + '等 `butler run` 提示时粘贴（也可以直接写进上面那个文件）。'
     + '⚠️ 最常见的坑是**存到了另一个管家目录**：如果你用 `--config` 把家安在别处，'
@@ -114,7 +114,7 @@ function connectFailed(error: unknown): Error {
     + '。两种可能，对一下就知道是哪种：'
     + '① 凭据不对／不属于这个应用（手抄时少了字符，或那是另一个应用的）；'
     + '② 应用的权限点没配齐，或「事件订阅」的方式不是**长连接**。'
-    + '出路：`bash packages/channel-feishu/probe/run.sh --save` 重扫一次；'
+    + '出路：' + scanHint() + '，重扫一次；'
     + '如果刚改过权限，记得**发新版**才生效。',
   );
 }
@@ -447,8 +447,9 @@ export class FeishuChannel extends ChannelService {
         name: '飞书登录态',
         ok: false,
         detail: '还没有填 app_id / app_secret',
-        // 出路必须是**真会发生**的那件事：会开二维码的是探针，不是 `butler run`
-        fix: '先跑 `bash packages/channel-feishu/probe/run.sh --save`（扫码最省事，会把凭据装好）；'
+        // 出路必须是**真会发生**的那件事：会开二维码的是探针，不是 `butler run`。
+        // 而且命令要按这个包实际装在哪儿给 —— 见 `scanHint`。
+        fix: `先${scanHint()}（会把凭据装好）；`
           + '也可以去 open.feishu.cn 建「企业自建应用」抄下 app_id / app_secret，等 `butler run` 提示时粘贴',
       });
       out.push({ name: '飞书去重表', ok: true, detail: dedupAt });

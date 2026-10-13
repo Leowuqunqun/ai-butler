@@ -32,6 +32,7 @@ import {
 import { autostartOff, autostartOn, autostartPlan, autostartStatus, formatPlan } from './autostart.js';
 import { dshAgentHome, ensureChannelSecrets, ensureModelKey } from './onboarding.js';
 import { loadConfig } from './config.js';
+import { scanHint } from '@butler/channel-feishu/probe-path';
 import { injectChannelSecrets, secretsFileOf } from './secrets.js';
 import { keyRefOf } from './credentials.js';
 
@@ -676,7 +677,9 @@ function runInit(args: Args): number {
   } else if (im === 'feishu') {
     console.log('\n这台是「收飞书的那台」。接下来：\n');
     console.log('  1. 先弄一个飞书应用（两种办法，挑一个）：');
-    console.log('     · 扫码最省事：bash packages/channel-feishu/probe/run.sh --save');
+    // 命令按这个包**实际装在哪儿**给：写死 `packages/...` 只在源码树里成立，
+    // 用 install.sh 装的人没有 packages/（那是 tarball 装进 ~/.butler/prefix）
+    console.log(`     · ${scanHint()}`);
     console.log('       （不用开发者后台、不用公网 IP；扫完它把两个值直接存进这台电脑）');
     console.log('     · 或去 open.feishu.cn 建一个「企业自建应用」，');
     console.log('       在「凭证与基础信息」里抄下 app_id 和 app_secret');

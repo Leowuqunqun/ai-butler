@@ -8,7 +8,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readdirSync, truncateSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -352,9 +352,45 @@ test('★★ 没凭据也要能装载（真机第一枪之前，就是这个状�
   const checks = await ch.check();
   assert.equal(checks[0].ok, false, '自检要如实报 ✗');
   assert.match(checks[0].detail, /app_id/);
-  assert.match(checks[0].fix, /probe\/run\.sh/, '出路要指向**真会开二维码**的那条（探针）');
+  assert.match(checks[0].fix, /probe\/smoke\.mjs/, '出路要指向**真会开二维码**的那条（探针）');
+  assertRunnableProbeHint(checks[0].fix);
 
-  await assert.rejects(() => ch.start(), /probe\/run\.sh/, '启动时给同一句人话');
+  const startErr = await ch.start().then(() => null, (e) => e);
+  assert.match(startErr.message, /probe\/smoke\.mjs/, '启动时给同一句人话');
+  assertRunnableProbeHint(startErr.message);
+});
+
+/**
+ * 「出路」里那条命令必须**真的能照着敲** —— 不是"写着探针"就算。
+ *
+ * 这是踩出来的：文案原来写死 `bash packages/channel-feishu/probe/run.sh`，而那句话
+ * **只在源码树里成立**（用 `install.sh` 装的人没有 `packages/` —— 那是 tarball 装进
+ * `~/.butler/prefix`，照敲只会得到 `No such file`）。现在文案按包自己的位置算，
+ * 所以这里也按"算出来的路径真的存在"来验。
+ */
+function assertRunnableProbeHint(text) {
+  const m = /`node ([^`]+?) --save`/.exec(text);
+  assert.ok(m, `出路里要有一条能照着敲的命令，实际：${text}`);
+  assert.ok(existsSync(m[1]), `命令里的探针路径必须真的存在：${m[1]}`);
+}
+
+test('★★ 探针命令：算出来的路径真的在，而且 `files` 里必须带着 probe', async () => {
+  const { probeCommand, probePath } = await import('../lib/probe-path.js');
+
+  const cmd = probeCommand();
+  assert.ok(cmd, '源码树里必须算得出来 —— 探针就在包内');
+  const file = /node (.+?) --save/.exec(cmd)?.[1];
+  assert.ok(file && existsSync(file), `算出来的路径要真的存在：${file}`);
+  assert.ok(probePath().endsWith(join('probe', 'smoke.mjs')));
+
+  // 这条是**根**：路径算得出来，靠的是探针跟着包一起被装走。
+  // 少了 `probe`，装完之后 `probeCommand()` 会变成 null —— 提示会悄悄退化成
+  // "去源码里跑"，而那正是这次要修的坑。所以这条测试盯的是 package.json 本身。
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.ok(
+    pkg.files.includes('probe'),
+    'package.json 的 files 少了 probe：装完之后用户就拿不到探针了',
+  );
 });
 
 test('★ 连不上长连接时：中文事实 + 出路，而且绝不回显那条一次性授权链接', async () => {
@@ -369,7 +405,8 @@ test('★ 连不上长连接时：中文事实 + 出路，而且绝不回显那�
 
   assert.match(err.message, /could not resolve bot identity/, '官方原文一个字不改，别藏起来');
   assert.match(err.message, /not_connected/, '把官方的 code 也带上');
-  assert.match(err.message, /probe\/run\.sh/, '要说怎么办 —— 只说"不行"等于没说');
+  assert.match(err.message, /probe\/smoke\.mjs/, '要说怎么办 —— 只说"不行"等于没说');
+  assertRunnableProbeHint(err.message);
   assert.match(err.message, /发新版/, '权限那条坑要提醒（改完不发版不生效）');
   // ⚠️ context.consoleUrl 是签了名的一次性授权链接 = 凭据，绝不能出现在任何输出里
   assert.ok(!err.message.includes('SECRET-TOKEN'), '一次性授权链接绝不能回显');

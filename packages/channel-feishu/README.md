@@ -60,6 +60,10 @@ ByteDance 账号，飞书改协议他们先知道）。我们只做它不做的�
 bash packages/channel-feishu/probe/run.sh
 ```
 
+> 上面是**源码树里**的写法。探针现在跟着包一起发（`package.json` 的 `files` 里带着 `probe`），
+> 所以**装完之后** CLI 的报错和引导页会给出一条完整命令：`node <包内路径>/probe/smoke.mjs --save`
+> —— 不依赖 bash，也不依赖可执行位，两个平台一样。
+
 没凭据它会走 **`registerApp` 扫码注册** —— 不需要开发者后台点那一串步骤，
 也不需要公网 IP，手机飞书在手边就行。想先看要做什么而不联网：
 

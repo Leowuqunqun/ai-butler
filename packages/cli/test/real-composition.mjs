@@ -16,9 +16,11 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, statSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { boot } from '@butler/cli';
 
@@ -220,9 +222,38 @@ test('真实组合：飞书那行**没填凭据也装得上**，而且如实报 
     const cred = checks.find((c) => /app_id/.test(c.name ?? '') || /凭据|登录态/.test(c.name ?? ''));
     assert.ok(cred, `自检里应当有一条讲凭据的，实际：${JSON.stringify(checks)}`);
     assert.equal(cred.ok, false, '没凭据就得报 ✗，不能误导');
-    assert.match(cred.fix, /probe\/run\.sh/, '出路要指向探针（它会扫码并把凭据装好）');
+    // 出路里的命令必须**真的能照着敲**：写死 `packages/...` 只在源码树里成立，
+    // 用 install.sh 装的人没有 packages/ —— 那条提示会变成死路
+    assert.match(cred.fix, /probe\/smoke\.mjs/, '出路要指向探针（它会扫码并把凭据装好）');
+    const probe = /`?node ([^`]+?) --save/.exec(cred.fix)?.[1];
+    assert.ok(probe && existsSync(probe), `提示里的探针路径要真的存在：${probe}`);
   } finally {
     await b.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/**
+ * 引导页里那段"怎么弄一个飞书应用"，用户是**照着敲**的。
+ *
+ * 所以这里真的起一次 CLI，看它**打印出来**的东西里那条命令能不能用 ——
+ * 不是检查源码里有没有那行字。文案原来写死 `bash packages/channel-feishu/probe/run.sh`，
+ * 而用 `install.sh` 装的人没有 `packages/`（那是 tarball 装进 `~/.butler/prefix`）。
+ *
+ * ⚠️ `--config` + `BUTLER_HOME` 两道锁：这条测试绝不碰用户真正的 `~/.butler`。
+ */
+test('真实组合：`butler init --im feishu` 打印出来的引导页里，探针那条命令能照着敲', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'real-guide-'));
+  try {
+    const out = execFileSync(process.execPath, [
+      fileURLToPath(new URL('../lib/cli.js', import.meta.url)),
+      'init', '--im', 'feishu', '--config', join(dir, 'config.json'),
+    ], { encoding: 'utf8', env: { ...process.env, BUTLER_HOME: dir } });
+
+    const probe = /node ([^\s`]+probe\/smoke\.mjs) --save/.exec(out)?.[1];
+    assert.ok(probe, `引导页里要有一条能照着敲的探针命令，实际打印的是：\n${out}`);
+    assert.ok(existsSync(probe), `引导页里的探针路径要真的存在：${probe}`);
+  } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });

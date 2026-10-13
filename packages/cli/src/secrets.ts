@@ -25,6 +25,7 @@
 
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { scanHint } from '@butler/channel-feishu/probe-path';
 
 /** 一个通道要哪一项凭据。**只在这里写一次**（加通道就在这儿加一行） */
 export interface ChannelSecretNeed {
@@ -60,7 +61,7 @@ const NEEDS: Record<string, ChannelSecretNeed[]> = {
       key: 'appId',
       label: '飞书',
       name: '飞书应用的 app_id',
-      hint: '两种办法（挑一个）：① 扫码最省事 —— 跑 `bash packages/channel-feishu/probe/run.sh --save`，'
+      hint: `两种办法（挑一个）：① ${scanHint()}，`
         + '它不需要开发者后台、不需要公网 IP，扫完直接把两个值存进这台电脑；'
         + '② 或去 open.feishu.cn 建一个「企业自建应用」，在「凭证与基础信息」里抄下 app_id',
     },

@@ -15,10 +15,15 @@
     "./map": {
       "types": "./lib/types/map.d.ts",
       "default": "./lib/map.js"
+    },
+    "./probe-path": {
+      "types": "./lib/types/probe-path.d.ts",
+      "default": "./lib/probe-path.js"
     }
   },
   "files": [
-    "lib"
+    "lib",
+    "probe"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
