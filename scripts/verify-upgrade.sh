@@ -25,6 +25,7 @@
 set -eu
 
 TMP=$(mktemp -d)
+# 收尾：临时目录整个删掉（真 ~/.butler 从没进过这里 —— 全程只动临时 HOME）
 trap 'rm -rf "${TMP}"' EXIT
 
 FAKE_HOME="${TMP}/home"

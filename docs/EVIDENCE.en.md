@@ -144,7 +144,9 @@ they keep growing with the feature set — **treat the total on this line as aut
   **published** new `install.sh` — and checks that what the new version promised arrived (the Feishu
   package and its probe), that `config.json` / `secrets.json` / 0600 are **byte-identical**, that
   `init` afterwards tops up missing rows **without** switching the receive row, and that
-  `init --im feishu` switches only that row and the row then really loads. A **lived-in house** is
+  `init --im feishu` switches only that row and the row then really loads. (That `butler run`
+  brings up the **Feishu** onboarding page and that Ctrl-C makes it exit on its own was verified
+  **by hand**, not by the script.) A **lived-in house** is
   the normal case for users, and "clean machine, first install" can never cover it.
 - `channel-wechat/test/login.mjs` really **starts a local HTTP QR page** (127.0.0.1 only) and
   feeds a fake client through the whole login: the code really reaches the page, the browser is
