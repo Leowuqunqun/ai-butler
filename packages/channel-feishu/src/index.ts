@@ -94,6 +94,31 @@ function missingCreds(home: string): Error {
   );
 }
 
+/**
+ * 连不上长连接时的那句人话。
+ *
+ * 官方原文是英文行话（实测抓到的原话：`could not resolve bot identity via
+ * /open-apis/bot/v3/info — required for channel to function`），只说"不行"、不说"怎么办"。
+ * 而同一件事 `doctor` 里是会说清楚的 —— 两处两种待遇，用户就会以为 `butler run` 坏了。
+ *
+ * ⚠️ **只取 `code` / `message`**：`LarkChannelError.context` 里有一条**签了名的一次性
+ * 授权链接**（官方类型里写着"绝不要写进日志、回显给用户、或贴进工单"）—— 那是凭据，
+ * 一个字都不能打印。
+ */
+function connectFailed(error: unknown): Error {
+  const code = (error as { code?: unknown } | null)?.code;
+  const message = error instanceof Error ? error.message : String(error);
+  return new Error(
+    `连不上飞书的长连接：${message}`
+    + (code ? `（code: ${String(code)}）` : '')
+    + '。两种可能，对一下就知道是哪种：'
+    + '① 凭据不对／不属于这个应用（手抄时少了字符，或那是另一个应用的）；'
+    + '② 应用的权限点没配齐，或「事件订阅」的方式不是**长连接**。'
+    + '出路：`bash packages/channel-feishu/probe/run.sh --save` 重扫一次；'
+    + '如果刚改过权限，记得**发新版**才生效。',
+  );
+}
+
 export class FeishuChannel extends ChannelService {
   // 全部给 default、不用 .required() —— 本项目的既定写法（见 ARCH-technical §5）：
   // static Config 拦不住漏填，必填在构造函数里拦。
@@ -222,7 +247,8 @@ export class FeishuChannel extends ChannelService {
     } catch (error) {
       off();
       this.off = undefined;
-      throw error;
+      // 官方那句是英文行话，且不说怎么办 —— 包一层（见 connectFailed）
+      throw connectFailed(error);
     }
     this.running = true;
     const me = this.lark.botIdentity;

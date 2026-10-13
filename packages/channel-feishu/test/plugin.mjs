@@ -356,3 +356,25 @@ test('★★ 没凭据也要能装载（真机第一枪之前，就是这个状�
 
   await assert.rejects(() => ch.start(), /probe\/run\.sh/, '启动时给同一句人话');
 });
+
+test('★ 连不上长连接时：中文事实 + 出路，而且绝不回显那条一次性授权链接', async () => {
+  const { channel, fake } = makeFeishu({ home: freshHome() });
+  // 原文照抄**实测**抓到的形态：拿假凭据真连了一次官方长连接，回来的就是这句
+  fake.connectError = 'could not resolve bot identity via /open-apis/bot/v3/info — required for channel to function';
+  fake.connectErrorCode = 'not_connected';
+  fake.connectErrorContext = { consoleUrl: 'https://open.feishu.cn/one-click?sign=SECRET-TOKEN' };
+
+  const err = await channel.start().then(() => null, (e) => e);
+  assert.ok(err, '凭据不对时 start 必须失败，不能假装连上了');
+
+  assert.match(err.message, /could not resolve bot identity/, '官方原文一个字不改，别藏起来');
+  assert.match(err.message, /not_connected/, '把官方的 code 也带上');
+  assert.match(err.message, /probe\/run\.sh/, '要说怎么办 —— 只说"不行"等于没说');
+  assert.match(err.message, /发新版/, '权限那条坑要提醒（改完不发版不生效）');
+  // ⚠️ context.consoleUrl 是签了名的一次性授权链接 = 凭据，绝不能出现在任何输出里
+  assert.ok(!err.message.includes('SECRET-TOKEN'), '一次性授权链接绝不能回显');
+  assert.ok(!err.message.includes('consoleUrl'));
+
+  assert.equal(fake.connected, false);
+  assert.equal(fake.subscribed, false, '连不上要退订 —— 别留半个订阅在那儿');
+});

@@ -46,6 +46,11 @@ export class FakeLark {
   appInfoHangs = false;
   /** 被拒时挂上来的 context —— 真实错误里那是**签了名的一次性授权链接** */
   appInfoContext = undefined;
+  /** 设了就让 `connect()` 抛错（原文照抄实测抓到的 `not_connected` 那句） */
+  connectError = null;
+  connectErrorCode = 'not_connected';
+  /** 连接失败时挂上来的 context —— 同样是凭据，适配层绝不能回显 */
+  connectErrorContext = undefined;
 
   /** connect() 之前是 undefined —— 和官方包的行为一致 */
   get botIdentity() {
@@ -60,6 +65,12 @@ export class FakeLark {
   }
 
   async connect() {
+    if (this.connectError) {
+      const error = new Error(this.connectError);
+      error.code = this.connectErrorCode;
+      if (this.connectErrorContext) error.context = this.connectErrorContext;
+      throw error;
+    }
     this.connected = true;
   }
 
