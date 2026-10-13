@@ -10,10 +10,10 @@
 
 ## 用例总数（以此为准）
 
-**合计 915 个用例，全部离线可跑**（十七个包：seam-channel 12 / seam-agent 12 /
+**合计 918 个用例，全部离线可跑**（十七个包：seam-channel 12 / seam-agent 12 /
 seam-link 15 / seam-approval 7 / seam-memory 6 / core 162 / channel-wechat 134 /
 channel-telegram 51 / channel-feishu 50 / agent-dsh 40 / agent-exec 26 / approval-im 18 /
-memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 237）。
+memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 240）。
 （下面两张明细里的用例数是**各条目落地当时**的数，会随功能继续长 —— **当前总数以这一行为准**。）
 
 ## M1 明细
@@ -88,8 +88,12 @@ memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 237）。
 ## 最有分量的几条证据
 
 - `agent-dsh` 的最后 7 个是**端到端**的：真 `core` 驱动真 `DshAgent` 驱动真子进程。
-- `cli` 的最后 6 个是**真实组合**：真的三个插件（真微信通道 + 真内核 + 真 dsh agent）
-  装进同一个容器，三条能力位齐、配置端到端传到。
+- `cli` 里有 7 个是**真实组合**：真的三个插件（真微信通道 + 真内核 + 真 dsh agent）
+  装进同一个容器，三条能力位齐、配置端到端传到。其中一条专门盯**飞书那行没填凭据也装得上**
+  —— 这是第 8 轮那个 bug 的**产品级回归**（当时 `doctor` 会说"配置里一行都没有"，用户完全看不懂）。
+- `cli` 里还有 2 个把**飞书**从头到尾走了一遍（`m1-feishu-e2e.mjs`）：真 `FeishuChannel`
+  （官方包换成假实现）+ 真 `ButlerCore` + 假大脑 —— 一条来信走到大脑、回话走**原生引用**，
+  同一条 `messageId` 重推只算一次。（去重那条反验过：把 `seen.ts` 的 `has()` 改成恒假，它立刻红。）
 - `link-lan` 的 65 个里有 **47 个真的起了一个 HTTP 节点**（或真跑了一次完整往返）：
   真监听、真认证、真用 `ctx.link` 连过去、真跑一次带进度的调用。其中 5 个专盯
   "一句话说不清楚的失败"（空闲超时、半路掉线、密钥不对、协议版本对不上、方法不存在）

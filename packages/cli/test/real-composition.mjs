@@ -182,3 +182,47 @@ test('真实组合：卸载之后三个服务位一起消失，不留半截', as
     }
   } finally { t.cleanup(); }
 });
+
+/**
+ * 飞书那一行的**装载**：没有凭据也必须装得上。
+ *
+ * 这一条是照着真机上撞到的坑写的（第 8 轮）：官方包在**构造时**就校验凭据，
+ * 而插件是**装载时**构造的 —— 于是"用户还没填 app_id"（一个正常状态：凭据是
+ * `butler run` 现从 `state/secrets.json` 注入的）变成了**插件装载失败**：
+ * `doctor` 说"配置里一行都没有"、`butler run` 起不来，而适配层里那两段人话**永远到不了**。
+ *
+ * 为什么放这儿而不是适配层自己的测试里：那边验的是 `new FeishuChannel(...)` 的行为，
+ * 这里验的是**产品真路径**（`boot()` + 包名寻址 + 空凭据）—— 用户走的是这条。
+ */
+test('真实组合：飞书那行**没填凭据也装得上**，而且如实报 ✗ 并指向探针', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'real-feishu-'));
+  const file = join(dir, 'config.json');
+  writeFileSync(file, JSON.stringify({
+    plugins: [
+      // 空凭据 —— 这不是错误状态，是"还没跑探针"的常态
+      { id: 'channel-feishu', name: '@butler/channel-feishu', config: { home: dir, appId: '', appSecret: '' } },
+      { id: 'core', name: '@butler/core', config: { workspace: dir, stateFile: join(dir, 'state.json') } },
+    ],
+  }));
+
+  const b = await boot({ configPath: file });
+  try {
+    assert.deepEqual(
+      b.failures.map((f) => `${f.id}: ${f.message}`),
+      [],
+      '没凭据不该是"装载失败" —— 那样 doctor 会报"配置里一行都没有"，用户完全看不懂',
+    );
+    assert.equal(b.has('channel'), true);
+    assert.equal(b.ctx.channel.id, 'feishu', '要是真实现，不是夹具');
+
+    // 装得上 ≠ 假装没事：自检要如实报 ✗，并给出**能照着做**的出路
+    const checks = await b.ctx.channel.check();
+    const cred = checks.find((c) => /app_id/.test(c.name ?? '') || /凭据|登录态/.test(c.name ?? ''));
+    assert.ok(cred, `自检里应当有一条讲凭据的，实际：${JSON.stringify(checks)}`);
+    assert.equal(cred.ok, false, '没凭据就得报 ✗，不能误导');
+    assert.match(cred.fix, /probe\/run\.sh/, '出路要指向探针（它会扫码并把凭据装好）');
+  } finally {
+    await b.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

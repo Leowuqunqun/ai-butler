@@ -10,10 +10,10 @@
 
 ## Test case total (authoritative)
 
-**915 test cases in total, all runnable offline** (seventeen packages: seam-channel 12 / seam-agent 12 /
+**918 test cases in total, all runnable offline** (seventeen packages: seam-channel 12 / seam-agent 12 /
 seam-link 15 / seam-approval 7 / seam-memory 6 / core 162 / channel-wechat 134 /
 channel-telegram 51 / channel-feishu 50 / agent-dsh 40 / agent-exec 26 / approval-im 18 /
-memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 237).
+memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 240).
 (The per-item counts in the two tables below are the numbers **as of the day that item landed**, and
 they keep growing with the feature set — **treat the total on this line as authoritative**.)
 
@@ -90,9 +90,15 @@ they keep growing with the feature set — **treat the total on this line as aut
 
 - The last 7 tests in `agent-dsh` are **end-to-end**: the real `core` drives the real `DshAgent`
   drives a real child process.
-- The last 6 tests in `cli` are a **real composition**: three real plugins (the real WeChat channel
+- 7 tests in `cli` are a **real composition**: three real plugins (the real WeChat channel
   + the real kernel + the real dsh agent) installed into one container, all three service slots
-  present, configuration carried end-to-end.
+  present, configuration carried end-to-end. One of them pins that **the Feishu row loads even
+  with no credentials** — the product-level regression for the round-8 bug (`doctor` used to say
+  "there is not a single line in the config", which a user cannot act on).
+- 2 more in `cli` walk **Feishu** from end to end (`m1-feishu-e2e.mjs`): the real `FeishuChannel`
+  (official package swapped for a fake) + the real `ButlerCore` + a fake brain — an inbound message
+  reaches the brain and the reply goes out as a **native quote**, while a re-pushed `messageId`
+  counts only once. (The dedup case was falsified: make `has()` always false and it goes red.)
 - **47 of the 65 tests in `link-lan` really do start an HTTP node** (or complete a real round
   trip): real listening socket, real authentication, a real connection through `ctx.link`, a real
   call with progress. Five of them target failures that are hard to explain in one sentence (idle
