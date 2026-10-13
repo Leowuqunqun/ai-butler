@@ -98,17 +98,25 @@ export class FeishuChannel extends ChannelService {
     // `home` 空着就用默认位置。**不在 Config 里给默认值**：默认值要在运行时算
     //（会用到 homedir()），写在 schema 里会让 dump 出来的配置看起来是死的。
     this.home = config.home || join(homedir(), '.butler');
-    // `maxFileMb` 在这里兜一次底：`static Config` 的默认值只有在**经 cordis 装载**时
-    // 才生效，而这个类是能被直接 `new` 出来的（测试就是那么干的）。少了这一行，
-    // 上限会变成 `NaN` —— 而 `size > NaN` 永远是 false，**限流被静默关掉**。
-    // 这种"默认失效"不该靠调用方守规矩。
+    // ⚠️ **所有默认值都在这里兜一次底。** `static Config` 里的默认值**只有经 cordis
+    //    装载**才生效，而这个类是能被直接 `new` 出来的（测试会那么干，将来的工具也会）。
+    //    这个坑已经咬过两次：
+    //      · `maxFileMb` 少了兜底 → `NaN` → `size > NaN` 恒为 false，**限流被静默关掉**；
+    //      · `allowChats` 少了兜底 → `makeChannel` 里 `.length` 抛 TypeError
+    //        （`appId` 同理：`start()` 里的 `.trim()` 会崩）。
+    //    所以这次一次列全，用 `??`（只替掉"没给"，不覆盖用户显式给的 0 / false）。
     this.config = {
       ...config,
+      appId: config.appId ?? '',
+      appSecret: config.appSecret ?? '',
       home: this.home,
-      maxFileMb: config.maxFileMb || 30,
-      checkTimeoutMs: config.checkTimeoutMs || 5000,
+      requireMention: config.requireMention ?? true,
+      allowChats: config.allowChats ?? [],
+      seenLimit: config.seenLimit ?? 1000,
+      maxFileMb: config.maxFileMb ?? 30,
+      checkTimeoutMs: config.checkTimeoutMs ?? 5000,
     };
-    this.seen = new SeenStore(join(this.home, 'state', 'feishu-seen.json'), config.seenLimit);
+    this.seen = new SeenStore(join(this.home, 'state', 'feishu-seen.json'), this.config.seenLimit);
     this.lark = this.makeChannel(this.config);
     // 收尾一律走 effect（cordis 4 没有 'dispose' 事件）
     ctx.effect(() => () => this.stop(), 'feishu.stop');
@@ -139,10 +147,16 @@ export class FeishuChannel extends ChannelService {
   async start(): Promise<void> {
     if (this.running) return;
     if (!this.config.appId.trim() || !this.config.appSecret.trim()) {
-      // 这条错会原样出现在 `butler run` 的"起不来：…"里，所以要写成人话
+      // 这条错会原样出现在 `butler run` 的"起不来：…"里，所以要写成人话。
+      // 而且要说清**去哪儿找过**：用户最常踩的坑是"存到了另一个管家目录"
+      // （凭据按"配置所在目录"找，用了 `--config` 就未必是 `~/.butler`）。
+      const secretsAt = join(this.home, 'state', 'secrets.json');
       throw new Error(
-        '还没有飞书应用的 app_id / app_secret。跑一次 `butler run` 选飞书，'
-        + '它会开一个二维码给你扫 —— 扫码就能建应用并授权，不用自己去开发者后台点那一串步骤。',
+        `还没有飞书应用的 app_id / app_secret（我在 ${secretsAt} 里没找到）。两条路都行：`
+        + '① 跑一次 `butler run` 选飞书 —— 它会开一个二维码给你扫，扫码就能建应用并授权；'
+        + '② 用探针扫码并顺手存下：`bash packages/channel-feishu/probe/run.sh --save`。'
+        + '⚠️ 最常见的坑是**存到了另一个管家目录**：如果你用 `--config` 把家安在别处，'
+        + '给探针也要加 `--home=<那个目录>`。',
       );
     }
     // 先订阅、再连：连上之后立刻到达的消息不能漏。

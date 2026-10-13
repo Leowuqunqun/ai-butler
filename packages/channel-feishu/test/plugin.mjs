@@ -19,9 +19,16 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const freshHome = () => mkdtempSync(join(tmpdir(), 'butler-feishu-'));
 
-test('凭据没填时拒绝上线，并且说的是"去哪拿"而不是"appId is required"', async () => {
-  const { channel } = makeFeishu({ appId: '', appSecret: '' });
-  await assert.rejects(() => channel.start(), /butler run/);
+test('凭据没填时拒绝上线，说的是"去哪拿"和"我去哪找过"，而不是"appId is required"', async () => {
+  const home = freshHome();
+  const { channel } = makeFeishu({ appId: '', appSecret: '', home });
+  await assert.rejects(() => channel.start(), (error) => {
+    assert.match(error.message, /butler run/, '要告诉他怎么拿');
+    // 也要说清**去哪儿找过**：最常见的原因是凭据存到了另一个管家目录（用了 --config）
+    assert.ok(error.message.includes(join(home, 'state', 'secrets.json')), `要说清找过哪儿，实际：${error.message}`);
+    assert.match(error.message, /--home=/, '要点出那个最常见的坑');
+    return true;
+  });
 });
 
 test('上线：先订阅再连（连上后立刻到达的消息不能漏），且重复调用不起第二条连接', async () => {

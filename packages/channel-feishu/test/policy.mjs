@@ -6,6 +6,9 @@
  * 这里会先红 —— 而在真机上红，代价是用户坐在那儿等一条永远不来的回复。
  *
  * 构造不联网：`createLarkChannel()` 只是把对象搭起来，`connect()` 才真的连。
+ * ⚠️ **所以这个文件里只允许"构造"和读配置**：任何会出网的方法（`check()` / `start()` /
+ * `getAppInfo()`）都不能在这里调 —— 那会让一个离线用例变成要联网的用例。
+ * 凭据相关的那几条路，交给 `fake-lark.mjs` 那套假实现去测。
  *
  * 两件查过官方实现、写在这里免得下次再查一遍的事：
  *
@@ -42,6 +45,20 @@ test('requireMention 原样传下去；白名单为空时**不传**这个字段'
   const policy = real({ requireMention: true, allowChats: [] }).lark.getPolicy();
   assert.equal(policy.requireMention, true);
   assert.ok(!('groupAllowlist' in policy), '空数组不传：传了虽然也不拦，但看起来像"配过白名单"');
+});
+
+test('★ 只给必填项也能构造（schema 的默认值只有经 cordis 装载才生效）', () => {
+  // 这条是给"同一类洞"立的规矩。它已经咬过两次：
+  //   · `maxFileMb` 少了兜底 → NaN → `size > NaN` 恒为 false，**限流被静默关掉**；
+  //   · `allowChats` 少了兜底 → 构造函数里 `.length` 直接抛 TypeError。
+  // 两者都只在**直接 new** 时出现 —— 而测试、以及将来的工具，都会直接 new。
+  const ch = real({});
+  const policy = ch.lark.getPolicy();
+  assert.equal(policy.requireMention, true, '默认：群里要 @ 它');
+  assert.ok(!('groupAllowlist' in policy), '默认不收窄群范围');
+  assert.equal(ch.config.maxFileMb, 30, '默认上限不能是 NaN（那等于没有上限）');
+  assert.equal(ch.config.checkTimeoutMs, 5000);
+  assert.deepEqual(ch.config.allowChats, []);
 });
 
 test('白名单非空时传 groupAllowlist（原样，不替用户猜）', () => {

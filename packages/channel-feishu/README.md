@@ -39,7 +39,7 @@ ByteDance 账号，飞书改协议他们先知道）。我们只做它不做的�
 - **不做入站语音转写**。微信那条路是平台已经转好的文字；飞书要自己接 ASR，还没做
 - **没有"正在输入"**。飞书没有这个概念，接缝上是默认的空实现
 - **还没做卡片/按钮审批**。真要做审批，飞书这块比微信强得多（按钮能回传），值得专门做
-- **真机还没验收过**。代码和 36 个离线用例都在，但"在真飞书里收发一条"还没跑过
+- **真机还没验收过**。代码和 37 个离线用例都在，但"在真飞书里收发一条"还没跑过
 
 ## "我们没重写协议"这句话的证据
 
@@ -76,6 +76,10 @@ bash packages/channel-feishu/probe/run.sh --save
 默认写的是 `~/.butler`。如果你当初是用 `--config` 把家安在别处（`butler init` 会打印
 它写在哪），就加一句 `--home=<那个目录>`，别让凭据落在一个管家不看的地方：
 
+> ⚠️ **验完先 `Ctrl-C` 掉探针，再 `butler run`**。同一个应用开两条长连接时，飞书会把事件
+> 在两条之间**分流投递**（官方 README 讲 `onRawEvent` 时写明了这一点）—— 表现是
+> "消息偶尔不回"，而两边看起来都正常。
+
 ```bash
 bash packages/channel-feishu/probe/run.sh --save --home=/srv/butler
 ```
@@ -93,7 +97,7 @@ butler run                 # 凭据已经存过 → 它自动跳过问凭据那�
 ## 测试
 
 ```bash
-pnpm --filter @butler/channel-feishu test    # tsc + 36 个离线用例
+pnpm --filter @butler/channel-feishu test    # tsc + 37 个离线用例
 ```
 
 离线测试的边界假在**"官方通道的接口"**上（`test/fake-lark.mjs`），不是假飞书服务器 ——
