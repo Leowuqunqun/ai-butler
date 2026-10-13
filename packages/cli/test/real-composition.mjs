@@ -257,3 +257,72 @@ test('真实组合：`butler init --im feishu` 打印出来的引导页里，探
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+/**
+ * 第 59 轮那两项（`dmMode` / `dmAllowlist`）在**产品真路径**上到底有没有到插件身上。
+ *
+ * 为什么非得在这儿再验一遍：适配层那边（`channel-feishu/test/policy.mjs`）全是
+ * `new FeishuChannel(...)`，走的是**构造函数**；而用户改的是 `config.json` ——
+ * 那条路是 **schema 在接**。只验构造函数，等于**假设** schema 接住了它。
+ */
+test('★ 真实组合：config.json 里的 dmMode / dmAllowlist 真的落到插件身上（没写的补默认）', async () => {
+  const bootWith = async (channelConfig) => {
+    const dir = mkdtempSync(join(tmpdir(), 'real-dm-'));
+    const file = join(dir, 'config.json');
+    writeFileSync(file, JSON.stringify({
+      plugins: [
+        {
+          id: 'channel-feishu',
+          name: '@butler/channel-feishu',
+          config: { home: dir, appId: '', appSecret: '', ...channelConfig },
+        },
+        { id: 'core', name: '@butler/core', config: { workspace: dir, stateFile: join(dir, 'state.json') } },
+      ],
+    }));
+    const b = await boot({ configPath: file });
+    return { b, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  };
+
+  // ① 写了的：原样到插件身上
+  const set = await bootWith({ dmMode: 'allowlist', dmAllowlist: ['ou_someone'] });
+  try {
+    assert.equal(set.b.ctx.channel.config.dmMode, 'allowlist');
+    assert.deepEqual(set.b.ctx.channel.config.dmAllowlist, ['ou_someone']);
+  } finally { await set.b.dispose(); set.cleanup(); }
+
+  // ② 没写的：由 schema 补默认。默认必须是 open —— 改默认就是悄悄改所有人的行为
+  const dflt = await bootWith({});
+  try {
+    assert.equal(dflt.b.ctx.channel.config.dmMode, 'open');
+    assert.deepEqual(dflt.b.ctx.channel.config.dmAllowlist, []);
+  } finally { await dflt.b.dispose(); dflt.cleanup(); }
+});
+
+test('★ 真实组合：config.json 里 dmMode 拼错 ⇒ 装载**如实报错**，而不是悄悄按 open 放行', async () => {
+  // 这条是第 59 轮那个联合类型的真正落点：官方对不认识的 dmMode 是照 open 处理的，
+  // 所以"拼错"在真机上表现为**谁都能私聊**，没有任何别的信号。必须在装载时就红。
+  const dir = mkdtempSync(join(tmpdir(), 'real-dm-bad-'));
+  const file = join(dir, 'config.json');
+  writeFileSync(file, JSON.stringify({
+    plugins: [
+      {
+        id: 'channel-feishu',
+        name: '@butler/channel-feishu',
+        config: { home: dir, appId: '', appSecret: '', dmMode: 'allowList' },
+      },
+      { id: 'core', name: '@butler/core', config: { workspace: dir, stateFile: join(dir, 'state.json') } },
+    ],
+  }));
+
+  const b = await boot({ configPath: file });
+  try {
+    const msgs = b.failures.map((f) => `${f.id}: ${f.message}`);
+    assert.ok(
+      msgs.some((m) => /dmMode/.test(m)),
+      `拼错的 dmMode 必须让装载如实报出来，实际 failures=${JSON.stringify(msgs)}`,
+    );
+  } finally {
+    await b.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
