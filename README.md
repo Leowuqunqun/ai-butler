@@ -142,7 +142,7 @@ pnpm typecheck          # 只做类型检查，不产出
 pnpm test               # 全部包，全部离线：不连网、不需要微信账号、不会真的发消息
 pnpm check:docs         # 文档体检：断链 / 锚点 / 引用了被 gitignore 的文件
 pnpm check:packages     # 打包体检：装出去的包里，入口和编译产物一个都不少
-pnpm check:scripts      # 脚本体检：step/ok/bad 的标题里别放反引号（那是命令替换，会把命令真跑一遍）
+pnpm check:scripts      # 脚本体检：会印字的函数（从源码里认，含 say/die）标题里别放反引号、不带引号的 heredoc 里也别放
 pnpm check:user-facing  # 文案体检：会打印给用户看的话里别出现 packages/ docs/ scripts/（那儿没有它们）
 pnpm mutate             # 变异测试：验的不是代码，是**测试本身**（十几分钟，手动跑）
 pnpm diagrams           # 重新渲染 docs/diagrams/*.svg

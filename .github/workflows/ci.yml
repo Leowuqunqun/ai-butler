@@ -41,7 +41,7 @@ jobs:
       - name: 打包自检（装出来的包是不是完整的）
         run: pnpm check:packages
 
-      - name: 脚本自检（step/ok/bad 的标题里别放反引号 —— 那是命令替换，会把命令真跑一遍）
+      - name: 脚本自检（会印字的函数标题里、以及不带引号的 heredoc 里，别放反引号 —— 那是命令替换）
         run: pnpm check:scripts
 
       - name: 用户面文案自检（会打印给用户看的话里别出现 packages/ docs/ scripts/ —— 装出来的机器上没有它们）
