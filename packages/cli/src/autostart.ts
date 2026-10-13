@@ -211,7 +211,12 @@ function unsupported(platform: NodeJS.Platform): string {
  * `autostartOn`），`butler report` 要把它念出来。抄两遍就迟早有一遍过期 —— 而报告指错
  * 文件比不写更坏：求助的人照着去找，找不到。
  */
-export function autostartLogFile(home: string = homedir()): string {
+/**
+ * 自启动日志放在哪。**必填**（第 35 轮改的）：它原来默认 `homedir()`，而同一天我们在
+ * `scanHint` 上刚吃过一次亏 —— **可选参数 + 默认值 = 漏传了也没人吭声**，后果是"照它指的
+ * 地方去找，东西在另一半"。现在编译器会替我们盯住每一个调用点。
+ */
+export function autostartLogFile(home: string): string {
   return join(home, '.butler', 'logs', 'autostart.log');
 }
 

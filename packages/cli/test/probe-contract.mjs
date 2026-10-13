@@ -27,6 +27,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { injectChannelSecrets, readSecrets, secretOf } from '@butler/cli';
+import { runSync } from './fixtures/node-helpers.mjs';
 
 const PROBE = join(
   dirname(fileURLToPath(import.meta.url)),
@@ -115,6 +116,53 @@ test('★ 家不在默认位置时：引导页那条命令（原样照抄）存�
         + `实际 stdout:\n${r.stdout}\n实际 stderr:\n${r.stderr}`,
     );
     assert.equal(secretOf(file, 'feishu', 'appId'), 'cli_contract_home');
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+/**
+ * ⚠️ 上一条**手写**了那个 `--home=`（它自己调 `probeCommand(home)`）—— 可用户不会调用函数，
+ * 他照抄的是 **`butler init` 印出来的那一行**。第 35 轮就是从这个缝里漏出去的：
+ * `scanHint` 的 `butlerDir` 那时候是**可选参数**，`init` 的引导页和 `doctor` 的自检
+ * 都漏传了它，TypeScript 一声没吭 —— "家安在别处"的用户照抄那条命令，凭据照样落回
+ * `~/.butler`，而 CLI 在别处读：现象还是那句"探针说存好了，`butler run` 却说还没有 app_id"。
+ *
+ * 所以这条**不碰函数**：从 `init` 真实的输出里把命令抠出来（连引号一起），原样交给 shell
+ * 跑一遍，再问 CLI 读不读得到。参数、默认位置的判断、输出格式 —— 改坏哪一处它都会红。
+ */
+test('★★ 家安在别处：从 `init` 输出里抠出的那条命令，照抄一遍真的管用', () => {
+  const home = mkdtempSync(join(tmpdir(), 'butler-probe-init-'));
+  const butler = join(home, '别处的家');
+  const cfg = join(butler, 'config.json');
+
+  try {
+    const r = runSync(['init', '--config', cfg, '--im', 'feishu'], { home });
+    assert.equal(r.code, 0, `init 该成功：\n${r.out}`);
+    const cmd = /`(node [^`]+)`/.exec(r.out)?.[1];
+    assert.ok(cmd, `引导里必须有一条能照着敲的命令：\n${r.out}`);
+    assert.ok(cmd.includes(`--home="${butler}"`), `别处的家必须带上 --home=（实际：${cmd}）`);
+
+    const run = spawnSync('bash', ['-c', cmd], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        LARK_APP_ID: 'cli_init_contract',
+        LARK_APP_SECRET: 'secret_init_contract',
+        BUTLER_HOME: '',
+      },
+      // 4 秒和上面那条一样：`--save` 是**存盘在连接之前**的，所以被超时杀掉是**预期结局**
+      //（探针会接着去连飞书；这一条要验的只是"凭据落在哪个家"）。
+      timeout: 4000,
+    });
+
+    const file = join(butler, 'state', 'secrets.json');
+    assert.ok(
+      existsSync(file),
+      '照抄那条命令之后，凭据必须落在**这个**家里（不是 ~/.butler）——'
+        + `实际 stdout:\n${run.stdout}\n实际 stderr:\n${run.stderr}`,
+    );
+    assert.equal(secretOf(file, 'feishu', 'appId'), 'cli_init_contract');
   } finally {
     rmSync(home, { recursive: true, force: true });
   }

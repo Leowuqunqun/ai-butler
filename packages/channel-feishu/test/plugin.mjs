@@ -415,9 +415,10 @@ test('★★ 没凭据也要能装载（真机第一枪之前，就是这个状�
   // 而 check() / start() 里那两段人话永远到不了。
   // 凭据是 `butler run` 从 state/secrets.json 注入的，所以"还没填"是**正常状态**，不是错误状态。
   const ctx = new Context();
+  const home = freshHome();
   let ch;
   assert.doesNotThrow(
-    () => { ch = new FeishuChannel(ctx, { appId: '', appSecret: '', home: freshHome() }); },
+    () => { ch = new FeishuChannel(ctx, { appId: '', appSecret: '', home }); },
     '没凭据时构造函数绝不能抛 —— 抛了插件就装不上，用户看到的是"配置里一行都没有"',
   );
 
@@ -426,9 +427,20 @@ test('★★ 没凭据也要能装载（真机第一枪之前，就是这个状�
   assert.match(checks[0].detail, /app_id/);
   assert.match(checks[0].fix, /probe\/smoke\.mjs/, '出路要指向**真会开二维码**的那条（探针）');
   assertRunnableProbeHint(checks[0].fix);
+  // ⚠️ 第 35 轮补的**明确**断言：家不在默认位置时，这句话里的命令必须自己带 `--home=`。
+  //    上一版这里只有一条"宽容"的正则（容忍这个参数、却不要求它）—— 于是 `scanHint` 的
+  //    参数漏传时它照样绿，而用户照抄那条命令会把凭据存进 `~/.butler`，CLI 却在别处读。
+  assert.ok(
+    checks[0].fix.includes(`--home="${home}"`),
+    `别处的家必须带上 --home=，否则这条"出路"是把人引到错地方（实际：${checks[0].fix}）`,
+  );
 
   const startErr = await ch.start().then(() => null, (e) => e);
   assert.match(startErr.message, /probe\/smoke\.mjs/, '启动时给同一句人话');
+  assert.ok(
+    startErr.message.includes(`--home="${home}"`),
+    `启动那句也一样要带 --home=（实际：${startErr.message}）`,
+  );
   assertRunnableProbeHint(startErr.message);
 });
 
@@ -449,9 +461,9 @@ function assertRunnableProbeHint(text) {
 }
 
 test('★★ 探针命令：算出来的路径真的在，而且 `files` 里必须带着 probe', async () => {
-  const { probeCommand, probePath } = await import('../lib/probe-path.js');
+  const { defaultHome, probeCommand, probePath } = await import('../lib/probe-path.js');
 
-  const cmd = probeCommand();
+  const cmd = probeCommand(defaultHome());
   assert.ok(cmd, '源码树里必须算得出来 —— 探针就在包内');
   const file = /node (.+?) --save/.exec(cmd)?.[1];
   assert.ok(file && existsSync(file), `算出来的路径要真的存在：${file}`);

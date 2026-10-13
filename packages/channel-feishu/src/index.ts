@@ -121,7 +121,7 @@ function missingCreds(home: string): Error {
  * 授权链接**（官方类型里写着"绝不要写进日志、回显给用户、或贴进工单"）—— 那是凭据，
  * 一个字都不能打印。
  */
-function connectFailed(error: unknown): Error {
+function connectFailed(error: unknown, home: string): Error {
   const code = (error as { code?: unknown } | null)?.code;
   const message = error instanceof Error ? error.message : String(error);
   return new Error(
@@ -130,7 +130,7 @@ function connectFailed(error: unknown): Error {
     + '。两种可能，对一下就知道是哪种：'
     + '① 凭据不对／不属于这个应用（手抄时少了字符，或那是另一个应用的）；'
     + '② 应用的权限点没配齐，或「事件订阅」的方式不是**长连接**。'
-    + '出路：' + scanHint() + '，重扫一次；'
+    + '出路：' + scanHint(home) + '，重扫一次；'
     + '如果刚改过权限，记得**发新版**才生效。',
   );
 }
@@ -264,7 +264,7 @@ export class FeishuChannel extends ChannelService {
       off();
       this.off = undefined;
       // 官方那句是英文行话，且不说怎么办 —— 包一层（见 connectFailed）
-      throw connectFailed(error);
+      throw connectFailed(error, this.home);
     }
     this.running = true;
     const me = this.lark.botIdentity;
@@ -480,7 +480,7 @@ export class FeishuChannel extends ChannelService {
         detail: '还没有填 app_id / app_secret',
         // 出路必须是**真会发生**的那件事：会开二维码的是探针，不是 `butler run`。
         // 而且命令要按这个包实际装在哪儿给 —— 见 `scanHint`。
-        fix: `先${scanHint()}（会把凭据装好）；`
+        fix: `先${scanHint(this.home)}（会把凭据装好）；`
           + '也可以去 open.feishu.cn 建「企业自建应用」抄下 app_id / app_secret，等 `butler run` 提示时粘贴',
       });
       out.push({ name: '飞书去重表', ok: true, detail: dedupAt });

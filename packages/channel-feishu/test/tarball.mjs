@@ -61,7 +61,7 @@ test('★★ 打包产物里那份探针能跑，提示里那条路径也真的�
     `提示该指向**这份副本**自己的探针，实际是 ${probe}`,
   );
   assert.ok(existsSync(probe), `提示里那条命令必须真能跑：${probe}`);
-  const hint = mod.scanHint();
+  const hint = mod.scanHint(mod.defaultHome());
   assert.match(hint, /--save/, '提示要带 --save —— 不带只会连一下，不会把凭据存下来');
   assert.ok(hint.includes(probe), '提示里印的正是这条路径');
 });
