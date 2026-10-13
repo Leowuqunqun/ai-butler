@@ -767,6 +767,35 @@ README / `docs/EVIDENCE.md`。）
 
 反验：把 `notInstalled` 那句判断去掉（并确认变异在位）→ 两条断言各自变红。
 
+### 第 26 轮：发一个**带飞书**的版本 —— 不然"重装一遍"只是把人送回原地
+
+第 25 轮把"重跑安装命令就能升级"写进了手册**和** CLI 的错误信息里。这轮去核实这句话，发现它
+**今天是假的**：
+
+- 仓库里唯一的 release 是 **v0.1.0**（建于 10-12），而 `channel-feishu` 第一次进仓库是 **10-13**
+  ⇒ v0.1.0 的 tag 里**没有**这个包，`releases/latest/download/install.sh` 取回来的还是那份旧的。
+- 用户那台的 `prefix` 正是 10-12 装的 —— 他照着升级，**装回来的是同一个东西**，一点变化都没有。
+
+顺带核清两件机制上的事（都没问题）：打包脚本是 `for d in packages/*/`（**全带上** ✓，我发的这个包里
+`butler-channel-feishu-0.2.0.tgz` 在 ✓，探针 `probe/{save,smoke}.mjs,run.sh` 也打进 tarball 了 ✓）；
+`install.sh` **没有**"已装就跳过"的判断，重跑会覆盖成新的 ✓。
+
+这轮做的事：
+
+1. 全仓版本 0.1.0 → **0.2.0**（17 个 package.json）+ README 双语里那条写死 `v0.1.0` 的插件链接。
+2. 打包并**发布 v0.2.0**（installer 包 + `-latest` 别名 + 两个 `.sha256` + `install.sh` + dsh 插件包）。
+   发完**从 GitHub 上把 `-latest` 下载回来验**：里面的 tarballs 有 `butler-channel-feishu` ✓。
+3. 两处**过期的数字/说法**一并修准（它们都会印给用户看）：
+   - `install.sh` 的 `--help` 说"全部 **15** 个 tarball" —— 现在是 17；
+   - "离线装 / 离线可装"说得太满：**我们的**包确实不去 npm 取，但第三方依赖（cordis、
+     `@larksuite/channel`）是 npm 按常规去下的 —— 机器不能上网时那一步会失败。
+4. `docs/GETTING-STARTED.md`（**跟着安装包发给用户**的那份）加了「想用飞书收信？」一节：
+   先 `butler doctor | grep -A1 channel` 确认这台的版本里有这个包 → `init --im feishu` → `run`；
+   并老实写着"飞书这条通道**还没做过真机验收**"。
+
+这轮的产物是**发布**而不是代码，所以没有新用例（全仓仍是 937）。发布本身可验证：把 release 上的
+`butler-installer-latest.tar.gz` 下载回来解包，看 `tarballs/` 里有没有 `butler-channel-feishu`。
+
 ---
 
 ## 十二、真机验收手册（给"第一枪"用）

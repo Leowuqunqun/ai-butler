@@ -66,8 +66,8 @@ Command-line details live in [`packages/cli`](packages/cli) (937 offline tests a
 **Already running DSH and only want a WeChat channel inside it?** Then skip the whole stack above — the built bundle ships in the Release, and one command installs it into a profile:
 
 ```sh
-curl -fsSL https://github.com/Leowuqunqun/ai-butler/releases/download/v0.1.0/butler-dsh-plugin-0.1.0.tar.gz | tar xz
-dsh plugin --profile web add "file:$(pwd)/butler-dsh-plugin-0.1.0/plugin"
+curl -fsSL https://github.com/Leowuqunqun/ai-butler/releases/download/v0.2.0/butler-dsh-plugin-0.2.0.tar.gz | tar xz
+dsh plugin --profile web add "file:$(pwd)/butler-dsh-plugin-0.2.0/plugin"
 ```
 
 Config (`cwd` / `owner` / QR port / `autostart`), what it does **not** do, and how to verify it yourself first → [**dsh-plugin/README.md**](packages/dsh-plugin/README.md)

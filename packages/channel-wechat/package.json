@@ -1,6 +1,6 @@
 {
   "name": "wechat-agent-bridge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "把微信变成你的 agent 遥控器 —— 个人微信扫码登录，长轮询收消息，交给可插拔的 agent 后端执行，支持回文本与文件",
   "type": "module",
   "license": "MIT",

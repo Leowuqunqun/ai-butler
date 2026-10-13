@@ -5,7 +5,7 @@
 # 里面是：
 #   install.sh        引导器（查/下 Node → 装进私有前缀 → 起引导页）
 #   install.command   macOS 上双击就能跑（⚠️ 第一次会被安全机制拦，右键→打开）
-#   tarballs/*.tgz    11 个包，**离线可装**（`workspace:` 已被 pnpm pack 换成真版本号）
+#   tarballs/*.tgz    全部包，**离线可装**（`workspace:` 已被 pnpm pack 换成真版本号）
 #   README.txt        给小白看的三句话
 #
 # 为什么要打 tarball 而不是"让他 npm i -g"：我们的包还没发布到 npm（那个名字被
@@ -110,7 +110,7 @@ AI 管家 —— 用微信遥控你的电脑
 
      ~/.butler/prefix/bin/butler doctor
 
-（这份包是 ${NAME}，版本 ${VERSION}，共 ${COUNT} 个包，离线可装。）
+（这份包是 ${NAME}，版本 ${VERSION}，共 ${COUNT} 个包，装成一棵树。）
 EOF
 
 # ⚠️ 别把"打包时所在的那个目录"写进给小白看的说明里 —— 他拿到的是**解压出来的另一个地方**，

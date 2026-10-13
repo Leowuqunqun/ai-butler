@@ -1,6 +1,6 @@
 {
   "name": "@butler/seam-approval",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "ctx.approval 能力位：一次性的\"允许/不许\"决定（超时 = 不许）",
   "type": "module",
   "license": "MIT",

@@ -1,6 +1,6 @@
 {
   "name": "@butler/dsh-plugin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "把微信接进 DSH：手机上说的话进 DSH 会话，DSH 的回复回到微信（一个 DSH bundle）",
   "type": "module",
   "license": "MIT",

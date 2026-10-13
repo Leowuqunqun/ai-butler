@@ -54,8 +54,8 @@ curl -fsSL https://github.com/Leowuqunqun/ai-butler/releases/latest/download/ins
 **已经在跑 DSH，只想给 DSH 加一条微信通道？** 不用装上面这一整套 —— 打包好的 bundle 就在 Release 里，一条命令装进某个 profile：
 
 ```sh
-curl -fsSL https://github.com/Leowuqunqun/ai-butler/releases/download/v0.1.0/butler-dsh-plugin-0.1.0.tar.gz | tar xz
-dsh plugin --profile web add "file:$(pwd)/butler-dsh-plugin-0.1.0/plugin"
+curl -fsSL https://github.com/Leowuqunqun/ai-butler/releases/download/v0.2.0/butler-dsh-plugin-0.2.0.tar.gz | tar xz
+dsh plugin --profile web add "file:$(pwd)/butler-dsh-plugin-0.2.0/plugin"
 ```
 
 配置（`cwd` / `owner` / 扫码端口 / `autostart`）、它不做什么、以及怎么先自己验一遍 → [**dsh-plugin/README.md**](packages/dsh-plugin/README.md)

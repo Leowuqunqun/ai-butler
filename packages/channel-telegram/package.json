@@ -1,6 +1,6 @@
 {
   "name": "@butler/channel-telegram",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "ctx.channel 的第二个实现：Telegram（长轮询，零第三方依赖）—— 同时是通道层抽象的一次验证",
   "type": "module",
   "license": "MIT",

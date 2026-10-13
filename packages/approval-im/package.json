@@ -1,6 +1,6 @@
 {
   "name": "@butler/approval-im",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "ctx.approval 的第一个实现：把「要动你的电脑」这件事问进对话里，超时 = 不许",
   "type": "module",
   "license": "MIT",

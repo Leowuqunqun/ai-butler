@@ -88,7 +88,8 @@ usage() {
 用法：sh install.sh [选项]
 
   手上只有这一个文件也行（比如 curl … | sh）—— 它会自己去 GitHub Release 取分发包，
-  取来的包里是全部 15 个 tarball，离线装。
+  取来的包里是全部 17 个 tarball —— 我们自己的包都从这儿装，不用去 npm 取；
+  第三方依赖（cordis 这些）npm 会按常规去下载，机器不能上网时那一步会失败。
 
   --dry-run          只说要干什么，一个字节都不动
   --no-start         装好但不启动
@@ -233,7 +234,7 @@ else
   say "② 手上只有 install.sh，从 Release 取分发包：${RELEASE_ASSET}"
   if [ "$DRY" = 1 ]; then
     say "  [dry-run] 下 ${RELEASE_BASE}/${RELEASE_ASSET}（连 .sha256 一起；校验不过就一个字节都不装）"
-    say "  [dry-run] 解开 → 用里面的 tarballs 装（离线）"
+    say "  [dry-run] 解开 → 用里面的 tarballs 装（装成一棵树）"
   else
     pick_fetcher
     TMP="${BUTLER_DIR}/tmp-install"
@@ -274,7 +275,7 @@ elif [ -n "${FROM_DIR}" ]; then
   if ! ls "${FROM_DIR}"/*.tgz >/dev/null 2>&1; then
     die "${FROM_DIR} 里没有 .tgz —— 分发包是不是没解开完整？"
   fi
-  say "② 装 AI 管家：从 ${FROM_DIR}（$(ls "${FROM_DIR}"/*.tgz | wc -l | tr -d ' ') 个包，离线可装）"
+  say "② 装 AI 管家：从 ${FROM_DIR}（$(ls "${FROM_DIR}"/*.tgz | wc -l | tr -d ' ') 个包，装成一棵树）"
   run env HOME="${HOME_DIR}" npm_config_cache="${BUTLER_DIR}/npm-cache" \
     "${NODE_BIN}" "${NPM_CLI}" install --prefix "${APP}" --no-audit --no-fund "${FROM_DIR}"/*.tgz
 else

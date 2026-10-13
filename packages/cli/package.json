@@ -1,6 +1,6 @@
 {
   "name": "@butler/cli",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AI 管家的命令行入口：读配置、拉起 cordis 容器、上线",
   "type": "module",
   "license": "MIT",

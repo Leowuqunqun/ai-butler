@@ -1,6 +1,6 @@
 {
   "name": "@butler/seam-channel",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "通道能力位（ctx.channel）：只声明接口，不实现。微信/Telegram/飞书等通道继承它接入",
   "type": "module",
   "license": "MIT",

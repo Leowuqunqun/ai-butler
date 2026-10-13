@@ -1,6 +1,6 @@
 {
   "name": "@butler/agent-dsh",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "ctx.agent 的实现：调用 DSH 本体的 headless agent 当大脑",
   "type": "module",
   "license": "MIT",

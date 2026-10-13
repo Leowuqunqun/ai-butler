@@ -1,6 +1,6 @@
 {
   "name": "@butler/seam-memory",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "记忆能力位（ctx.memory）：只声明接口，不实现。文件/SQLite 等存储继承它接入",
   "type": "module",
   "license": "MIT",

@@ -1,6 +1,6 @@
 {
   "name": "@butler/link-tailscale",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "ctx.link 的实现：尾巴网络（Tailscale）链路。换掉的是「怎么找到那台机器」，线上跑的还是 link-lan 那套 HTTP + SSE",
   "type": "module",
   "license": "MIT",
