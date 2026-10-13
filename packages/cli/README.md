@@ -3,7 +3,7 @@
 命令行入口。**把配置变成一个真的跑起来的管家。**
 
 > 你是**要给一个不懂技术的人装上**（或者自己第一次装）？先看
-> [从零到「用微信遥控这台电脑」：三步](../../docs/GETTING-STARTED.md) —— 那份是给用户看的，
+> [从零到「用微信遥控这台电脑」：三步](https://github.com/Leowuqunqun/ai-butler/blob/main/docs/GETTING-STARTED.md) —— 那份是给用户看的，
 > 这一份是给要改它的人看的。
 
 ```bash
@@ -41,7 +41,7 @@ butler doctor                # 四个能力位照旧；通道自己的自检也�
 核心层和 doctor 一个字没改
 （`test/switch-im.mjs` 里有两条断言专门钉这件事，其中一条是"`packages/core/src`
 里不许出现任何通道包的名字"）。Telegram 通道自己的说明见
-[`packages/channel-telegram`](../channel-telegram)。
+[`packages/channel-telegram`](https://github.com/Leowuqunqun/ai-butler/tree/main/packages/channel-telegram)。
 
 ## `butler init` —— 第一次用，你什么都不用填
 
@@ -293,8 +293,8 @@ AI 管家自检
 
 ### 为什么自检要问插件自己
 
-`check?()` 是 seam 上的**可选**约定（见 [seam-channel](../seam-channel/README.md) /
-[seam-agent](../seam-agent/README.md)）。只有实现自己知道该验什么：微信通道知道
+`check?()` 是 seam 上的**可选**约定（见 [seam-channel](https://github.com/Leowuqunqun/ai-butler/blob/main/packages/seam-channel/README.md) /
+[seam-agent](https://github.com/Leowuqunqun/ai-butler/blob/main/packages/seam-agent/README.md)）。只有实现自己知道该验什么：微信通道知道
 登录态存在哪，dsh 知道它要哪个二进制和哪个 patch 文件，exec 知道 `argv[0]` 在不在。
 让 doctor 从外面猜，就得把每个实现的配置 schema 抄一份 —— 维护灾难，也是层次错误。
 

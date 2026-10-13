@@ -1,6 +1,6 @@
 # @butler/memory-file
 
-[`ctx.memory`](../seam-memory) 的第一个实现：**一个 JSON 文件**。
+[`ctx.memory`](https://github.com/Leowuqunqun/ai-butler/tree/main/packages/seam-memory) 的第一个实现：**一个 JSON 文件**。
 
 ```json
 { "version": 1,

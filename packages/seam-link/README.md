@@ -8,8 +8,8 @@
 
 | 实现 | 名册从哪来 | 适合 |
 | --- | --- | --- |
-| [`@butler/link-lan`](../link-lan) | 配置里手写的 `peers` | 两台机器在同一个 WiFi。零依赖 |
-| [`@butler/link-tailscale`](../link-tailscale) | 问 Tailscale：谁在我的网络里 | 中枢和节点不在一个网络里。**线上跑的还是 link-lan 那套协议** |
+| [`@butler/link-lan`](https://github.com/Leowuqunqun/ai-butler/tree/main/packages/link-lan) | 配置里手写的 `peers` | 两台机器在同一个 WiFi。零依赖 |
+| [`@butler/link-tailscale`](https://github.com/Leowuqunqun/ai-butler/tree/main/packages/link-tailscale) | 问 Tailscale：谁在我的网络里 | 中枢和节点不在一个网络里。**线上跑的还是 link-lan 那套协议** |
 
 两个实现一起看，能看清这个 seam 到底分叉在哪：**分叉的是"怎么找到那台机器"，
 不该分叉的是线上协议**。第二个实现只多了"问名册"这一步，

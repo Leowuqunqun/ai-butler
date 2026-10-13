@@ -31,4 +31,4 @@ dsh 子进程里**（dsh 自己的审批 seam 负责发问），不在管家进�
 
 `by` 说明这个结论是谁下的：`'owner'`（主人）/ `'timeout'`（到点了）/ `'withdrawn'`（对方撤回了）。
 
-实现见 [`@butler/approval-im`](../approval-im/README.md)（默认，问进对话里）。
+实现见 [`@butler/approval-im`](https://github.com/Leowuqunqun/ai-butler/blob/main/packages/approval-im/README.md)（默认，问进对话里）。

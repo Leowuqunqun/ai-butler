@@ -35,7 +35,7 @@ jobs:
       - name: 类型检查
         run: pnpm typecheck
 
-      - name: 文档体检（断链 / 锚点 / 引用了被 gitignore 的文件）
+      - name: 文档体检（断链 / 锚点 / 被 gitignore / 出包文档的链接读者够得着 / 本仓地址指得到）
         run: pnpm check:docs
 
       - name: 打包自检（装出来的包是不是完整的）

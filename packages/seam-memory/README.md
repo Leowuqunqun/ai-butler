@@ -46,4 +46,4 @@ export default class MyMemory extends MemoryService {
 
 起步 JSON 文件、记忆多了换 SQLite（见 `docs/ARCH-technical.md` 的存储一节）——
 **已经看得见第二个实现**，所以它够格做 seam。这也是这个项目一直守的那条：
-只有一个实现的时候不做抽象。第一个实现是 [`@butler/memory-file`](../memory-file)。
+只有一个实现的时候不做抽象。第一个实现是 [`@butler/memory-file`](https://github.com/Leowuqunqun/ai-butler/tree/main/packages/memory-file)。

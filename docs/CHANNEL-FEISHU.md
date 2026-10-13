@@ -1705,6 +1705,52 @@ disposer 真管用）；⑤ **`boot()` 里已经挂好了**（装完插件直接
 
 **没验**：真机验收（真飞书企业里扫码、长连接、回一条消息）—— 仍然卡在这里，目标继续 active。
 
+### 第 50 轮：出包文档里的链接，读者够不够得着
+
+第 47 轮那条规矩是"**会打印给用户看的话**里不许出现仓库路径"。这一轮换了个读者：**拿到这个包的人**。
+包的 README 在 GitHub 上点得开，但在 **npm 页面**上，相对链接是按**包**解析的 —— `../cli`、
+`../../docs/GETTING-STARTED.md`、`test/fixtures/consumer.ts` 到了那边全是死链。
+
+先量：把每个 `packages/*/package.json` 的 `files` 展开成"这个包真发什么"（npm 还一定会带
+README/LICENSE/package.json），再拿包 README 里的相对链接去对。**14 处**，散在 8 个包的 README 里：
+
+| 文件 | 那几处 |
+| --- | --- |
+| `channel-telegram/README.md` | `../cli` |
+| `channel-wechat/README.md` | `../seam-channel/README.md`、`../seam-channel`、`test/fixtures/consumer.ts` |
+| `cli/README.md` | `../../docs/GETTING-STARTED.md`、`../channel-telegram`、`../seam-channel/README.md`、`../seam-agent/README.md` |
+| `dsh-plugin/README.md` | `scripts/dsh-probe/` |
+| `memory-file/README.md` | `../seam-memory` |
+| `seam-approval/README.md` | `../approval-im/README.md` |
+| `seam-link/README.md` | `../link-lan`、`../link-tailscale` |
+| `seam-memory/README.md` | `../memory-file` |
+
+全换成完整地址（`blob` 给文件、`tree` 给目录）—— 跟第 47 轮同一套改法：**指向读者够得着的地方**。
+
+⚠️ 这里有个自己给自己下的套：我**刚写完 14 个 GitHub 地址**，而它们只是字符串 —— 写错一个字符，
+本地什么都不会响，读者点开才是 404。而第 41 轮早就把这条规矩写下来了（"手册那个地址指向的文件必须
+真在仓库里"）。于是顺手把它也做成检查：本仓的 `blob`/`tree` 地址，路径必须真在，而且种类要对
+（`blob` ⇒ 文件、`tree` ⇒ 目录 —— 差一个词就是 404）。这条**当场**验了我写的那 14 个地址。
+
+⚠️ 还有一条第 47/49 轮的老教训要用上："哪些 md 算出了包"**不写死清单**，从每个 `package.json` 的
+`files` 现算 —— 前两次都是"范围是假设的"（漏 `.mjs`、漏 heredoc）。
+
+**验证**（自检 14 条 + 三道真文件控制组，都用 sha 断言"确实改到了"）：
+
+| 控制组 | 期望 | 实测 |
+| --- | --- | --- |
+| 把 `seam-memory` 的地址改回 `../memory-file` | 报出该文件 | ✅ `packages/seam-memory/README.md` |
+| `GETTING-STARTED.md` 写错一个字符 | 报出该文件 | ✅ `packages/cli/README.md` |
+| 把 `blob` 写成 `tree`（种类不对） | 同样报出 | ✅ 同上 |
+| 去掉"跑到包外面"那一支（规则内部） | 自检点名 | ✅ `../b/README.md` 那条 |
+| 不再问"这个路径在不在"（规则内部） | 自检点名 | ✅ 三条 URL 用例 |
+
+**没做的**：不查指向**别的仓库**的地址（那是外部世界，得联网才知道）；只认 `main` 这一支，本仓的
+`tag` 链接不在范围里（要翻 git 历史，不值当）；自检里的"路径在不在"是用**假仓库**回答的，
+真实现那条 `reallyExists` 由上面第三道真文件控制组看着 —— 这两者要是哪天走岔了，自检看不出来。
+
+**没验**：真机验收（真飞书企业里扫码、长连接、回一条消息）—— 仍然卡在这里，目标继续 active。
+
 ## 十二、真机验收手册（给"第一枪"用）
 
 三分钟，两条命令。**这一步只能人来做**（要手机扫码），所以把"看到什么 → 说明什么"

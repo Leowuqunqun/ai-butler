@@ -124,7 +124,7 @@ bash scripts/dsh-probe/run.sh                 # ② 真机：接线层（发行�
 
 **但逻辑对不等于接线对** —— 我们调 DSH 的那几行（`agents.create/resume/get`、
 `followup`、`whenIdle`、`session/event`、`installModelSelection`）到底是不是这个语义，
-只有真跑一次才知道。所以有第二个：[`scripts/dsh-probe/`](scripts/dsh-probe/)。
+只有真跑一次才知道。所以有第二个：[`scripts/dsh-probe/`](https://github.com/Leowuqunqun/ai-butler/tree/main/packages/dsh-plugin/scripts/dsh-probe)。
 它在一个**临时 DSH home** 里建 profile（不碰你正在用的 `~/.dsh`），
 把插件和一个探针一起装进去，模型指到本机假端点（不出网、不花钱），然后：
 

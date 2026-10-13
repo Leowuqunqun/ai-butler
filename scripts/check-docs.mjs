@@ -14,11 +14,18 @@
  * 第 3 条是踩出来的：根 README 曾经引用 `docs/diagrams/*.png` 当配图，
  * 而 `.gitignore` 里恰好有 `docs/diagrams/*.png`（那张图只该在聊天里看）。
  * 本地一切正常，推到 GitHub 上配图全裂。所以这个检查必须带上 gitignore 判定。
+ *
+ * 第 4 条是第 50 轮补的：**出包出去的 md 里，相对链接必须指向"同一个包里也出包"的东西**。
+ * 包的 README 在 GitHub 上点得开，但在 **npm 页面**上相对链接是按"包"解析的 ——
+ * `../cli`、`../../docs/GETTING-STARTED.md`、`test/fixtures/x.ts` 到了那边全是死链。
+ * 同一个毛病在第 47 轮出现过一次（当时是**会打印给用户看的话**里写仓库路径），
+ * 这次换了个读者：拿到这个包的人。指向仓库别处一律用完整地址。
+ * ⚠️ "哪些 md 算出了包"不写死清单，从每个 package.json 的 `files` 现算（见 shippedSetOf）。
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, relative, resolve } from 'node:path';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { dirname, join, normalize, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -69,6 +76,149 @@ function anchorsOf(text) {
   }
   return out;
 }
+
+// ───────────── ④ 出包文档：链接得对着"拿到这个包的人"说 ─────────────
+
+/** 递归列出目录下所有文件（绝对路径） */
+function walkFiles(dir, out = []) {
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) walkFiles(p, out);
+    else out.push(p);
+  }
+  return out;
+}
+
+/**
+ * 这个包**实际发出去**的文件（相对包根）。
+ *
+ * npm 一定会带 `README*` / `LICENSE*` / `package.json`，其余按 `files` 展开。
+ * ⚠️ 不写死清单，从 package.json 现算 —— 第 47 轮漏了 17 个 `.mjs`、第 49 轮漏了整个 heredoc，
+ * 两次都是"范围是假设的"。这里让范围由数据决定。
+ */
+function shippedSetOf(pkgRoot) {
+  const abs = resolve(ROOT, pkgRoot);
+  const pkgJson = JSON.parse(readFileSync(join(abs, 'package.json'), 'utf8'));
+  const out = new Set(['package.json']);
+  for (const name of readdirSync(abs)) {
+    if (/^(README|LICENSE|LICENCE|CHANGELOG)(\.|$)/i.test(name)) out.add(name);
+  }
+  for (const entry of pkgJson.files ?? []) {
+    const target = join(abs, entry);
+    if (!existsSync(target)) continue;
+    if (statSync(target).isFile()) out.add(entry);
+    else for (const f of walkFiles(target)) out.add(join(entry, relative(target, f)));
+  }
+  return out;
+}
+
+/**
+ * 出包文档里"指向没出包的东西"的相对链接。**纯函数**（shipped 由调用方给），
+ * 所以规则自检能直接喂它 —— 第 48/49 轮那套。
+ */
+function shippedDocViolations(relFile, text, shipped) {
+  const parts = relFile.split('/'); // packages/<name>/…
+  const pkgRoot = `${parts[0]}/${parts[1]}`;
+  const hits = [];
+  for (const m of text.matchAll(/!?\[[^\]]*\]\(([^)\s]+)\)/g)) {
+    const raw = m[1];
+    if (/^(https?:|mailto:|#)/.test(raw)) continue; // 完整地址/锚点：读者够得着
+    const path = raw.split('#')[0];
+    if (!path) continue;
+    const target = normalize(join(dirname(relFile), path)); // 相对仓库根
+    if (!target.startsWith(`${pkgRoot}/`)) {
+      hits.push(raw); // 跑到包外面去了
+      continue;
+    }
+    if (!shipped.has(target.slice(pkgRoot.length + 1))) hits.push(raw);
+  }
+  return hits;
+}
+
+/**
+ * 指向**本仓**的完整地址，路径得真在仓库里（`blob` ⇒ 文件，`tree` ⇒ 目录）。
+ *
+ * 第 41 轮把这条规矩写进过文档：「手册那个地址指向的文件必须真在仓库里」。这次让它是个**检查** ——
+ * 而且第 50 轮我自己刚写了 14 个这种地址，正好需要有人盯着（写错一个字符，读者点开就是 404，
+ * 而本地什么都不会响）。只认 `main` 这一支：认 tag 就得联网或翻 git 历史，不值当。
+ *
+ * `exists(kind, path)` 由调用方注入 —— 纯函数，自检可以喂假数据（第 48/49 轮那套）。
+ */
+const SELF_REPO = /^https:\/\/github\.com\/Leowuqunqun\/ai-butler\/(blob|tree)\/main\/([^)#]+)/;
+
+function selfRepoUrlViolations(text, exists) {
+  const hits = [];
+  for (const m of text.matchAll(/!?\[[^\]]*\]\(([^)\s]+)\)/g)) {
+    const mm = SELF_REPO.exec(m[1]);
+    if (!mm) continue;
+    if (!exists(mm[1], mm[2])) hits.push(m[1]);
+  }
+  return hits;
+}
+
+/** 这些是**规则自己的承诺**（改规则就把这里一起改，改不了说明你改的是承诺） */
+const SELF_TEST = [
+  { why: '指向别的包（npm 读者够不着）', file: 'packages/a/README.md', link: '../b/README.md', shipped: ['README.md'], want: 1 },
+  { why: '指向仓库根（更够不着）', file: 'packages/a/README.md', link: '../../docs/x.md', shipped: ['README.md'], want: 1 },
+  { why: '同包内、也出包', file: 'packages/a/README.md', link: 'docs/x.md', shipped: ['README.md', 'docs/x.md'], want: 0 },
+  { why: '同包内、没出包（test/ 里的）', file: 'packages/a/README.md', link: 'test/x.ts', shipped: ['README.md'], want: 1 },
+  { why: '完整地址永远算够得着', file: 'packages/a/README.md', link: 'https://github.com/o/r/blob/main/docs/x.md', shipped: ['README.md'], want: 0 },
+  { why: '同文件内的锚点不算跨文件', file: 'packages/a/README.md', link: '#小节', shipped: ['README.md'], want: 0 },
+  { why: '子目录里的 md 也按包根算', file: 'packages/a/docs/y.md', link: '../../b/z.md', shipped: ['docs/y.md'], want: 1 },
+];
+
+/** 本仓地址那条的承诺：blob 要指向文件、tree 要指向目录，都得真在 */
+const URL_TEST = [
+  { why: 'blob 指向真文件', url: 'https://github.com/Leowuqunqun/ai-butler/blob/main/README.md', want: 0 },
+  { why: 'blob 指向不存在的路径', url: 'https://github.com/Leowuqunqun/ai-butler/blob/main/docs/nope.md', want: 1 },
+  { why: 'blob 写成了目录（差一个词）', url: 'https://github.com/Leowuqunqun/ai-butler/blob/main/packages/cli', want: 1 },
+  { why: 'tree 指向真目录', url: 'https://github.com/Leowuqunqun/ai-butler/tree/main/packages/cli', want: 0 },
+  { why: 'tree 写成了文件', url: 'https://github.com/Leowuqunqun/ai-butler/tree/main/README.md', want: 1 },
+  { why: '别人的仓库不管（那是外部世界）', url: 'https://github.com/o/r/blob/main/nope.md', want: 0 },
+  { why: '本仓的 tag 链接不在范围里', url: 'https://github.com/Leowuqunqun/ai-butler/blob/v0.2.1/README.md', want: 0 },
+];
+
+/** 自检用的假仓库：路径 → 是文件还是目录。谓词按它回答，跟真实现同一套语义 */
+const FAKE_REPO = { 'README.md': 'file', 'packages/cli': 'dir' };
+const fakeExists = (urlKind, path) => {
+  const kind = FAKE_REPO[path];
+  if (!kind) return false;
+  return urlKind === 'blob' ? kind === 'file' : kind === 'dir';
+};
+
+function runSelfTest() {
+  const bad = [
+    ...SELF_TEST.map((c) => ({
+      ...c,
+      got: shippedDocViolations(c.file, `[t](${c.link})`, new Set(c.shipped)).length,
+      shown: `${c.file} → ${c.link}`,
+    })),
+    ...URL_TEST.map((c) => ({
+      ...c,
+      got: selfRepoUrlViolations(`[t](${c.url})`, fakeExists).length,
+      shown: c.url,
+    })),
+  ].filter((c) => c.got !== c.want);
+
+  if (!bad.length) return;
+  console.error('文档体检：**规则自己坏了**（不是仓库里的文档有问题）。\n');
+  for (const c of bad) {
+    console.error(`  ${c.why}：应该 ${c.want} 处，实际 ${c.got} 处`);
+    console.error(`    ${c.shown}`);
+  }
+  console.error('\n改法：这是 scripts/check-docs.mjs 里 shippedDocViolations / selfRepoUrlViolations');
+  console.error('的规则被改动了。要是故意放宽/收紧，请把 SELF_TEST / URL_TEST 一起改，');
+  console.error('并在 docs/CHANNEL-FEISHU.md 里写清楚为什么。');
+  process.exit(1);
+}
+
+if (process.argv.includes('--self-test')) {
+  runSelfTest();
+  console.log(`文档体检：规则自检 ${SELF_TEST.length + URL_TEST.length} 条 → ✅ 规则本身是好的`);
+  process.exit(0);
+}
+
+runSelfTest(); // 先确认"这把尺子"是好的，再拿它量仓库
 
 let broken = 0, ignored = 0, badAnchor = 0, checked = 0, oddFence = 0;
 const problems = [];
@@ -128,6 +278,47 @@ for (const file of files) {
         badAnchor++;
       }
     }
+  }
+}
+
+// ───────────── ④ 出包文档里指向没出包的东西（范围从 package.json 现算） ─────────────
+
+let shippedBad = 0;
+const shippedCache = new Map();
+for (const file of files) {
+  const m = /^packages\/([^/]+)\//.exec(file);
+  if (!m) continue;
+  const pkgRoot = `packages/${m[1]}`;
+  if (!shippedCache.has(pkgRoot)) shippedCache.set(pkgRoot, shippedSetOf(pkgRoot));
+  const shipped = shippedCache.get(pkgRoot);
+  if (!shipped.has(relative(pkgRoot, file))) continue; // 这份 md 自己就不出包（比如 test/ 里的）
+  const text = readFileSync(resolve(ROOT, file), 'utf8');
+  for (const raw of shippedDocViolations(file, text, shipped)) {
+    problems.push(
+      `❌ 出包文档里指向了没出包的东西  ${file}\n       → ${raw}\n` +
+        '       （npm 页面上的相对链接是按"包"解析的，跨包的相对路径到了那边就是死链；换完整地址）',
+    );
+    shippedBad++;
+  }
+}
+
+// ───────────── ⑤ 指向本仓的完整地址，路径得真在（第 41 轮写下的规矩，第 50 轮做成检查） ─────────────
+
+let selfUrlBad = 0;
+/** blob ⇒ 得是文件；tree ⇒ 得是目录 */
+const reallyExists = (kind, path) => {
+  const abs = resolve(ROOT, path);
+  if (!existsSync(abs)) return false;
+  return kind === 'blob' ? statSync(abs).isFile() : statSync(abs).isDirectory();
+};
+for (const file of files) {
+  const text = readFileSync(resolve(ROOT, file), 'utf8');
+  for (const url of selfRepoUrlViolations(text, reallyExists)) {
+    problems.push(
+      `❌ 指向本仓的完整地址，在仓库里找不到  ${file}\n       → ${url}\n` +
+        '       （本地看着没问题是因为它只是个字符串；推上去读者点开就是 404）',
+    );
+    selfUrlBad++;
   }
 }
 
@@ -221,7 +412,7 @@ if (problems.length) console.log(`${problems.join('\n')}\n`);
 console.log(
   `检查 ${files.length} 个 md、${checked} 个链接/图片、${pairs.length} 对双语 → ` +
   (problems.length
-    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
-    : '✅ 链接有效、都在版本库里、围栏成对、双语结构对齐'),
+    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}、本仓地址 ${selfUrlBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
+    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着、本仓地址指得到、双语结构对齐（规则自检 ${SELF_TEST.length + URL_TEST.length} 条通过）`),
 );
 process.exit(problems.length ? 1 : 0);

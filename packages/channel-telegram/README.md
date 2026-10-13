@@ -64,7 +64,7 @@ getUpdates request`）。直接抛出去等于没抛，所以按错误码翻成�
 2. ~~**`botToken` 得自己填一行配置。**~~ **已收掉**：`butler run` 现在会起引导页
    问你要那串 token（页面里 @BotFather 是能点的链接），存进 `~/.butler/state/secrets.json`
    （0600）。手写进 `config` 仍然可以，而且**优先级最高** —— 见
-   [`packages/cli`](../cli) 的「凭据都在哪」那一节。
+   [`packages/cli`](https://github.com/Leowuqunqun/ai-butler/tree/main/packages/cli) 的「凭据都在哪」那一节。
    （微信那条路是扫码：同样不用填任何东西，只是形式不同。）
    换一个机器人（或者在 @BotFather 那边 `/revoke` 过之后）：`butler run --again`。
 

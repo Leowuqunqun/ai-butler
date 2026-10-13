@@ -293,7 +293,7 @@ await ctx.plugin(WechatChannel, { home: '/data', qrPage: false });
 - **这个插件不是权限门。** 配置里那个 `allowFrom` 只是粗筛，
   真正的门（谁能让这台电脑干活）在核心层。没接核心层之前不要把它暴露出去。
 
-契约本身在 [`@butler/seam-channel`](../seam-channel/README.md)，
+契约本身在 [`@butler/seam-channel`](https://github.com/Leowuqunqun/ai-butler/blob/main/packages/seam-channel/README.md)，
 想接别的 IM（Telegram、飞书…）看那份文档。
 
 ---
@@ -334,7 +334,7 @@ key 来源 —— 这是协议里最容易写混的一处，细节见
 
 （入站那个 `ref_msg` 我们压成一行纯文本之后走 `InboundMessage.quote` 交给内核 ——
 和 Telegram 的 `reply_to_message` 汇到同一个字段上。**不并进正文**，理由见
-[`seam-channel`](../seam-channel) 的契约注释：引用不能参与路由。）
+[`seam-channel`](https://github.com/Leowuqunqun/ai-butler/tree/main/packages/seam-channel) 的契约注释：引用不能参与路由。）
 
 **只引用、没说话也算内容**：你引用某句话、自己一个字没打（关了 `media` 时引用着一张图
 也是这样），管家会把引用交上去照办 —— 而不是回你一句"这条读不了"。
@@ -445,7 +445,7 @@ cd packages/channel-wechat && node --test test/*.mjs
 - `test/plugin-types.mjs`（6 个）：**防漂移**——手写的 `plugin.d.ts` 跟运行时成员对账
 - `test/ilink.mjs`（4 个）：长轮询能被立刻掐断（停机不干等 40 秒）、超时行为不变
 
-另外 `pnpm typecheck` 会编译 [`test/fixtures/consumer.ts`](test/fixtures/consumer.ts)——
+另外 `pnpm typecheck` 会编译 [`test/fixtures/consumer.ts`](https://github.com/Leowuqunqun/ai-butler/blob/main/packages/channel-wechat/test/fixtures/consumer.ts)——
 一个模拟"核心层怎么用这个通道"的**消费方探针**（只做类型检查，不运行）。
 运行时测试查不出手写 `.d.ts` 的类型错误，得靠它：
 写它的第一版就抓到 `static Config` 被声明成 `unknown`，

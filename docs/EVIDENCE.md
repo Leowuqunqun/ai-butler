@@ -99,6 +99,7 @@ memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 258）。
 | ★ **"会打印给用户看的话里不许出现仓库内路径"，终于有了仓库级检查**（第 41 轮自己写下的"没做的"；第 46 轮刚把"会打印"的集合加宽到 `ctx.logger.*`。做法：**用 TypeScript 语法树认"会打印"的调用**，不用正则 —— 注释里到处都是 `docs/…`、而 `//` 又出现在 `https://…` 里，正则剥注释一定会剥错；认 `console.log/error/warn/info/debug`、`process.stdout/stderr.write`、**logger 家族**（`ctx.logger.x` / `this.ctx.logger?.x` / `this.log(…)`；⚠️ 第 48 轮量出这句**太窄** —— 见下一条）、以及 `.sh` 里的 `echo/printf/step/ok/bad`；`https://…` 里的路径不算。范围按"**谁在看这句话**"划：`packages/*/src` + `packages/*/probe` + `install.sh`，**不查 `scripts/*.sh`** —— 第一次跑报出的 5 处命中全在那儿，那是维护者工具，跑它的人手上就有仓库。⚠️ 后缀还得**齐**：第一版只写 `.ts`，把 `channel-wechat` / `dsh-plugin` 那 17 个 `.mjs`（含 `qr-page.mjs`、`login.mjs` 这种专门印给用户看的）**静默跳过**了 —— 所以配了一条防静默守卫：某个包的 `src/` 一个文件都没收到就报错点名；守卫自己还差点被 `plugin.d.ts` 假绿（纯类型声明满足了"收到文件"） | ✅ `pnpm check:user-facing`（`scripts/check-user-facing.mjs`，CI 里一步）；六道反向验证：`console.log` / `ctx.logger?.info` / `process.stderr.write` / 字符串拼接 / `.sh` 的 `echo` 各报出所在行（`p1.ts:1`、`p3.ts:2`、`p4.ts:1`、`p6.ts:2`、`p5.sh:3`），而同样的话写在 `//` 注释、`/** */` 里以及 `https://…/blob/main/docs/…` 这三种**不报**；盲区与守卫另有两道实测（后缀只留 `.ts` ⇒ 守卫同时点出两个包；排除 `.d.ts` 前只点出一个）；四个 `check:*` 同绿 |
 | ★ **"会打印给用户看的话"那把尺子，量出自己太窄；并且从这一轮起每次自证**（第 47 轮只认 `console.*` + `process.std*.write` + "logger 家族"。这一轮把全仓打印调用**按基名分组数了一遍**（`console` 224、`this` 65、`logger` 19、`opts` 14、`store`/`state`/`res`/`handle` 各 1），才看见漏了两类**真存在**的东西：`packages/cli/src/onboarding.ts` 里 **14 处 `opts.log(…)`** —— 引导页的打印口是**注入进来**的（`log: (line: string) => void`），把地址和提示送到用户眼前的正是它；以及 `channel-wechat/src/login.mjs` 的**裸 `log(…)`**（扫码提示，没有接收者）。`.write` **不能**一起放宽：`handle`/`store`/`state`/`res` 那四处是写流写盘。新规则＝任何 `.log/.info/.warn/.error/.debug(…)` 都算（不看接收者叫什么）＋裸 `log(…)` ＋ `process.stdout/stderr.write`。另外脚本里加了 `SELF_TEST` 15 条与 `--self-test`：正常跑时**先验尺子再量仓库**，尺子坏了报的是"**规则自己坏了（不是仓库里有违规）**"并逐条给出"应该 N 处、实际 M 处"和那段源码） | ✅ 放宽后重扫，仓库**仍然是干净的**（那 20 处新覆盖的行没有违规 —— 所以这一半是**防未来**、不是修现行问题，文档里如实写了）；自检本身被咬过两道：关掉"方法名就是打印"那一支 ⇒ 5 条红（`console.log`/`opts.log`/`ctx.logger`/拼接/模板，各报"实际 0 处"），让 `maskUrls` 失效 ⇒ 只 URL 那条红（报"应该 0 处，实际 1 处"），把 `ok` 从 shell 动词表里删掉 ⇒ 只那条红，还原后 15/15 绿；四个 `check:*` 同绿 |
 | ★ **"会真执行的反引号"那把尺子也量出自己太窄：只认 3 个函数名，而且根本没看 heredoc**（第 30 轮那次事故留了**两道**疤，一道就在 `install.sh` 的 heredoc —— 抬头写着，规则却扫不到；谁删掉 `make-installer-bundle.sh:95` 那个转义反斜杠都不会有人喊。第 49 轮改成**从源码里认**：体内含 `printf`/`echo` 的函数 ＋ 调了它们的**传递闭包**（`die()` 自己一个 `printf` 都没有，但它调 `say()`），于是 `install.sh` 的 `say`/`die`、`make-installer-bundle.sh` 的 `say` 全都进了网；另查**不带引号的 heredoc** 体内的裸反引号（`<<'EOF'` 不展开，整段跳过）。同时补 `SELF_TEST` 10 条与 `--self-test`，再加一条**对账守卫**：源码里数 `name() {` 和取到的函数体对不上就出声） | ✅ 两道**真文件**控制组：删掉 `make-installer-bundle.sh:95` 那道历史疤里的反斜杠 ⇒ 报出 `scripts/make-installer-bundle.sh:95` 那一行；往 `install.sh:340` 的 `say "③ …"` 里塞一对反引号 ⇒ 报出 `install.sh:340`（两次都用 sha 断言"确实改到了文件"，还原后逐字节一致、复跑绿）。规则内部三道：关掉 heredoc 半边 ⇒ 自检点名那条 heredoc 承诺；去掉传递闭包 ⇒ 点名 `die` 那条；退回"用行首 `}` 找函数结尾"的旧写法 ⇒ **自检仍绿、真扫描红**，对账守卫报出 `verify-upgrade.sh` 丢了 `perm butler doctor` 三个函数 —— 那就是它当场抓到的 bug；四个 `check:*` 同绿 |
+| ★ **两份"发出去的东西"里的链接，第一次有人管：包 README 在 npm 上是死链，本仓地址写错也不响**（第 50 轮。① 审计：把每个 `packages/*/package.json` 的 `files` 展开成"这个包真发什么"，再拿包 README 里的相对链接去对 ⇒ **14 处**指向没出包的东西（`../cli`、`../../docs/GETTING-STARTED.md`、`test/fixtures/consumer.ts` …）—— 在 GitHub 上点得开、在 npm 页面上按"包"解析全断。全换成完整地址。② 新规矩：指向**本仓**的 `blob`/`tree` 地址，路径必须真在（`blob` ⇒ 文件、`tree` ⇒ 目录）—— 第 41 轮只把这句话写在文档里，现在它是个检查） | ✅ 规则自检 14 条（新规则两条各 7 条）；**真文件**控制组三道：把 `seam-memory` 的地址改回 `../memory-file` ⇒ 报出该文件；`GETTING-STARTED.md` 写错一个字符 ⇒ 报出 `packages/cli/README.md`；`blob` 写成 `tree` ⇒ 同样报出（种类不对也算）—— 三次都用 sha 断言"确实改到了"、还原后逐字节一致、复跑绿。规则内部两道：去掉"跑到包外面"那一支 ⇒ 自检点名 `../b/README.md`；不再问"这个路径在不在" ⇒ 自检点名三条 URL 用例；四个 `check:*` 同绿 |
 
 ## 最有分量的几条证据
 
@@ -186,6 +187,15 @@ memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 258）。
 
 > `check:docs` 里有一条专门查「**引用了被 gitignore 的文件**」——
 > 本地看着一切正常、推到 GitHub 却是裂图。这类问题不查就一定会漏。
+>
+> ⚠️ **（第 50 轮补）它原来只管"这个文件在不在仓库里"** —— 那对**在仓库里的读者**够，对**拿到这个包的
+> 人**不够：包 README 在 GitHub 上点得开，可 npm 页面上的相对链接是按"包"解析的，`../cli`、
+> `../../docs/GETTING-STARTED.md`、`test/fixtures/x.ts` 到了那边全是死链（量出来 **14 处**，散在 8 个
+> 包的 README 里，都换成 GitHub 地址了）。同一个毛病第 47 轮出现过一次，只是换了读者：那次是
+> **会打印给用户看的话**，这次是**发出去的文件**。另外补了一条：指向**本仓**的完整地址，`blob` 得指向
+> 文件、`tree` 得指向目录，路径要真在 —— 第 41 轮写下的那句"手册那个地址指向的文件必须真在仓库里"，
+> 现在有人管着了。⚠️ 别写死"哪些 md 算出了包"：范围从每个 `package.json` 的 `files` 现算
+> （第 47 轮漏 `.mjs`、第 49 轮漏 heredoc，两次都是"范围是假设的"）。
 >
 > `check:scripts` 也是**被真事故逼出来的**：`step "… `butler run` …"` 那对反引号在双引号里就是
 > **命令替换** —— 命令会在"拼这行标题"的时候**真跑一遍**。它让一个验收脚本卡死 27 分钟，还被误诊了
