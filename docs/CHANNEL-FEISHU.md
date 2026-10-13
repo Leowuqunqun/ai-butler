@@ -285,6 +285,14 @@ M-c 引导页 / `doctor` / 文档 / GETTING-STARTED。
 **还没做**（下一步的顺序）：
 
 1. **真机验收** —— `bash packages/channel-feishu/probe/run.sh`：扫码注册 → 长连接 → 收一条 → 回一条
-2. 接进 CLI（`ImName` 第三个取值 + `secrets` 里的 appId/appSecret + 引导页多问两个字段）
-3. M-b：入站附件下载（官方有 `downloadResourceToFile`，还没接）
-4. 审批卡片 —— 飞书的按钮**能回传**，这是它比微信强的地方，值得单独做
+2. M-b：入站附件下载（官方有 `downloadResourceToFile`，还没接）
+3. 审批卡片 —— 飞书的按钮**能回传**，这是它比微信强的地方，值得单独做
+
+**已经接进 CLI 了**（这条原来列在上面，做完了）：
+
+- `butler init --im feishu` / `butler run --im feishu` 都认
+- 一个包要**两项**凭据（`app_id` + `app_secret`）—— 原来的结构是"一个包一项"，
+  所以扩成了数组：引导页挨个问，**已经存过的那项不重问**，配置里手写过的那项一个字不动
+- 探针加了 `--save`：扫码之后把两个值**按 CLI 认的格式**写进 `<管家>/state/secrets.json`
+  （合并写、0600、原子写、不打印凭据）—— 于是"扫码 → `butler run`"是一条完整路，
+  用户不用手抄任何一串东西。默认写 `~/.butler`；用 `--config` 把家安在别处时加 `--home=`

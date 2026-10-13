@@ -40,19 +40,48 @@ export interface ChannelSecretNeed {
   hint: string;
 }
 
-const NEEDS: Record<string, ChannelSecretNeed> = {
-  '@butler/channel-telegram': {
+/**
+ * 一个包要的凭据，**可能不止一项**。
+ *
+ * 多数通道只要一个 token（Telegram）；飞书要两个（app_id + app_secret）。
+ * 所以这里是数组而不是一项 —— 引导页会挨个问，但**已经存过的那项不会重问**。
+ */
+const NEEDS: Record<string, ChannelSecretNeed[]> = {
+  '@butler/channel-telegram': [{
     channel: 'telegram',
     key: 'botToken',
     label: 'Telegram',
     name: 'Telegram 的 bot token',
     hint: '在 Telegram 里找 @BotFather 发 /newbot 建一个机器人，把它给你的那串 token 贴进来',
-  },
+  }],
+  '@butler/channel-feishu': [
+    {
+      channel: 'feishu',
+      key: 'appId',
+      label: '飞书',
+      name: '飞书应用的 app_id',
+      hint: '两种办法（挑一个）：① 扫码最省事 —— 跑 `bash packages/channel-feishu/probe/run.sh --save`，'
+        + '它不需要开发者后台、不需要公网 IP，扫完直接把两个值存进这台电脑；'
+        + '② 或去 open.feishu.cn 建一个「企业自建应用」，在「凭证与基础信息」里抄下 app_id',
+    },
+    {
+      channel: 'feishu',
+      key: 'appSecret',
+      label: '飞书',
+      name: '飞书应用的 app_secret',
+      hint: '和 app_id 在同一页（「凭证与基础信息」）。扫码那条路会自动填好，不用手抄',
+    },
+  ],
 };
 
-/** 这一行插件需要什么凭据？不需要就返回 `null` */
+/** 这一行插件需要哪些凭据？不需要就返回空数组 */
+export function channelSecretNeeds(row: { name: string }): ChannelSecretNeed[] {
+  return NEEDS[row.name] ?? [];
+}
+
+/** 只要第一项（日志里想简短地称呼这个通道时用） */
 export function channelSecretNeed(row: { name: string }): ChannelSecretNeed | null {
-  return NEEDS[row.name] ?? null;
+  return channelSecretNeeds(row)[0] ?? null;
 }
 
 /** 凭据文件在哪：`<管家目录>/state/secrets.json` */
@@ -135,15 +164,16 @@ export function injectChannelSecrets(
 ): string[] {
   const filled: string[] = [];
   for (const row of rows) {
-    const need = channelSecretNeed(row);
-    if (!need) continue;
-    const current = row.config?.[need.key];
-    if (typeof current === 'string' && current.trim() !== '') continue;
-    const value = secretOf(file, need.channel, need.key);
-    if (!value) continue;
-    if (!row.config) continue;
-    row.config[need.key] = value;
-    filled.push(need.key);
+    // 一个包可能要两项（飞书：app_id + app_secret），所以这里也挨个来
+    for (const need of channelSecretNeeds(row)) {
+      const current = row.config?.[need.key];
+      if (typeof current === 'string' && current.trim() !== '') continue;
+      const value = secretOf(file, need.channel, need.key);
+      if (!value) continue;
+      if (!row.config) continue;
+      row.config[need.key] = value;
+      filled.push(need.key);
+    }
   }
   return filled;
 }

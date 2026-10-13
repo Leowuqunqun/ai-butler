@@ -179,9 +179,9 @@ export interface DefaultConfigOptions {
 }
 
 /** 支持的 IM。加一个就是加一行 —— **核心层不需要知道有这个东西存在** */
-export type ImName = 'wechat' | 'telegram';
+export type ImName = 'wechat' | 'telegram' | 'feishu';
 
-export const IM_NAMES: ImName[] = ['wechat', 'telegram'];
+export const IM_NAMES: ImName[] = ['wechat', 'telegram', 'feishu'];
 
 /**
  * 通道那一行长什么样。
@@ -194,6 +194,12 @@ function channelRow(im: ImName, home: string): { id: string; name: string; confi
     // token 留空：doctor 会说"还没有填 bot token"，并指到 @BotFather。
     // 留一行空值在这里，用户至少知道**该往哪儿填**。
     return { id: 'channel', name: '@butler/channel-telegram', config: { home, botToken: '' } };
+  }
+  if (im === 'feishu') {
+    // 两个值都留空（和 Telegram 同一个道理）：doctor 会说缺什么，
+    // 引导页会挨个问。**真值只会进 `state/secrets.json`，不进这个文件** ——
+    // 这份 config.json 是引导用户去读的，凭据进去等于鼓励泄露。
+    return { id: 'channel', name: '@butler/channel-feishu', config: { home, appId: '', appSecret: '' } };
   }
   return { id: 'channel', name: 'wechat-agent-bridge/plugin', config: { home } };
 }

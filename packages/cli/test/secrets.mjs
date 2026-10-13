@@ -15,6 +15,7 @@ import { dirname, join } from 'node:path';
 
 import {
   channelSecretNeed,
+  channelSecretNeeds,
   injectChannelSecrets,
   readSecrets,
   saveSecret,
@@ -29,6 +30,7 @@ function sandbox() {
 
 const TGM = { name: '@butler/channel-telegram', config: { botToken: '' } };
 const WECHAT = { name: 'wechat-agent-bridge/plugin', config: {} };
+const FEISHU = { name: '@butler/channel-feishu', config: { appId: '', appSecret: '' } };
 
 test('落点：<管家目录>/state/secrets.json', () => {
   assert.equal(secretsFileOf('/home/x/.butler'), join('/home/x/.butler', 'state', 'secrets.json'));
@@ -113,5 +115,36 @@ test('没有存过的凭据：一个字段都不填', () => {
     const row = { name: '@butler/channel-telegram', config: { botToken: '' } };
     assert.deepEqual(injectChannelSecrets([row], secretsFileOf(s.dir)), []);
     assert.equal(row.config.botToken, '');
+  } finally { s.cleanup(); }
+});
+
+test('飞书要**两项**凭据：一个包可以不止一项', () => {
+  const needs = channelSecretNeeds(FEISHU);
+  assert.deepEqual(needs.map((n) => n.key), ['appId', 'appSecret']);
+  assert.ok(needs.every((n) => n.channel === 'feishu'));
+  // 第一项必须把"怎么拿"说全：扫码是首选（不用开发者后台），后台是退路
+  assert.match(needs[0].hint, /扫码/);
+  assert.match(needs[0].hint, /open\.feishu\.cn/);
+  // 只要一项的老问法仍然能用（日志里想简短称呼这个通道时）
+  assert.equal(channelSecretNeed(FEISHU)?.key, 'appId');
+});
+
+test('★ 两项都从凭据文件填进配置行，且只填**空的**', () => {
+  const s = sandbox();
+  try {
+    const file = secretsFileOf(s.dir);
+    saveSecret(file, 'feishu', 'appId', 'cli_page');
+    saveSecret(file, 'feishu', 'appSecret', 's3cret');
+
+    const blank = { name: '@butler/channel-feishu', config: { home: s.dir, appId: '', appSecret: '' } };
+    assert.deepEqual(injectChannelSecrets([blank], file).sort(), ['appId', 'appSecret']);
+    assert.equal(blank.config.appId, 'cli_page');
+    assert.equal(blank.config.appSecret, 's3cret');
+
+    // 一个通道两项时，"手写过一项"是最容易写错的场景：那一项一个字都不许动
+    const half = { name: '@butler/channel-feishu', config: { appId: 'cli_MINE', appSecret: '' } };
+    assert.deepEqual(injectChannelSecrets([half], file), ['appSecret']);
+    assert.equal(half.config.appId, 'cli_MINE');
+    assert.equal(half.config.appSecret, 's3cret');
   } finally { s.cleanup(); }
 });

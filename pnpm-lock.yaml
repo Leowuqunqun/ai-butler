@@ -117,6 +117,9 @@ importers:
       '@butler/approval-im':
         specifier: workspace:*
         version: link:../approval-im
+      '@butler/channel-feishu':
+        specifier: workspace:*
+        version: link:../channel-feishu
       '@butler/channel-telegram':
         specifier: workspace:*
         version: link:../channel-telegram

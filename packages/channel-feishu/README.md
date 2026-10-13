@@ -55,6 +55,28 @@ bash packages/channel-feishu/probe/run.sh
 bash packages/channel-feishu/probe/run.sh --dry
 ```
 
+加 `--save` 就不只是验一遍，而是**直接把凭据装好**：
+
+```bash
+bash packages/channel-feishu/probe/run.sh --save
+```
+
+它把 `app_id` / `app_secret` 按 CLI 认的格式写进 `<管家目录>/state/secrets.json`
+（**合并写、0600、原子写**，不碰你已有的 Telegram token），而且**不把凭据打印到终端**。
+
+默认写的是 `~/.butler`。如果你当初是用 `--config` 把家安在别处（`butler init` 会打印
+它写在哪），就加一句 `--home=<那个目录>`，别让凭据落在一个管家不看的地方：
+
+```bash
+bash packages/channel-feishu/probe/run.sh --save --home=/srv/butler
+```
+之后：
+
+```bash
+butler init --im feishu    # 生成那份「收飞书」的配置（通道那一行换成这个包）
+butler run                 # 凭据已经存过 → 它自动跳过问凭据那一步
+```
+
 探针**只用官方包、不 import 本包代码**，所以它是一把干净的尺子：
 它通了而管家不通，问题一定在我们这边。通了就一次性证明五件事：凭据、长连接、
 事件投递、权限点、回复。

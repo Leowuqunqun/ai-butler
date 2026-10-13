@@ -673,6 +673,18 @@ function runInit(args: Args): number {
     console.log('\n第一次它会开两个网页，**都不用你改任何文件**：');
     console.log('  1. 先让你把那串 bot token 贴进去');
     console.log('  2. 再让你贴模型 key（AI 要靠它思考）');
+  } else if (im === 'feishu') {
+    console.log('\n这台是「收飞书的那台」。接下来：\n');
+    console.log('  1. 先弄一个飞书应用（两种办法，挑一个）：');
+    console.log('     · 扫码最省事：bash packages/channel-feishu/probe/run.sh --save');
+    console.log('       （不用开发者后台、不用公网 IP；扫完它把两个值直接存进这台电脑）');
+    console.log('     · 或去 open.feishu.cn 建一个「企业自建应用」，');
+    console.log('       在「凭证与基础信息」里抄下 app_id 和 app_secret');
+    console.log('  2. butler run');
+    console.log('\n第一次它会问你两件事，都不用改任何文件：');
+    console.log('  1. 应用的 app_id 和 app_secret（扫码那条路存过的话，它会自动跳过）');
+    console.log('  2. 模型 key（AI 要靠它思考）');
+    console.log('\n⚠️ 飞书这条通道还没做过真机验收 —— 真出问题，大概率在权限点上。');
   } else {
     console.log('\n这台是「收微信的那台」。接下来：\n');
     console.log('  butler run');

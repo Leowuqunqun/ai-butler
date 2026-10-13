@@ -31,6 +31,7 @@
     "@butler/agent-dsh": "workspace:*",
     "@butler/agent-exec": "workspace:*",
     "@butler/channel-telegram": "workspace:*",
+    "@butler/channel-feishu": "workspace:*",
     "@butler/core": "workspace:*",
     "@butler/link-lan": "workspace:*",
     "@butler/memory-file": "workspace:*",

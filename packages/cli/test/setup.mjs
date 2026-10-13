@@ -22,7 +22,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
-  DEFAULT_CONFIG_PATH, FALLBACK_PATCH, butlerHome, defaultConfigText, defaultPatchPath,
+  DEFAULT_CONFIG_PATH, FALLBACK_PATCH, IM_NAMES, butlerHome, defaultConfigText, defaultPatchPath,
   initButlerHome, patchTemplate,
 } from '../lib/setup.js';
 import { DEFAULT_KEY_REF, credentialsFileOf, keyRefOf } from '../lib/credentials.js';
@@ -69,6 +69,17 @@ test('默认配置：六行，名字和路径都是现成的，用户一个字�
       }
     }
   }
+});
+
+test('选飞书：通道那一行换成 channel-feishu，两个字段留空', () => {
+  const parsed = JSON.parse(defaultConfigText({ home: '/tmp/butler-home', im: 'feishu' }));
+  const channel = parsed.plugins.find((p) => p.id === 'channel');
+
+  assert.equal(channel.name, '@butler/channel-feishu');
+  // 两个字段**留空行**：用户至少知道该往哪儿填。
+  // 真值不走这个文件 —— 它只进 state/secrets.json（这份 config.json 是给人读的）
+  assert.deepEqual(channel.config, { home: '/tmp/butler-home', appId: '', appSecret: '' });
+  assert.ok(IM_NAMES.includes('feishu'), '--im feishu 得被认出来');
 });
 
 test('节点那份配置：**没有通道**，也没有内核 —— 它不登录微信', () => {

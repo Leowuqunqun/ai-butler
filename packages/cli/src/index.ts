@@ -28,6 +28,7 @@ export { boot, SELF_DIR, type BootOptions, type Booted, type BootFailure } from 
 
 export {
   channelSecretNeed,
+  channelSecretNeeds,
   injectChannelSecrets,
   readSecrets,
   saveSecret,

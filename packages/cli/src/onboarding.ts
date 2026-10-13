@@ -42,7 +42,7 @@ import { join } from 'node:path';
 
 import { credentialsFileOf, keyState, refsOf, saveKeyRef } from './credentials.js';
 import { verifyModelKey, type KeyVerdict } from './model-key.js';
-import { channelSecretNeed, injectChannelSecrets, saveSecret, secretOf, secretsFileOf } from './secrets.js';
+import { channelSecretNeeds, injectChannelSecrets, saveSecret, secretOf, secretsFileOf } from './secrets.js';
 
 /**
  * 配置里的 agent 那一行，如果跑的是 DSH —— 它需要的东西在哪儿。
@@ -352,38 +352,48 @@ export async function ensureChannelSecrets(
   opts: ChannelSecretsGateOptions,
 ): Promise<string[]> {
   for (const row of rows) {
-    const need = channelSecretNeed(row);
-    if (!need) continue;
-
-    const current = row.config?.[need.key];
-    if (typeof current === 'string' && current.trim() !== '') continue; // ① 配置里写了，听他的
+    const needs = channelSecretNeeds(row);
+    if (needs.length === 0) continue;
 
     const file = secretsFileOf(opts.butlerDir);
-    const stored = secretOf(file, need.channel, need.key);
-    if (stored && !opts.force) {
+    // ① 配置里写了的那几项，听他的 —— 一个通道要两项时可能只写死了一项，
+    //    所以筛的是"缺少的项"，不是"这个通道有没有配过"
+    const missing = needs.filter((n) => {
+      const current = row.config?.[n.key];
+      return !(typeof current === 'string' && current.trim() !== '');
+    });
+    if (missing.length === 0) continue;
+
+    const storedAll = missing.every((n) => secretOf(file, n.channel, n.key));
+    if (storedAll && !opts.force) {
       const filled = injectChannelSecrets(rows, file);
-      opts.log(`通道凭据：填上了你上次存的那串（${need.name}）✓`);
+      opts.log(`通道凭据：填上了你上次存的那串（${missing.map((n) => n.name).join('、')}）✓`);
       return filled;
     }
 
-    const outcome = await ensureChannelToken({
-      butlerDir: opts.butlerDir,
-      channel: need.channel,
-      key: need.key,
-      name: need.name,
-      hint: need.hint,
-      log: opts.log,
-      ...pageOptionsOf(opts),
-      ...(opts.force === undefined ? {} : { force: opts.force }),
-    });
+    // 缺哪项问哪项：存过的那项不重问（除非 --again）
+    const outcomes: KeyOutcome[] = [];
+    for (const need of missing) {
+      if (!opts.force && secretOf(file, need.channel, need.key)) continue;
+      outcomes.push(await ensureChannelToken({
+        butlerDir: opts.butlerDir,
+        channel: need.channel,
+        key: need.key,
+        name: need.name,
+        hint: need.hint,
+        log: opts.log,
+        ...pageOptionsOf(opts),
+        ...(opts.force === undefined ? {} : { force: opts.force }),
+      }));
+    }
     // ⚠️ 不管存没存上，都再注入一次：他点了"先跳过"的话，原来那串必须还在行里
     //   （`--again` 是"再问一次"，不是"清空重来"）
     const filled = injectChannelSecrets(rows, file);
-    if (outcome === 'saved') {
+    if (filled.length > 0 && outcomes.includes('saved')) {
       opts.log('✅ 填好了（那个文件是 0600，只有这台电脑上你的账号能读）。');
-      return filled;
+    } else if (filled.length > 0 && outcomes.includes('skipped')) {
+      opts.log('（还是用你原来那串）');
     }
-    if (outcome === 'skipped' && stored) opts.log('（还是用你原来那串）');
     // 跳过不拦路：通道自己的 check / start 会说清缺什么，doctor 也会
     return filled;
   }
