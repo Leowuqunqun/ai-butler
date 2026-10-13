@@ -49,7 +49,7 @@ curl -fsSL https://github.com/Leowuqunqun/ai-butler/releases/latest/download/ins
 （macOS 第一次双击会被系统拦一下 —— 在它上面右键 →「打开」；我们没买 Apple 的签名证书。）
 
 详细走一遍（给完全不懂技术的人看，附可打勾的验收清单和「卡住了看这里」对照表）→ [**从零到「用微信遥控这台电脑」：三步**](docs/GETTING-STARTED.md)
-命令行细节在 [`packages/cli`](packages/cli)（全仓 932 个离线测试）
+命令行细节在 [`packages/cli`](packages/cli)（全仓 933 个离线测试）
 
 **已经在跑 DSH，只想给 DSH 加一条微信通道？** 不用装上面这一整套 —— 打包好的 bundle 就在 Release 里，一条命令装进某个 profile：
 
@@ -78,7 +78,7 @@ dsh plugin --profile web add "file:$(pwd)/butler-dsh-plugin-0.1.0/plugin"
 | ④ 设备 | 多终端（中枢 + 节点 + 别名路由 + 微信里配对收设备） | ✅ **能用**（两台机器，微信里 `@家里那台` 就指过去） |
 | ⑤ 信任 | 审批、审计 | 审批 ✅ 能用（在微信里问一句；可给带期限的长期授权）；审计 📐 未开工 |
 
-上面每一层的证据（M1/M2/M3 明细、932 个用例怎么分布、哪些是端到端、
+上面每一层的证据（M1/M2/M3 明细、933 个用例怎么分布、哪些是端到端、
 干净环境验收抓到过什么 bug）→ [**EVIDENCE.md**](docs/EVIDENCE.md)
 
 ---
@@ -102,7 +102,7 @@ packages/
   link-lan/            ✅ 链路实现：局域网（HTTP + SSE，零依赖；认证是红线；配对码收设备）
   link-tailscale/      ✅ 链路实现：跨网（名册问 Tailscale；线上复用 link-lan 那套协议）
   cli/                 ✅ 入口 `butler`：配置 + patch 叠加 → 拉起容器 → 上线 / doctor 自检
-  channel-feishu/      📐 第三个通道：飞书（站在官方 @larksuite/channel 上；58 个离线用例，收到图片/文件会落盘；真机未验收）
+  channel-feishu/      📐 第三个通道：飞书（站在官方 @larksuite/channel 上；59 个离线用例，收到图片/文件会落盘；真机未验收）
   （以下还没拆成包）
   hub/ node/           —— 角色已有归属：hub 由 core/ 承担，node 由 link-lan/node 承担
   installer/           —— 引导器脚本已在仓库根目录（install.sh），包还没拆
