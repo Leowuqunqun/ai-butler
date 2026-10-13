@@ -21,11 +21,16 @@
 // 而 `//` 又出现在 `https://…` 里 —— 用正则剥注释一定会剥错。所以拿 TypeScript 的
 // parser 认这几类调用：
 //
-//   · console.log / error / warn / info / debug(…)
-//   · process.stdout.write(…) / process.stderr.write(…)
-//   · logger 家族的 info/warn/error/debug(…)（`ctx.logger.x`、`this.ctx.logger?.x`、
-//     `this.log(…)` 都算）
+//   · **任何** `.log / .info / .warn / .error / .debug(…)` 调用 —— **不看接收者叫什么**
+//     （`console.x`、`ctx.logger.x`、`opts.log`、`this.log` 都算。第 48 轮实测：只认
+//     "logger 族名"会漏掉引导页注入进来的 `opts.log`（14 处）和扫码页的裸 `log(…)`）
+//   · 裸的 `log(…)`
+//   · `process.stdout.write(…)` / `process.stderr.write(…)` —— `.write` **只认这两个**：
+//     全仓数过，别的 `.write` 落在 `handle` / `store` / `state` / `res` 上，是写流写盘
 //   · `.sh` 里的 echo / printf / step / ok / bad —— 脚本没有 AST，那几行纯文本扫
+//
+// 这个脚本**每次跑都先自检规则本身**（下面 `SELF_TEST` 那十几条，`--self-test` 可以只跑它）。
+// 第 47 轮的六道反向验证是手跑一次、记在文档里的 —— 文档不会在别人改坏规则时喊疼。
 //
 // `https://…` 里的路径**不算**违规：那正是"够得着"的那一种。
 //
@@ -124,23 +129,28 @@ function label(abs) {
 
 // ───────────────────────── 认出"会打印"的调用 ─────────────────────────
 
-const CONSOLE_METHODS = new Set(['log', 'error', 'warn', 'info', 'debug']);
-const LOGGER_METHODS = new Set(['info', 'warn', 'error', 'debug']);
+/** 这些方法名在这个仓库里就是"打日志"（`.write` 不算 —— 见下面） */
+const PRINT_METHODS = new Set(['log', 'info', 'warn', 'error', 'debug']);
 
-/** 这个调用是不是"打到终端"的那几类？ */
+/**
+ * 这个调用是不是"打到终端"的那几类？
+ *
+ * ⚠️ 第 48 轮放宽过一次，因为**实测**漏了两种：
+ *   · `opts.log(…)` —— 引导页的打印口是**注入进来**的（`onboarding.ts` 里 14 处），
+ *     第一版只认基名含 `logger` 的，全漏；
+ *   · 裸的 `log(…)` —— `channel-wechat/src/login.mjs` 的扫码提示就是这么打的。
+ * 所以现在**不看接收者叫什么**：`.log/.info/.warn/.error/.debug(…)` 一律算。
+ * 这条放宽不是拍脑袋：全仓数过一遍，除了 `process.std*.write`，`.write` 只出现在
+ * `handle` / `store` / `state` / `res` 上（写流、写盘），所以 `.write` **只认那两个**。
+ */
 function isPrintCall(node) {
   const callee = node.expression;
+  if (ts.isIdentifier(callee) && callee.text === 'log') return true;
   if (!ts.isPropertyAccessExpression(callee)) return false;
   const method = callee.name.text;
+  if (PRINT_METHODS.has(method)) return true;
   const base = callee.expression.getText();
-
-  // console.log / console.error / …
-  if (/^console$/.test(base) && CONSOLE_METHODS.has(method)) return true;
-  // process.stdout.write / process.stderr.write
   if (/^process\.(stdout|stderr)$/.test(base) && method === 'write') return true;
-  // ctx.logger.info / this.ctx.logger?.error / this.log(…)
-  if (LOGGER_METHODS.has(method) && /logger/.test(base)) return true;
-  if (base === 'this' && method === 'log') return true;
   return false;
 }
 
@@ -161,13 +171,99 @@ function literalsIn(node, out = []) {
   return out;
 }
 
-const problems = [];
-
-/** 一行一条：打在哪、什么话、命中哪一段 */
-function report(rel, line, text, why) {
-  problems.push({ rel, line, text, why });
+/** 扫一段源码：返回命中列表。**真扫描和规则自检走的是同一条路**（否则自检等于没检） */
+function scanSource(rel, text) {
+  const hits = [];
+  const sf = ts.createSourceFile(rel, text, ts.ScriptTarget.Latest, true);
+  const visit = (node) => {
+    if (ts.isCallExpression(node) && isPrintCall(node)) {
+      for (const arg of node.arguments) {
+        for (const lit of literalsIn(arg, [])) {
+          const value = lit.text ?? lit.getText();
+          if (offends(value)) {
+            const { line } = sf.getLineAndCharacterOfPosition(lit.getStart(sf));
+            hits.push({ rel, line: line + 1, text: value });
+          }
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return hits;
 }
 
+/** 扫一段 shell：脚本没有 AST，只看会打出去的那几个动词，整行注释跳过 */
+function scanShell(rel, text) {
+  const hits = [];
+  text.split('\n').forEach((line, index) => {
+    if (/^[ \t]*#/.test(line)) return;
+    if (!/^[ \t]*(echo|printf|step|ok|bad)\b/.test(line)) return;
+    if (offends(line)) hits.push({ rel, line: index + 1, text: line.trim().slice(0, 120) });
+  });
+  return hits;
+}
+
+/** 按文件类型分派 —— 自检也走它，所以"分派对不对"同样被自检盯着 */
+function scanFile(rel, text) {
+  return rel.endsWith('.sh') ? scanShell(rel, text) : scanSource(rel, text);
+}
+
+// ───────────────────────── 规则自检（每次跑都验一遍） ─────────────────────────
+
+/**
+ * 这些是**规则自己的承诺**。为什么要有：第 47 轮的六道反向验证是手跑一次、记在文档里的 ——
+ * 文档不会在别人改坏规则时喊疼。这十条每跑一次 `check:user-facing` 就验一次，
+ * 所以"守卫真的会咬"不再依赖谁记得去手工试。
+ *
+ * ⚠️ 改规则时把这里一起改：**改不了就说明你改的是承诺**，那就该在文档里写清楚。
+ */
+const SELF_TEST = [
+  { why: 'console.log 里的仓库内路径', file: 'a.ts', code: "console.log('见 docs/x.md')", want: 1 },
+  { why: 'opts.log（注入进来的打印口）', file: 'a.ts', code: "opts.log('见 packages/cli/src/x.ts')", want: 1 },
+  { why: '裸的 log(…)（扫码页）', file: 'a.mjs', code: "log('见 docs/x.md')", want: 1 },
+  { why: 'ctx.logger 家族（第 46 轮起真会打到终端）', file: 'a.ts', code: "ctx.logger?.warn('见 packages/cli/src/x.ts')", want: 1 },
+  { why: 'process.stderr.write', file: 'a.ts', code: "process.stderr.write('见 scripts/x.sh')", want: 1 },
+  { why: '字符串拼接里的每一段', file: 'a.ts', code: "console.error('第 ' + n + ' 步：见 docs/x.md')", want: 1 },
+  { why: '模板字符串', file: 'a.ts', code: 'console.log(`见 docs/x.md`)', want: 1 },
+  { why: '注释里写什么都不算（AST 天然免疫）', file: 'a.ts', code: '// 见 docs/x.md\n/* packages/x */', want: 0 },
+  { why: 'https://… 里的路径不算（那正是"够得着"）', file: 'a.ts', code: "console.log('https://github.com/o/r/blob/main/docs/x.md')", want: 0 },
+  { why: '写流/写盘不算（store.write 不是打印）', file: 'a.ts', code: "store.write('docs/x.md')", want: 0 },
+  { why: '.sh 的 echo', file: 'a.sh', code: 'echo "见 docs/x.md"', want: 1 },
+  { why: '.sh 的 printf', file: 'a.sh', code: "printf '见 docs/x.md\\n'", want: 1 },
+  { why: '.sh 的 ok（验收脚本的标题）', file: 'a.sh', code: 'ok "见 docs/x.md"', want: 1 },
+  { why: '.sh 里不是打印动词的行不算', file: 'a.sh', code: 'mkdir -p docs/x', want: 0 },
+  { why: '.sh 的整行注释', file: 'a.sh', code: '# 见 docs/x.md', want: 0 },
+];
+
+function runSelfTest() {
+  const bad = SELF_TEST.map((c) => ({ ...c, got: scanFile(`自检/${c.file}`, c.code).length })).filter(
+    (c) => c.got !== c.want,
+  );
+  if (!bad.length) return;
+
+  console.error('用户面文案自检：**规则自己坏了**（不是仓库里有违规）。\n');
+  for (const c of bad) {
+    console.error(`  ${c.why}：应该 ${c.want} 处，实际 ${c.got} 处`);
+    console.error(`    ${c.code.split('\n')[0]}`);
+  }
+  console.error('\n改法：这不是文案问题，是 scripts/check-user-facing.mjs 里的规则（isPrintCall /');
+  console.error('offends / scanFile）被改动了。要是故意放宽/收紧，请把 SELF_TEST 一起改，');
+  console.error('并在 docs/CHANNEL-FEISHU.md 里写清楚为什么。');
+  process.exit(1);
+}
+
+// ───────────────────────── 主流程 ─────────────────────────
+
+if (process.argv.includes('--self-test')) {
+  runSelfTest();
+  console.log(`用户面文案自检：规则自检 ${SELF_TEST.length} 条 → ✅ 规则本身是好的`);
+  process.exit(0);
+}
+
+runSelfTest(); // 先确认"这把尺子"是好的，再拿它量仓库
+
+const problems = [];
 for (const abs of targets()) {
   const rel = label(abs);
   let text;
@@ -177,33 +273,7 @@ for (const abs of targets()) {
     console.error(`用户面文案自检：读不了 ${rel} —— ${err.code ?? err.message}`);
     process.exit(1);
   }
-
-  if (abs.endsWith('.sh')) {
-    // 脚本没有 AST：只看会打出去的那几个动词，整行注释跳过
-    text.split('\n').forEach((line, index) => {
-      if (/^[ \t]*#/.test(line)) return;
-      if (!/^[ \t]*(echo|printf|step|ok|bad)\b/.test(line)) return;
-      if (offends(line)) report(rel, index + 1, line.trim(), line.trim().slice(0, 120));
-    });
-    continue;
-  }
-
-  const sf = ts.createSourceFile(rel, text, ts.ScriptTarget.Latest, true);
-  const visit = (node) => {
-    if (ts.isCallExpression(node) && isPrintCall(node)) {
-      for (const arg of node.arguments) {
-        for (const lit of literalsIn(arg, [])) {
-          const value = lit.text ?? lit.getText();
-          if (offends(value)) {
-            const { line } = sf.getLineAndCharacterOfPosition(lit.getStart(sf));
-            report(rel, line + 1, value, value.slice(0, 120));
-          }
-        }
-      }
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(sf);
+  problems.push(...scanFile(rel, text));
 }
 
 if (problems.length) {
@@ -224,5 +294,5 @@ const mjsCount = list.filter((f) => f.endsWith('.mjs')).length;
 const shCount = list.filter((f) => f.endsWith('.sh')).length;
 console.log(
   `用户面文案自检：${tsCount} 个 .ts + ${mjsCount} 个 .mjs + ${shCount} 个 .sh → ` +
-    '✅ 会打印的行里没有仓库内路径（https:// 里的不算）',
+    `✅ 会打印的行里没有仓库内路径（https:// 里的不算；规则自检 ${SELF_TEST.length} 条通过）`,
 );
