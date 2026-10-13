@@ -22,6 +22,13 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 const freshHome = () => mkdtempSync(join(tmpdir(), 'butler-feishu-'));
 
+/** 把每一次日志调用记下来的假 logger（形状和 Cordis 的一样：格式串 + 参数） */
+function spyLogger() {
+  const got = [];
+  const at = (level) => (...args) => got.push([level, ...args]);
+  return { got, log: { error: at('error'), warn: at('warn'), info: at('info'), debug: at('debug') } };
+}
+
 test('凭据没填时拒绝上线，说的是"去哪拿"和"我去哪找过"，而不是"appId is required"', async () => {
   const home = freshHome();
   const { channel } = makeFeishu({ appId: '', appSecret: '', home });
@@ -411,20 +418,78 @@ test('★ 去重表写不进去时，宁可漏一次去重，也不能把消息�
   assert.deepEqual(got, ['写不进去也得让我收到'], '去重表坏了是遗憾，消息被吞是事故');
 });
 
-test('★ 处理链自己抛错，不会变成 unhandled rejection（下一条照收）', async () => {
+test('★ 处理链自己抛错：错误有人看见，而且**下一条照收**（不是 unhandled rejection）', async () => {
   const { channel, fake } = makeFeishu({ home: freshHome() });
   await channel.start();
 
+  const s = spyLogger();
+  channel.ctx.logger = s.log;
   const got = [];
   channel.onMessage((msg) => got.push(msg.text));
-  // 消费者的 bug 由接缝兜（它只接同步抛错）；这里要证的是**处理链自己**漏出去的异常
-  // 也有落点 —— 漏出去会变成 unhandled rejection，而 Node 默认把它升级成进程退出。
+
+  // 让"处理链自己"在某一条上炸掉 —— 模拟实现里的 bug（**不是**消费者的错：
+  // 消费者抛的是同步的，那种由接缝兜，见下面那条用例的注释）。
+  //
+  // ⚠️ 这条用例在第 56 轮之前**只是名字和注释在说要证这件事**，函数体里却没有任何东西会抛：
+  //    它发两条正常消息、断言两条都到 —— 把适配层那个 `.catch` 整个删掉它照样绿。
+  //    量覆盖率才露出来：`handleIncoming` 的 catch 从来没被执行过（`lib/index.js:256` 未覆盖）。
+  const real = channel.fetchFiles.bind(channel);
+  let armed = true;
+  channel.fetchFiles = async (msg) => {
+    if (armed) {
+      armed = false;
+      throw new Error('实现里的 bug（本条用例模拟）');
+    }
+    return real(msg);
+  };
+
   fake.emit(normalized({ content: '第一条' }));
   await settle();
   fake.emit(normalized({ content: '第二条', messageId: 'om_2' }));
   await settle();
 
-  assert.deepEqual(got, ['第一条', '第二条'], '一条出错不该影响下一条');
+  assert.deepEqual(got, ['第二条'], '炸掉的那条不该送到大脑；后面那条**必须照收**');
+  const said = s.got.filter((g) => g[0] === 'error').map((g) => String(g[1]));
+  assert.ok(
+    said.some((m) => m.includes('处理这条消息时出错')),
+    `炸了必须有人看见 —— 沉默才是事故。实际日志：${JSON.stringify(s.got)}`,
+  );
+});
+
+test('★ 断开时报错不影响"停下来"：记一条 warn，但绝不往外抛', async () => {
+  const { channel, fake } = makeFeishu({ home: freshHome() });
+  await channel.start();
+
+  const s = spyLogger();
+  channel.ctx.logger = s.log;
+  fake.disconnectError = 'disconnect failed (fake)：这条连接已经烂了';
+
+  // 抛了这条用例就红 —— 进程正要走，不该被一条 warn 拦住（`lib/index.js:284` 那行同理）
+  await channel.stop();
+
+  assert.equal(fake.connected, false, '该断还是得断');
+  const warned = s.got.filter((g) => g[0] === 'warn').map((g) => String(g[1]));
+  assert.ok(warned.some((m) => m.includes('断开时出错')), `实际日志：${JSON.stringify(s.got)}`);
+});
+
+test('★ 取被引消息失败：当没引用，正文一个字不少地照送', async () => {
+  const { channel, fake } = makeFeishu({ home: freshHome() });
+  await channel.start();
+
+  const s = spyLogger();
+  channel.ctx.logger = s.log;
+  fake.fetchMessageFails = 'fetch failed (fake)：被引的那句已经不在了';
+
+  const got = [];
+  channel.onMessage((msg) => got.push(msg));
+  fake.emit(normalized({ content: '上面那句是什么意思', replyToMessageId: 'om_missing' }));
+  await settle();
+
+  assert.equal(got.length, 1, '少一段上下文，好过整条不回 —— 还是要送到大脑');
+  assert.equal(got[0].quote, undefined, '取不到就当没引用');
+  assert.equal(got[0].text, '上面那句是什么意思', '正文一个字都不能少');
+  const debugs = s.got.filter((g) => g[0] === 'debug').map((g) => String(g[1]));
+  assert.ok(debugs.some((m) => m.includes('取被引消息失败')), `实际日志：${JSON.stringify(s.got)}`);
 });
 
 test('★ 附件超过上限：不交给 agent，而且不留在收件箱里', async () => {

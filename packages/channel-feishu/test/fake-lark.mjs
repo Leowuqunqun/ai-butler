@@ -59,6 +59,10 @@ export class FakeLark {
   connectErrorCode = 'not_connected';
   /** 连接失败时挂上来的 context —— 同样是凭据，适配层绝不能回显 */
   connectErrorContext = undefined;
+  /** 设了就让 `disconnect()` 抛错（第 56 轮补：`stop()` 里那个 warn 从没被执行过） */
+  disconnectError = null;
+  /** 设了就让 `fetchMessage()` 抛错（第 56 轮补：取被引消息失败那条路） */
+  fetchMessageFails = null;
 
   /** connect() 之前是 undefined —— 和官方包的行为一致 */
   get botIdentity() {
@@ -84,6 +88,7 @@ export class FakeLark {
 
   async disconnect() {
     this.connected = false;
+    if (this.disconnectError) throw new Error(this.disconnectError);
   }
 
   async send(to, input) {
@@ -99,6 +104,7 @@ export class FakeLark {
   }
 
   async fetchMessage(messageId) {
+    if (this.fetchMessageFails) throw new Error(this.fetchMessageFails);
     return this.fetched.get(messageId);
   }
 
