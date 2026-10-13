@@ -1968,10 +1968,12 @@ feishu sdk: [["client ready"]]
 ### 第 56 轮：量了一次覆盖率 —— 三条"错误落点"从没被执行过，其中一条的用例是个空守卫
 
 这轮没写新功能，改了量法：给飞书包跑 `node --test --experimental-test-coverage`
-（测试跑的是 `lib/`，和 `src/` 逐行对应）。结果 `lib/index.js` **98.82%** 行覆盖，
+（测试跑的是 `lib/`；⚠️ 下面这些行号是 **`lib/` 行号，不是 `src/` 的** —— 第 57 轮才发现
+tsc 会合并跨行语句、抹掉空行，两份文件行数并不相等（599 vs 506），**不能当成逐行对应**）。
+结果 `lib/index.js` **98.82%** 行覆盖，
 **恰好四处**从没执行过：`256`、`284-285`、`331-333` —— **全是 catch 块**：
 
-| 行 | 那条 catch 干什么 | 没跑过意味着 |
+| `lib/index.js` 行 | 那条 catch 干什么 | 没跑过意味着 |
 | --- | --- | --- |
 | `256` | `handleIncoming` 漏出的异常 → 记 error（**否则变成 unhandled rejection，Node 默认退出进程**） | 保护"管家不被一条消息带走"的守卫没被验过 |
 | `284-285` | `stop()` 里 `disconnect()` 抛错 → 只 warn | 没见过 |
@@ -2001,6 +2003,41 @@ feishu sdk: [["client ready"]]
 
 **没做的**：没把 `probe/smoke.mjs`（50%，交互式扫码那段）算进来 —— 那段要真人。
 没做覆盖率门槛（没在 CI 里卡 `--test-coverage-lines` 之类的线）。
+
+**没验**：真机验收 —— 仍然卡在这里，目标继续 active。
+
+### 第 57 轮：同一把尺子量另外两个包 —— 顺手发现我第 56 轮那句写错了
+
+目标里"接入 CLI"那一半落在 `packages/cli`，接缝在 `packages/seam-channel`。用同一把尺子量了这两个包：
+
+- **`seam-channel`：自己的测试里 `index.js` / `quote.js` 都是 100% / 100% / 100%。**
+  这正好把第 56 轮那条边界从推测变成实测：那份报告里 `seam-channel` 的
+  `63-66`、`79-80`、`quote.ts` 整个函数"未覆盖"，是**跨包假象** —— 跑飞书的测试时
+  顺手载入了接缝的一部分，不代表接缝自己没测。**一份报告不能跨包下结论**，这条现在有数据了。
+- **`cli` 自己那棵 `lib/`**：`boot` / `config` / `index` / `logging` / `model-key` / `secrets` 都是 100%，
+  `setup` 98.67%、`cli` 90.33%、`onboarding` 93.42%。⚠️ 报告顶部那个 `all files 71.41%` **不是 cli 的**
+  —— 里面混着 `agent-dsh`(38%)、`memory-file`(55%)、`approval-im`、`link-*` 等**别的包**（cli 的测试会载入它们）。
+
+**飞书那几条 CLI 路径查了，不缺**：`--im feishu` 在测试里出现 37 次，专门盯着飞书的用例有 11 条
+（`doctor`、`m1-feishu-e2e` ×2、`onboarding`、`probe-contract`、`real-composition`、`secrets` ×2、
+`setup`、`switch-im`、`home-contract`），正好盖住目标点名的三件事：`ImName`、两项凭据、引导页。
+**量了才没白写测试** —— 没有缺口，所以这轮一条测试都没加。
+
+**发现我第 56 轮写错了一句**：那里说"测试跑的是 `lib/`，和 `src/` 逐行对应" —— **不对**。
+`channel-feishu` 是 `src/index.ts` 599 行 vs `lib/index.js` 506 行：tsc 会**合并跨行语句、抹掉空行**，
+行号根本不等值。所以那三个行号（`256`/`284-285`/`331-333`）是 **`lib/` 行号**，
+引用代码时我读的也确实是对的（读的就是 `lib/`），但**"逐行对应"这句话是错的，已改**。
+
+试过并**放弃**的两条路（记下来省得下轮再试）：
+
+- 靠"文本相同"贪心对齐 lib 与 src：**失败**（tsc 把 `this.ctx.logger?.error(\n '…',\n error);`
+  并成一行，逐行比文本对不上）。硬要做就得解 sourcemap 的 VLQ，成本不划算。
+- 打开 `"sourceMap": true` 让覆盖率直接报 `src/` 行号：**不做** —— 那会把 `.js.map` 和
+  `sourceMappingURL` 注释一起塞进**发行包**（`files: ['lib','probe']`），用户下载的东西变了。
+  为了我自己看行号方便去改用户拿到的东西，不划算。
+
+**没做的**：没有 lib↔src 的自动映射（所以以后引用行号时要**说清是 `lib/` 还是 `src/`**）；
+没在 CI 里卡覆盖率门槛。
 
 **没验**：真机验收 —— 仍然卡在这里，目标继续 active。
 
