@@ -490,7 +490,8 @@ test('★★ 探针命令：算出来的路径真的在，而且 `files` 里必�
 });
 
 test('★ 连不上长连接时：中文事实 + 出路，而且绝不回显那条一次性授权链接', async () => {
-  const { channel, fake } = makeFeishu({ home: freshHome() });
+  const home = freshHome();
+  const { channel, fake } = makeFeishu({ home });
   // 原文照抄**实测**抓到的形态：拿假凭据真连了一次官方长连接，回来的就是这句
   fake.connectError = 'could not resolve bot identity via /open-apis/bot/v3/info — required for channel to function';
   fake.connectErrorCode = 'not_connected';
@@ -504,9 +505,22 @@ test('★ 连不上长连接时：中文事实 + 出路，而且绝不回显那�
   assert.match(err.message, /probe\/smoke\.mjs/, '要说怎么办 —— 只说"不行"等于没说');
   assertRunnableProbeHint(err.message);
   assert.match(err.message, /发新版/, '权限那条坑要提醒（改完不发版不生效）');
-  // ⚠️ context.consoleUrl 是签了名的一次性授权链接 = 凭据，绝不能出现在任何输出里
+  // ⚠️ 第 36 轮补的两条。上面那条 `assertRunnableProbeHint` 是**宽容**的（容忍 `--home=`、
+  //    却不要求它），而 `connectFailed` 正是同一族里**第三处**漏传管家目录的调用点 ——
+  //    第 35 轮修好了、却没有任何断言盯它。家不在默认位置时它必须自己带 `--home=`。
+  assert.ok(
+    err.message.includes(`--home="${home}"`),
+    `别处的家必须带上 --home=，否则这条"出路"把人引到错地方（实际：${err.message}）`,
+  );
+  // ⚠️ context.consoleUrl 是签了名的一次性授权链接 = 凭据，绝不能出现在任何输出里。
+  //    上面验的是**合成**的那个 token；这一条换成更强的形态：这条消息里**一个 URL 都不该有**
+  //    （第 36 轮拿假凭据真连了一次官方长连接，实测抓到的原文里就夹着那条签名链接）。
   assert.ok(!err.message.includes('SECRET-TOKEN'), '一次性授权链接绝不能回显');
   assert.ok(!err.message.includes('consoleUrl'));
+  assert.ok(
+    !/https?:\/\//.test(err.message),
+    `这条消息里不该有任何 URL —— 官方原文那句里夹着签名链接（实际：${err.message}）`,
+  );
 
   assert.equal(fake.connected, false);
   assert.equal(fake.subscribed, false, '连不上要退订 —— 别留半个订阅在那儿');
