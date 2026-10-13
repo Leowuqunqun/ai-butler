@@ -1,6 +1,6 @@
 {
   "name": "@butler/memory-file",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "把记忆存成一个 JSON 文件（ctx.memory 的第一个实现）：肉眼可查、原子写、0600",
   "type": "module",
   "license": "MIT",

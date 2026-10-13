@@ -1,6 +1,6 @@
 {
   "name": "@butler/link-lan",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "ctx.link 的实现：局域网链路（HTTP + SSE，零依赖）。中枢侧 @butler/link-lan，节点侧 @butler/link-lan/node",
   "type": "module",
   "license": "MIT",

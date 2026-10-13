@@ -1,6 +1,6 @@
 {
   "name": "@butler/core",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "AI 管家的内核：把 ctx.channel 收到的消息交给 ctx.agent，再把结果发回去",
   "type": "module",
   "license": "MIT",

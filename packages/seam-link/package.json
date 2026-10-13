@@ -1,6 +1,6 @@
 {
   "name": "@butler/seam-link",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "链路能力位（ctx.link）：只声明接口，不实现。局域网/Tailscale/SSH 等链路继承它接入",
   "type": "module",
   "license": "MIT",
