@@ -835,6 +835,10 @@ turned everything green. **Only a real install exposes this class of bug**, so
 `scripts/verify-clean-install.sh` is now a standing acceptance: it builds the very
 `dist/*.tar.gz` that ships, unpacks it, and walks "dry-run → real install → `--help` → `init`
 → `doctor` → `autostart --dry-run` → uninstall keeps data" inside a **temporary home and prefix**.
+(The **upgrade** path is a second standing acceptance, `scripts/verify-upgrade.sh`: install a real
+old release, let the **old CLI** write the config, drop in the things a user would have edited, then
+upgrade in place with the **published** new `install.sh` — "clean machine, first install" can never
+tell you whether the things in a **lived-in house** survived.)
 
 That chain has since caught two more, both living exactly where "only happens once you ship it"
 lives — and both are now pinned in the script:

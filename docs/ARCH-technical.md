@@ -828,6 +828,9 @@ item_list[i].image_item / file_item
 **这类问题只有真装一遍才会暴露**，所以 `scripts/verify-clean-install.sh` 是常设验收：
 它先打出真正要发出去的那个 `dist/*.tar.gz`，解开，在一个**临时家目录 + 临时前缀**里
 走完"dry-run → 真装 → `--help` → `init` → `doctor` → `autostart --dry-run` → 卸载留数据"。
+（**升级**那条路是另一个常设验收 `scripts/verify-upgrade.sh`：装真的旧版本、用**老 CLI** 生成配置、
+再把"用户自己改过的东西"塞进去，然后用**发布出来的**新 `install.sh` 就地升级 —— "干净机器第一次装"
+永远验不到"住着的房子"里那些东西还在不在。）
 
 上面那条链子后来又抓到两条，都长在"只有真发给别人"才会出问题的地方，现在都钉在脚本里：
 

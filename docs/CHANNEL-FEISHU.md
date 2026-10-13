@@ -796,6 +796,35 @@ README / `docs/EVIDENCE.md`。）
 这轮的产物是**发布**而不是代码，所以没有新用例（全仓仍是 937）。发布本身可验证：把 release 上的
 `butler-installer-latest.tar.gz` 下载回来解包，看 `tarballs/` 里有没有 `butler-channel-feishu`。
 
+### 第 27 轮：升级演练 —— 在**真的装着老版本的机器**上验一遍（脚本留在 `scripts/verify-upgrade.sh`）
+
+第 26 轮把 v0.2.0 发出去了，于是用户下一件真会敲的事就是那条升级命令。可"包里有飞书"（上一轮
+验的）和"**在他那台已经装好的机器上升级成功、而且不弄坏他的东西**"是两件事。这轮把后者也跑成
+了一个可重跑的脚本：
+
+`sh scripts/verify-upgrade.sh` —— 全程在**临时 HOME** 里（`install.sh` 的 `HOME_DIR="${HOME}"`、
+`BUTLER_DIR="${HOME_DIR}/.butler"`，所以把 HOME 指走就整间房子都是临时的），真 `~/.butler` 不碰：
+
+1. 装**真**的 v0.1.0（从 release 下载，那时候没有飞书）；
+2. 让这间房子像用户那台：用**老版本的 CLI** 生成配置，再塞一个"用户自己改过"的标记 + 一份
+   `secrets.json`（0600）；
+3. 用**发布出来的**新 `install.sh` 就地升级（就是 `curl … | sh` 那条）；
+4. 验：飞书包 + 探针来了 ✓；`config.json` / `secrets.json` / 0600 **一个字节没变** ✓；
+5. 验升级后的语义：`butler init`（不带 `--im`）补能力行但**不换**收信那行 ✓；
+   `init --im feishu` 只换那一行 ✓；换完 doctor 里**真的装载成功** ✓；探针 `--dry` 能跑 ✓。
+
+跑通的过程里我自己的断言错了两次，都值得记下来：
+
+- **凭印象猜包名**：我写了 `@butler/channel-wechat` —— 微信那条通道的包名其实是
+  `wechat-agent-bridge`（配置行里写的就是 `wechat-agent-bridge/plugin`）。断言错了会**冤枉老版本**，
+  所以那条现在失败时会把目录列出来。
+- **把"如实报告"当失败**：`butler doctor` 在"配置不完整 / 微信还没登录"时**非零退出**，那是它的
+  正确行为（它还说了"改完再跑一次 doctor"）。夹具里我一开始只写了一行配置，于是 doctor 如实报
+  "少了 agent、core" —— 脚本却把它当成了失败。现在不看退出码，只看它说了什么。
+
+（不改真机器的一个附带好处：这轮把"用户的房子"里会有什么（`config.json`、`state/secrets.json`、
+`dsh.patch.yml`）也都看清楚了。）
+
 ---
 
 ## 十二、真机验收手册（给"第一枪"用）

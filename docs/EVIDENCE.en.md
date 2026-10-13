@@ -138,6 +138,14 @@ they keep growing with the feature set — **treat the total on this line as aut
   inside a **temporary home and prefix**; the real `~/Library`, real launchd and real WeChat are
   never touched. **It caught the ★ bug in the table above on its very first run**, which is exactly
   why it exists.
+- The **upgrade** path has a standing acceptance too: `sh scripts/verify-upgrade.sh` installs a
+  **real** old release (v0.1.0, from before Feishu existed), lets the **old CLI** write the config,
+  drops in a "user edited this" marker plus a 0600 credential file, then upgrades in place with the
+  **published** new `install.sh` — and checks that what the new version promised arrived (the Feishu
+  package and its probe), that `config.json` / `secrets.json` / 0600 are **byte-identical**, that
+  `init` afterwards tops up missing rows **without** switching the receive row, and that
+  `init --im feishu` switches only that row and the row then really loads. A **lived-in house** is
+  the normal case for users, and "clean machine, first install" can never cover it.
 - `channel-wechat/test/login.mjs` really **starts a local HTTP QR page** (127.0.0.1 only) and
   feeds a fake client through the whole login: the code really reaches the page, the browser is
   really pointed at that page's address, the credentials really land on disk, the cursor really
