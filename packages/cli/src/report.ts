@@ -17,6 +17,7 @@ import { homedir, release, type } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { autostartLogFile } from './autostart.js';
 import { doctor, formatDoctor } from './doctor.js';
 
 export interface ReportOptions {
@@ -39,9 +40,12 @@ const PATCH_LINES = 120;
 
 export async function collectReport(opts: ReportOptions = {}): Promise<string> {
   const home = opts.home ?? homedir();
-  const butler = join(home, '.butler');
+  const configPath = opts.configPath ?? join(home, '.butler', 'config.json');
+  // ⚠️ 管家目录 = **配置所在目录** —— 和 `cli.ts` 里 `butlerDir: dirname(args.config)` 是同一条规则。
+  //    用 `--config` 把家安在别处的人，报告必须说**那个**家。以前这里写死 `~/.butler`，
+  //    于是报告自己跟自己打架：①段在数 `~/.butler` 里的文件，④段的 doctor 读的却是 `--config` 那份。
+  const butler = dirname(configPath);
   const at = (opts.now ?? (() => new Date()))();
-  const configPath = opts.configPath ?? join(butler, 'config.json');
   const lines: string[] = [];
   const put = (s = ''): void => { lines.push(s); };
 
@@ -63,12 +67,14 @@ export async function collectReport(opts: ReportOptions = {}): Promise<string> {
     ['模型 key（只登记存在，**不读内容**）', 'dsh-home/.credentials.yaml'],
     ['通道凭据（只登记存在，**不读内容**）', 'state/secrets.json'],
     ['记忆', 'state/memory.json'],
-    ['自启动日志', 'logs/autostart.log'],
   ];
   for (const [what, rel] of known) {
     const p = join(butler, rel);
     put(`  ${what}：${describeFile(p)}`);
   }
+  // 日志这一条**不跟着管家目录走**：自启动永远写在 `~/.butler/logs`（见 `autostart.ts` 的
+  // `autostartLogFile`）。如实说，而不是顺手拼到 `butler` 后面 —— 那样会指一个不存在的文件。
+  put(`  自启动日志：${describeFile(autostartLogFile(home))}（这一条不跟着 --config 走）`);
 
   put('\n────────── ② 配置里有哪些行 ──────────');
   configSection(configPath, put);
@@ -94,7 +100,7 @@ export async function collectReport(opts: ReportOptions = {}): Promise<string> {
   }
 
   put('\n────────── ⑤ 最近的日志尾巴 ──────────');
-  const logFile = join(butler, 'logs', 'autostart.log');
+  const logFile = autostartLogFile(home);  // 同上：日志不跟着 --config 走
   if (!existsSync(logFile)) {
     put('  没有日志文件（没用过自启动，或者刚装上）。');
   } else {
@@ -107,6 +113,7 @@ export async function collectReport(opts: ReportOptions = {}): Promise<string> {
   put('\n────────── ⑥ 这一份里没有什么 ──────────');
   put('  · 没有你的模型 key、通道 token、链接密钥 —— 它们只会以「已隐去」出现');
   put('  · 没有你和管家的对话内容');
+  put('  · 隐去是**按形状**扫的：路径里那些又长又随机的串也会被隐去 —— 读起来断了一截是正常的，不是坏了');
   put('  · 生成这份报告**只读**：除了它自己，没改你机器上的任何东西');
 
   // 单一出口：整份文本最后过一遍扫描器。两道防线，不是一道。

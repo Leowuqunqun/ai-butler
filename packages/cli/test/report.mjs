@@ -161,3 +161,41 @@ test('扫描器本身：sk-、Bearer、长串都拦得住', () => {
   assert.ok(!out.includes('0123456789abcdef0123456789abcdef'));
   assert.match(out, /已隐去/);
 });
+
+/**
+ * ⚠️ 这条盯的是报告**自己跟自己打架**：④段的 doctor 读的是 `--config` 那份，
+ * ①段却曾经写死 `~/.butler` —— 于是同一份报告里，"管家目录"和凭据有没有是假的。
+ * 报告是"出事了发给帮你的人"那份东西，指错地方比不写更坏。
+ */
+test('★ 用 --config 把家安在别处：报告说的是**那个**家', async () => {
+  const home = tempHome();
+  try {
+    const elsewhere = join(home, '别处的家');
+    mkdirSync(join(elsewhere, 'state'), { recursive: true });
+    mkdirSync(join(elsewhere, 'dsh-home'), { recursive: true });
+    mkdirSync(join(home, '.butler', 'logs'), { recursive: true });
+    const configPath = join(elsewhere, 'config.json');
+    writeFileSync(configPath, JSON.stringify({
+      plugins: [{ id: 'core', name: '@butler/core', config: { workspace: '/home/leo/work' } }],
+    }, null, 2));
+    // 凭据**只**在别处那个家里 —— 报告要是还去 ~/.butler 找，这一条就会说"没有"
+    writeFileSync(join(elsewhere, 'state', 'secrets.json'), JSON.stringify({ version: 1, channels: {} }));
+    // 自启动的日志反过来：**不**跟着 --config 走，永远在 ~/.butler/logs（见 autostart.ts）
+    writeFileSync(join(home, '.butler', 'logs', 'autostart.log'), '别处那台的日志尾巴\n');
+
+    const text = await collectReport({ home, configPath, selfCheck });
+
+    // ⚠️ 比"整条路径"是不行的：报告最后要过一个**按形状扫**的脱敏器，而 macOS 临时路径里
+    //    那串长随机段正好长得像密钥 —— 它会被隐去（那是**对**的）。所以这里比**可辨认的尾巴**，
+    //    它同样能证伪：写死 `~/.butler` 的时候，这一行里根本不会出现"别处的家"。
+    const dirLine = /管家目录：.*/.exec(text)?.[0] ?? '';
+    assert.ok(dirLine.endsWith('别处的家'),
+      `报告必须说 --config 那个家（不是 ~/.butler），实际写的是：${dirLine}`);
+    assert.ok(text.includes('通道凭据（只登记存在，**不读内容**）：有'),
+      '凭据在 --config 那个家里 —— 去 ~/.butler 找就会说"没有"');
+    assert.match(text, /记忆：没有/);
+    assert.match(text, /别处那台的日志尾巴/, '⑤ 念的是真日志（它固定在 ~/.butler/logs，不跟着 --config 走）');
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});

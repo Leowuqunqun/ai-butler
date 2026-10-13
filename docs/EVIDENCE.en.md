@@ -114,6 +114,12 @@ they keep growing with the feature set — **treat the total on this line as aut
   all) before reading the result back with the CLI's own reader. It used not to: copy-pasting it
   wrote the credentials into `~/.butler` while the CLI read somewhere else — exactly the "the probe
   says it saved, `butler run` says there is no app_id yet" failure the test exists to prevent.
+  The same line measures the **other commands** too (round 33): with `--config` pointing elsewhere,
+  `butler report` names **that** home — `packages/cli/test/report.mjs` pins both the "butler
+  directory" line and whether the credentials exist. It used to hardcode `~/.butler`, so the report
+  contradicted itself (section ① counted files in `~/.butler` while section ④'s doctor read the
+  `--config` one). The autostart log is the one thing that deliberately does **not** follow it (it
+  always lives in `~/.butler/logs`), and the report says so instead of guessing.
   And one that asks the **real official package** (`packages/channel-feishu/test/types.mjs`):
   14 raw Feishu events go through the official `normalize()`, then through our layer, to see whether
   we drop anything. It caught a bug that made messages **vanish** — text-only types (a forwarded

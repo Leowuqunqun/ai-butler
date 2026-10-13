@@ -106,6 +106,10 @@ memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 249）。
   **原样交给 shell 跑一遍**（连引号一起验），再用 CLI 的读法读回来。以前它不带：用户照抄就会把
   凭据存进 `~/.butler`，而 CLI 在别处读 —— 正是这条契约最想防的"探针说存好了、`butler run`
   却说还没有 app_id"。
+  同一条线还量了**别的命令**（第 33 轮）：`--config` 把家安在别处时，`butler report` 说的就是
+  **那个**家 —— `packages/cli/test/report.mjs` 把报告里的"管家目录"和"凭据有没有"一起钉住。
+  以前它写死 `~/.butler`，于是报告自己跟自己打架（①段在数 `~/.butler`，④段的 doctor 读的却是
+  `--config` 那份）。自启动日志是唯一**不**跟着走的（它固定在 `~/.butler/logs`），报告如实说明。
   还有一条是拿**真的官方包**问的（`packages/channel-feishu/test/types.mjs`）：14 组原始飞书事件
   喂给官方导出的 `normalize()`，再问我们这层"有没有弄丢"。它抓出过一个会让消息**整条消失**的
   bug —— 只有文本、没有附件的类型（合并转发的聊天记录 / 卡片 / 名片 / 位置）曾被丢弃，

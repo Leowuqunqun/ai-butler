@@ -93,7 +93,7 @@ export function autostartPlan(opts: AutostartOptions = {}): AutostartPlan | null
   const uid = opts.uid ?? (typeof process.getuid === 'function' ? process.getuid() : 0);
   // ⚠️ **现在**这份 PATH 才是能干活的那份，见文件头的第 1 个坑
   const path = (opts.env ?? process.env).PATH ?? '';
-  const logFile = join(home, '.butler', 'logs', 'autostart.log');
+  const logFile = autostartLogFile(home);
   const args = ['run', '--config', config, '--no-open'];
 
   if (platform === 'darwin') {
@@ -204,6 +204,23 @@ function unsupported(platform: NodeJS.Platform): string {
   ].join('\n');
 }
 
+/**
+ * 自启动日志在哪 —— **不跟着 `--config` 走**：永远在 `~/.butler/logs` 下。
+ *
+ * 抽成一个函数，是因为有**两处**要按同一条规则说这个文件：这儿写它（`autostartPlan` /
+ * `autostartOn`），`butler report` 要把它念出来。抄两遍就迟早有一遍过期 —— 而报告指错
+ * 文件比不写更坏：求助的人照着去找，找不到。
+ */
+export function autostartLogFile(home: string = homedir()): string {
+  return join(home, '.butler', 'logs', 'autostart.log');
+}
+
+/** 打印给人看时把家目录缩成 `~`（对默认用户，这句话和以前一个字符都不差） */
+function shownPath(p: string): string {
+  const home = homedir();
+  return p.startsWith(`${home}/`) ? `~${p.slice(home.length)}` : p;
+}
+
 function firstOk(run: CommandRunner, cmds: readonly (readonly string[])[]): { ok: boolean; out: string } {
   let last: { ok: boolean; out: string } = { ok: false, out: '' };
   for (const cmd of cmds) {
@@ -224,7 +241,7 @@ export function autostartOn(opts: AutostartOptions = {}): number {
   }
 
   mkdirSync(dirname(plan.file), { recursive: true });
-  mkdirSync(dirname(join(opts.home ?? homedir(), '.butler', 'logs', 'autostart.log')), { recursive: true });
+  mkdirSync(dirname(autostartLogFile(opts.home ?? homedir())), { recursive: true });
   writeFileSync(plan.file, plan.content, { mode: 0o644 });
   log(`✅ 写好了自启动单元（${plan.kind}）：${plan.file}`);
 
@@ -236,7 +253,7 @@ export function autostartOn(opts: AutostartOptions = {}): number {
     return 1;
   }
   log('✅ 自启动已生效：管家会在这台电脑登录后自己起来（不用开终端）。');
-  log('  日志：~/.butler/logs/autostart.log');
+  log(`  日志：${shownPath(autostartLogFile(opts.home ?? homedir()))}`);
   return 0;
 }
 
