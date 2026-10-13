@@ -124,6 +124,7 @@ scripts/               图渲染 + 文档/包结构自检 + 变异测试
 | [agent-dsh/README.md](packages/agent-dsh/README.md) | 大脑实现的用法与两个坑（`--patch` 顺序、`DSH_HOME` 必须隔离） |
 | [agent-exec/README.md](packages/agent-exec/README.md) | 接自己的脚本 / 别的 agent CLI；第二个实现如何检验契约 |
 | [cli/README.md](packages/cli/README.md) | **想知道怎么真的跑起来看这个**：`butler init` 生成什么、配置格式、patch 语义、`butler run`、`butler doctor` |
+| [dsh-plugin/README.md](packages/dsh-plugin/README.md) | **只想给 DSH 加个微信通道、不装整套看这个**：Release 一条命令装进 profile、配置表（`cwd` / `owner` / 端口 / `autostart`）、它不做什么、**真机验收自己怎么跑**（`probe/run.sh`） |
 | [channel-wechat/README.md](packages/channel-wechat/README.md) | 通道包的用法、配置、踩过的坑 |
 | [channel-telegram/README.md](packages/channel-telegram/README.md) | 第二个通道：怎么被接进来的、三个"宁可这样也不要那样"、**以及它找出的那个 seam 漏点** |
 | [channel-wechat/docs/protocol.md](packages/channel-wechat/docs/protocol.md) | iLink 协议笔记（含实测结论） |

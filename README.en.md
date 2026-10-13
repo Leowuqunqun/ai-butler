@@ -136,6 +136,7 @@ scripts/               diagram rendering + docs/package-structure checks + mutat
 | [agent-dsh/README.md](packages/agent-dsh/README.md) | How to use the agent implementation, plus two foot-guns (`--patch` order, `DSH_HOME` must be isolated) |
 | [agent-exec/README.md](packages/agent-exec/README.md) | Hook up your own script / another agent CLI; how a second implementation tests the contract |
 | [cli/README.md](packages/cli/README.md) | **Read this to actually run it**: what `butler init` generates, config format, patch semantics, `butler run`, `butler doctor` |
+| [dsh-plugin/README.md](packages/dsh-plugin/README.md) | **Read this to add a WeChat channel to DSH alone, without the whole stack**: one-command install from the Release into a profile, the config table (`cwd` / `owner` / ports / `autostart`), what it does not do, and how to run the real-DSH acceptance probe yourself |
 | [channel-wechat/README.md](packages/channel-wechat/README.md) | How to use the channel package, configuration, the foot-guns we hit |
 | [channel-telegram/README.md](packages/channel-telegram/README.md) | The second channel: how it plugs in, three "rather this than that" calls, **and the one seam leak it exposed** |
 | [channel-wechat/docs/protocol.md](packages/channel-wechat/docs/protocol.md) | iLink protocol notes (including measured conclusions) |

@@ -56,6 +56,10 @@ pgrep -fl "bridge.mjs run"
 （老的那个要重新扫码才能回去）。想留着老的就换一台机器跑这套；不在乎就直接往下走 ——
 这是可逆的，重新扫码就回来了。
 
+> **已经有一个在跑的 DSH？** 那可能不用装这一整套 —— 微信通道可以只当 DSH 插件挂进去
+> （一条 `dsh plugin --profile web add` 就完事，干活的还是 DSH 自己，会话也在一起）。
+> 装法与配置看 [dsh-plugin/README.md](../packages/dsh-plugin/README.md)。
+
 ### 电脑不在同一个 WiFi（你在外面遥控家里那台）
 
 两台都装 [Tailscale](https://tailscale.com/download)，**用同一个账号登录**，然后：
