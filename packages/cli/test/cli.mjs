@@ -304,3 +304,12 @@ test('--help 里看得到 autostart', async () => {
   assert.equal(r.code, 0);
   assert.match(r.out, /butler autostart on\|off\|status/);
 });
+
+test('--help 里看得到 BUTLER_HOME（"家在哪"的第二条说法）', async () => {
+  const r = await runCli(['--help']);
+  assert.equal(r.code, 0);
+  // 别只印一个名字：要说清它和 --config 谁优先（不然用户不知道该信哪条）
+  assert.match(r.out, /--config <文件>[\s\S]*BUTLER_HOME[\s\S]*仍然优先/);
+  // 还有一处更实际的：init 会写到那底下 —— 这段原来写死了 ~/.butler
+  assert.match(r.out, /init 写这两份[\s\S]*BUTLER_HOME/);
+});

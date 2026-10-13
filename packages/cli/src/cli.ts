@@ -99,6 +99,8 @@ const HELP = `AI 管家 —— 用微信遥控你的电脑
   --again                      已经贴过的 key / token 也再问一遍（想换一把的时候用）
   --dry-run                    只说要干什么，一个字节都不写（只有 autostart 认）
   --config <文件>              主配置。默认 ~/.butler/config.json
+                               （BUTLER_HOME 也能指管家目录：认了它就是默认家，
+                                探针和 CLI 都跟着走；--config 仍然优先）
   --patch <文件>               叠加在上面的补丁，可以给多次，后写的赢
   --node                       给**被遥控的那台**写配置（只对 init 有意义）
   --im wechat\|telegram\|feishu  这一台用哪个 IM 收信（不给 = 保持现在这个；首次是 wechat）
@@ -110,7 +112,7 @@ const HELP = `AI 管家 —— 用微信遥控你的电脑
   --out <文件>                 报告写到哪儿（只有 report 认）
   -v, --version                看版本
 
-butler init 写这两份（已经存在的一律不动）：
+butler init 写这两份（已经存在的一律不动；设了 BUTLER_HOME 就写在那底下）：
 
   ~/.butler/config.json        装哪几个插件（五行：通道 / agent / 内核 / 记忆 / 链路）
   ~/.butler/dsh.patch.yml      给 agent 的补丁：模型通道 + 人格
