@@ -10,9 +10,9 @@
 
 ## 用例总数（以此为准）
 
-**合计 924 个用例，全部离线可跑**（十七个包：seam-channel 12 / seam-agent 12 /
+**合计 927 个用例，全部离线可跑**（十七个包：seam-channel 12 / seam-agent 12 /
 seam-link 15 / seam-approval 7 / seam-memory 6 / core 162 / channel-wechat 134 /
-channel-telegram 51 / channel-feishu 52 / agent-dsh 40 / agent-exec 26 / approval-im 18 /
+channel-telegram 51 / channel-feishu 55 / agent-dsh 40 / agent-exec 26 / approval-im 18 /
 memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 244）。
 （下面两张明细里的用例数是**各条目落地当时**的数，会随功能继续长 —— **当前总数以这一行为准**。）
 
@@ -101,6 +101,10 @@ memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 244）。
   → **只有跨重启那条**红（进程内那条仍绿）—— 它正好说明这条测试量的是"落盘"这一层。
   再加一条**产品路径**（`packages/cli/test/secrets.mjs`）：探针存好的凭据经"读 → 填 → 装"
   真的落到**插件实例**上 —— 把那一项的 `key` 拼错一个字母，它立刻红。
+  还有一条是拿**真的官方包**问的（`packages/channel-feishu/test/types.mjs`）：14 组原始飞书事件
+  喂给官方导出的 `normalize()`，再问我们这层"有没有弄丢"。它抓出过一个会让消息**整条消失**的
+  bug —— 只有文本、没有附件的类型（合并转发的聊天记录 / 卡片 / 名片 / 位置）曾被丢弃，
+  大脑收到的是空提示词。把规则退回旧白名单，量这件事的用例立刻红。
 - `link-lan` 的 65 个里有 **47 个真的起了一个 HTTP 节点**（或真跑了一次完整往返）：
   真监听、真认证、真用 `ctx.link` 连过去、真跑一次带进度的调用。其中 5 个专盯
   "一句话说不清楚的失败"（空闲超时、半路掉线、密钥不对、协议版本对不上、方法不存在）

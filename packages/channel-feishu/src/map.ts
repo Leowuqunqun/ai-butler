@@ -88,6 +88,15 @@ export function toQuoteLine(msg: NormalizedMessage, max = 50): string {
 }
 
 /**
+ * 哪些类型的正文是**附件承载**的。
+ *
+ * 这些类型里官方给的 `content` 只是个标记（`<file key="…" name="…"/>`、`[sticker]`、
+ * `[file]`…），真正的信息在 `resources` 上 —— 落盘之后由"附件提示"那条路交给大脑。
+ * 所以这些类型 `text` 留空：不然提示词里多一行 markup，还可能被当成"用户说的话"。
+ */
+const RESOURCE_BORNE = new Set(['image', 'file', 'audio', 'video', 'media', 'sticker']);
+
+/**
  * 归一化消息 → `InboundMessage`。
  *
  * 引用原文和附件都**由调用方准备好再传进来**：引用要取一次网络（`fetchMessage`），
@@ -105,8 +114,19 @@ export function toInbound(
     raw: msg,
   };
   const text = (msg.content ?? '').trim();
-  const textual = msg.rawContentType === 'text' || msg.rawContentType === 'post';
-  if (textual && text) out.text = text;
+  /**
+   * 第 18 轮补的规则：**不在上面那个名单里的类型，正文就是这条消息唯一的载体**，必须原样带上。
+   *
+   * 在那之前这里只有 `text` / `post` 会带正文，于是官方**已经渲染成人能读的文本**的这些类型
+   * 会被整条丢掉：合并转发的聊天记录（`merge_forward`）、卡片里的字（`interactive`）、
+   * 分享的群名片 / 联系人卡片（`share_chat` / `share_user`）、位置（`location`）……
+   * 用户看得见自己发了东西，大脑拿到的是一个**空提示词**。
+   *
+   * 官方对没渲染出内容的类型也会给一句占位（`[unsupported message]` 等）—— 那是它自己的契约
+   * （"这条我读不出内容"）。带上它比**什么都不给**好：至少大脑能如实说"这条我读不了"，
+   * 而不是对着一条空消息编。
+   */
+  if (!RESOURCE_BORNE.has(msg.rawContentType) && text) out.text = text;
   if (opts.quote) out.quote = opts.quote;
   if (opts.files?.length) out.files = opts.files;
   return out;
