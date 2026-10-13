@@ -8,8 +8,8 @@
  * 先把平台跑通，再谈适配层 —— 反过来的话，出问题时分不清是我们的映射写错了，
  * 还是飞书那边的权限没开。而且它不碰任何管家状态：不用装、不用配置、跑完就走。
  *
- * 它**故意只用官方包**，不 import 我们这个包的代码 —— 这样它就是一把干净的尺子：
- * 它要是通了而管家不通，问题一定在我们这边。
+ * 它**故意不 import 适配层**（`src/`）—— 只用官方包，外加一个只负责"把凭据写到盘上"的
+ * `probe/save.mjs`。这样它就是一把干净的尺子：它要是通了而管家不通，问题一定在适配层。
  *
  * 用法：
  *   bash packages/channel-feishu/probe/run.sh          # 没凭据就扫码注册
@@ -22,41 +22,14 @@
  * @module @butler/channel-feishu/probe
  */
 
-import { chmodSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
-
 import { registerApp, createLarkChannel } from '@larksuite/channel';
+
+import { homeOf, saveCreds, secretsFileOf } from './save.mjs';
 
 const DRY = process.argv.includes('--dry');
 const SAVE = process.argv.includes('--save');
-
-/**
- * 把凭据写进管家认的那个文件：`<home>/state/secrets.json`，格式 `channels.<通道>.<字段>`。
- *
- * 规矩照抄 `packages/cli/src/secrets.ts` 的：**合并写**（不碰别人的 token）、
- * **先临时文件再 rename**（断电不会留半个 JSON）、**0600**。
- * 这里刻意**不打印凭据本身** —— 要看就去那个文件里看，别把它留在滚动的终端里。
- */
-function saveCreds(home, appId, appSecret) {
-  const dir = join(home, 'state');
-  const file = join(dir, 'secrets.json');
-  let all = { version: 1, channels: {} };
-  try {
-    const parsed = JSON.parse(readFileSync(file, 'utf8'));
-    if (parsed && typeof parsed === 'object' && parsed.channels) all = parsed;
-  } catch {
-    // 没有、或者坏了 —— 新建一个（坏了的那份会在下一步被覆盖，这正是我们想要的）
-  }
-  all.channels = { ...(all.channels ?? {}), feishu: { appId, appSecret } };
-
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const tmp = `${file}.${process.pid}.tmp`;
-  writeFileSync(tmp, `${JSON.stringify(all, null, 2)}\n`, { mode: 0o600 });
-  renameSync(tmp, file);
-  chmodSync(file, 0o600);
-  return file;
-}
+/** 管家目录（`--home=` > `BUTLER_HOME` > `~/.butler`）。dry 里也要说真话，所以在这儿算一次 */
+const HOME = homeOf();
 
 if (DRY) {
   console.log('— dry run：下面这些是"真跑时会做的事"，现在什么都没发出去 —');
@@ -66,7 +39,7 @@ if (DRY) {
   console.log('  3. channel.on("message") —— 打印真实字段，并回一句"收到：…"');
   console.log('  4. channel.connect() —— WebSocket 长连接，连上后打印机器人身份');
   console.log('  5. 等你用手机飞书发一条消息（单聊；群里要 @ 它），收到就回复；Ctrl-C 退出');
-  if (SAVE) console.log('  ＋ --save：把凭据写进 ~/.butler/state/secrets.json（0600），`butler run` 直接用它');
+  if (SAVE) console.log('  ＋ --save：把凭据写进 ' + secretsFileOf(HOME) + '（0600），`butler run` 直接用它');
   console.log('');
   console.log('  通了就证明五件事：凭据、长连接、事件投递、权限点、回复 —— 全对。');
   process.exit(0);
@@ -129,11 +102,7 @@ if (!appId || !appSecret) {
 }
 
 if (SAVE) {
-  // 管家目录默认是 ~/.butler；容器里那套配置也照这个默认走
-  const home = process.argv.find((a) => a.startsWith('--home='))?.slice('--home='.length)
-    || process.env.BUTLER_HOME
-    || join(homedir(), '.butler');
-  const file = saveCreds(home, appId, appSecret);
+  const file = saveCreds(HOME, appId, appSecret);
   console.log(`凭据已存进 ${file}（0600）—— 下次 \`butler run\` 选飞书时会直接用它，不用再扫。`);
   console.log('（不打印凭据本身：要看就去那个文件里看。）\n');
 }

@@ -10,9 +10,9 @@
 
 ## Test case total (authoritative)
 
-**906 test cases in total, all runnable offline** (seventeen packages: seam-channel 12 / seam-agent 12 /
+**914 test cases in total, all runnable offline** (seventeen packages: seam-channel 12 / seam-agent 12 /
 seam-link 15 / seam-approval 7 / seam-memory 6 / core 162 / channel-wechat 134 /
-channel-telegram 51 / channel-feishu 42 / agent-dsh 40 / agent-exec 26 / approval-im 18 /
+channel-telegram 51 / channel-feishu 50 / agent-dsh 40 / agent-exec 26 / approval-im 18 /
 memory-file 9 / link-lan 65 / link-tailscale 34 / dsh-plugin 37 / cli 236).
 (The per-item counts in the two tables below are the numbers **as of the day that item landed**, and
 they keep growing with the feature set — **treat the total on this line as authoritative**.)
