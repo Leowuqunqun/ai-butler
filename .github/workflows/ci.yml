@@ -44,5 +44,8 @@ jobs:
       - name: 脚本自检（step/ok/bad 的标题里别放反引号 —— 那是命令替换，会把命令真跑一遍）
         run: pnpm check:scripts
 
+      - name: 用户面文案自检（会打印给用户看的话里别出现 packages/ docs/ scripts/ —— 装出来的机器上没有它们）
+        run: pnpm check:user-facing
+
       - name: 跑测试（全部离线：不连网、不需要微信账号、不会真的发消息）
         run: pnpm test

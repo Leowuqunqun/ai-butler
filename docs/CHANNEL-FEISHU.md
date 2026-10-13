@@ -1286,6 +1286,11 @@ const DOC = 'https://github.com/Leowuqunqun/ai-butler/blob/main/docs/CHANNEL-FEI
 没做的：没加一个仓库级的静态检查脚本（`check:user-facing` 之类）—— 这一轮把规则落在**这个包**的
 打包产物上，也就是"这个包真发出去的东西"；别的包要不要同一条，等真有下一次撞上再说。
 
+  ✅ **（第 47 轮补）** 加上了：`pnpm check:user-facing`（`scripts/check-user-facing.mjs`，CI 里一步）。
+  不过结论比当时想的宽一点 —— "别的包要不要同一条"这个问法本身就窄了：真正该问的是**这句话给谁看**，
+  于是范围是 `packages/*/src` + `packages/*/probe` + `install.sh`，`scripts/*.sh` **不在里面**
+  （那是维护者工具，跑它的人手上就有仓库）。见第十一节第 47 轮。
+
 **没验**：真机验收（真飞书企业里扫码、长连接、回一条消息）。
 
 ### 第 42 轮：`BUTLER_HOME` 这条规则，所有"算管家目录"的地方都认了吗
@@ -1523,6 +1528,59 @@ disposer 真管用）；⑤ **`boot()` 里已经挂好了**（装完插件直接
 - Cordis 自带那个缓冲 exporter **没动**（它不碍谁，也不好从外面摘）；我们只是**多挂了一个**。
 - 没做**按插件分别定级**（只开了 `levels.default` 一个口子）。真需要时再加。
 - 没验 DSH 图形界面那边的日志视图 —— 那条路走的是它自己的通道，与这里无关。
+
+### 第 47 轮：把"会打印给用户看的话"做成仓库级检查（第 41 轮自己写下的"没做的"）
+
+第 41/43 轮把"提示里出现的东西，用户手上得真有"这条规矩落在**一个包**的打包产物上，并留下最后一句
+"没加一个仓库级的静态检查脚本（`check:user-facing` 之类）……别的包要不要同一条，等真有下一次撞上
+再说"。这一轮把它做了 —— 而且"下一次"其实已经来了：**第 46 轮把"会打印"的集合加宽了**
+（`ctx.logger.*` 以前只进一个没人读的内存缓冲，等于不打印；现在它真的会打到终端上）。
+
+新脚本 `scripts/check-user-facing.mjs`（`pnpm check:user-facing`，CI 里一步）。规矩本身没变：
+
+```text
+凡是"会打印出去"的行里，不许出现 packages/ docs/ scripts/ —— https://… 里的路径不算。
+```
+
+两个决定值得记下来。
+
+**一、用语法树，不用正则。** 注释里到处都是 `docs/…`（写给人看的），而 `//` 又出现在 `https://…`
+里 —— 用正则剥注释**一定会剥错**。所以拿 TypeScript 的 parser 认这几类调用：
+`console.log/error/warn/info/debug(…)`、`process.stdout/stderr.write(…)`、**logger 家族的
+`info/warn/error/debug(…)`**（`ctx.logger.x` / `this.ctx.logger?.x` / `this.log(…)` 都算 —— 这是
+第 46 轮的加宽）、以及 `.sh` 里的 `echo/printf/step/ok/bad`（脚本没有 AST，那几行纯文本扫）。
+`typescript` 本来就是根上的 devDependency，没添新依赖。
+
+**二、范围是"谁在看这句话"，不是"哪个目录"。** 第一次跑就报出 5 处命中，**全在 `scripts/*.sh`**
+（`make-dsh-plugin-bundle.sh` 里的 `packages/seam-channel/lib`、`release.sh` 里的 `packages/` 和
+`docs/CHANNEL-FEISHU.md`）—— 可那是**维护者工具**：跑它的人手上就有仓库，那些路径正是他自己要看的。
+所以查的是"会到**装出来的用户**眼前的东西"：`packages/*/src`（CLI 与插件）、`packages/*/probe`
+（探针跟着包一起发）、`install.sh`（用户的第一个入口）；**不查 `scripts/*.sh`**。圈太大只会逼人写
+例外，圈太小又拦不住 —— 这条线就是"谁在看这句话"。
+
+**它现在没抓到东西**，而这正是想要的状态：这一轮之前 `.ts`/`.mjs` 侧本来就是干净的（第 40/43 轮修过），
+它守的是"以后别再出现"。它的第一个产出反倒是上面那个**范围**决定。
+
+**验证**（六道反向验证，用 `node scripts/check-user-facing.mjs <文件>` 指向临时文件，不动仓库）：
+
+| 喂进去的东西 | 期望 | 实测 |
+| --- | --- | --- |
+| `console.log('详细对照表在 docs/CHANNEL-FEISHU.md')` | 报 | ✅ `p1.ts:1` |
+| `ctx.logger?.info('看 node packages/cli/probe/smoke.mjs')` | 报 | ✅ `p3.ts:2` |
+| `process.stderr.write('见 scripts/release.sh 里那段\n')` | 报 | ✅ `p4.ts:1` |
+| `console.error('第 ' + n + ' 步：见 docs/CHANNEL-FEISHU.md')`（字符串拼接） | 报 | ✅ `p6.ts:2` |
+| `.sh` 里 `echo "细节见 docs/CHANNEL-FEISHU.md"` | 报 | ✅ `p5.sh:3` |
+| 同样的话写在 `//` 注释、`/** */` 里，以及 `https://…/blob/main/docs/…` | **不报** | ✅ 绿 |
+
+**没做的**：
+- 没给这个 checker 配自己的用例（另外三个 `check:*` 也一样 —— `mutate` 的靶子是 `src` + 测试，
+  不覆盖 `scripts/`）。反向验证是手跑的，记在上面那张表里。
+- 没做自动修复（不替人改文案，只指出哪一行）。
+- 没查"别的不该出现在用户面前的东西"（比如提示里让人去跑只有仓库里才有的命令）。这一轮只守"路径"
+  这一类，因为它是**咬过三次**的那一类。
+- 没管 `scripts/*.sh`（见上，有意的）。
+
+**没验**：真机验收（真飞书企业里扫码、长连接、回一条消息）—— 仍然卡在这里，目标继续 active。
 
 ## 十二、真机验收手册（给"第一枪"用）
 
