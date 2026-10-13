@@ -15,10 +15,12 @@
  * 假在更外面（起个假飞书服务器）只会测到官方的代码，那是他们的事。
  *
  * 假到什么程度：**只实现我们真的会调用的那几个成员**，行为按官方 README 与
- * 类型声明来（`on/connect/disconnect/send/reply/fetchMessage/botIdentity`）。
+ * 类型声明来（`on/connect/disconnect/send/reply/fetchMessage/downloadResourceToFile/botIdentity`）。
  *
  * @module @butler/channel-feishu/test/fake-lark
  */
+
+import { writeFileSync } from 'node:fs';
 
 import { Context } from '@deepseek-ai/cordis';
 import { FeishuChannel } from '../lib/index.js';
@@ -30,6 +32,14 @@ export class FakeLark {
   identity = { openId: 'ou_fake_bot', name: '管家的测试身份' };
   fetched = new Map();
   handlers = new Map();
+  /** 下载过什么（顺序、类型、落到哪），测试用来断言适配层怎么调的 */
+  downloads = [];
+  /** 默认写进去的字节；测试想造"超大文件"就换一个长的 */
+  downloadBytes = Buffer.from('假附件的内容');
+  /** 服务器给的 content-type（官方包会把它带回来） */
+  downloadContentType = 'image/png';
+  /** 设了就让下载抛错 —— 用来测"一个附件失败不拖累整条消息" */
+  downloadFails = null;
 
   /** connect() 之前是 undefined —— 和官方包的行为一致 */
   get botIdentity() {
@@ -63,6 +73,17 @@ export class FakeLark {
 
   async fetchMessage(messageId) {
     return this.fetched.get(messageId);
+  }
+
+  /**
+   * 官方包的契约：**父目录必须已经存在**（它不替我们建），而且它是 pipe 到磁盘的。
+   * 这里照做 —— 适配层哪天忘了 mkdir，这个假实现就会像真的一样抛 ENOENT。
+   */
+  async downloadResourceToFile(messageId, fileKey, type, destPath) {
+    this.downloads.push({ messageId, fileKey, type, destPath });
+    if (this.downloadFails) throw new Error(this.downloadFails);
+    writeFileSync(destPath, this.downloadBytes);
+    return { contentType: this.downloadContentType, bytesWritten: this.downloadBytes.length };
   }
 
   /** 测试用：像飞书那样把一条消息投进来（官方包归一化之后的形状） */

@@ -20,20 +20,20 @@
  */
 
 import z from '@deepseek-ai/schemastery';
-import { ChannelService, type HealthCheck, type SendOpts, type SendResult } from '@butler/seam-channel';
+import { ChannelService, type HealthCheck, type LocalFile, type SendOpts, type SendResult } from '@butler/seam-channel';
 import type { Context } from '@deepseek-ai/cordis';
 import { createLarkChannel, type LarkChannel, type NormalizedMessage } from '@larksuite/channel';
 
 import { toInbound, toQuoteLine, decodeContext } from './map.js';
 import { SeenStore } from './seen.js';
+import { destFor, downloadTypeOf, guessMime, kindOf } from './files.js';
 
-import { statSync } from 'node:fs';
+import { mkdirSync, rmSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 
 /** 飞书的硬上限。超了官方包会报错，不如我们先把话说清楚 */
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-const MAX_FILE_BYTES = 30 * 1024 * 1024;
 
 export interface FeishuChannelConfig {
   /** 开发者后台或扫码注册给的 app_id（`cli_…`）。**空 = 还没填** */
@@ -47,6 +47,8 @@ export interface FeishuChannelConfig {
   allowChats: string[];
   /** 去重表记多少条 messageId */
   seenLimit: number;
+  /** 单文件上限（MB）：收进来的超过它不落盘，发出去的超过它直接报错。飞书自己也是 30 */
+  maxFileMb: number;
 }
 
 export class FeishuChannel extends ChannelService {
@@ -59,6 +61,7 @@ export class FeishuChannel extends ChannelService {
     requireMention: z.boolean().default(true),
     allowChats: z.array(z.string()).default([]),
     seenLimit: z.number().default(1000),
+    maxFileMb: z.number().default(30),
   });
 
   readonly id = 'feishu';
@@ -76,7 +79,11 @@ export class FeishuChannel extends ChannelService {
     // `home` 空着就用默认位置。**不在 Config 里给默认值**：默认值要在运行时算
     //（会用到 homedir()），写在 schema 里会让 dump 出来的配置看起来是死的。
     this.home = config.home || join(homedir(), '.butler');
-    this.config = { ...config, home: this.home };
+    // `maxFileMb` 在这里兜一次底：`static Config` 的默认值只有在**经 cordis 装载**时
+    // 才生效，而这个类是能被直接 `new` 出来的（测试就是那么干的）。少了这一行，
+    // 上限会变成 `NaN` —— 而 `size > NaN` 永远是 false，**限流被静默关掉**。
+    // 这种"默认失效"不该靠调用方守规矩。
+    this.config = { ...config, home: this.home, maxFileMb: config.maxFileMb || 30 };
     this.seen = new SeenStore(join(this.home, 'state', 'feishu-seen.json'), config.seenLimit);
     this.lark = this.makeChannel(this.config);
     // 收尾一律走 effect（cordis 4 没有 'dispose' 事件）
@@ -170,17 +177,83 @@ export class FeishuChannel extends ChannelService {
     }
     this.seen.add(msg.messageId);
 
-    let quote: string | undefined;
-    if (msg.replyToMessageId) {
+    // 取引用原文 + 落盘附件 —— 两件事互不依赖，**并行**做。
+    // 串着做等于让用户白等一趟网络（而这两趟网络都不快）。
+    const [quote, files] = await Promise.all([this.fetchQuote(msg), this.fetchFiles(msg)]);
+
+    this.emitMessage(toInbound(msg, {
+      ...(quote ? { quote } : {}),
+      ...(files.length > 0 ? { files } : {}),
+      channelId: this.id,
+    }));
+  }
+
+  /** 取出被引用那句话的原文。取不到就当没引用（少一段上下文，好过整条消息不回） */
+  private async fetchQuote(msg: NormalizedMessage): Promise<string | undefined> {
+    if (!msg.replyToMessageId) return undefined;
+    try {
+      const quoted = await this.lark.fetchMessage(msg.replyToMessageId);
+      return quoted ? toQuoteLine(quoted) : undefined;
+    } catch (error) {
+      this.ctx.logger?.debug('feishu: 取被引消息失败（当没引用）: %o', error);
+      return undefined;
+    }
+  }
+
+  /**
+   * 把这条消息带的附件落到本机。
+   *
+   * 接缝的硬要求：`files` 里每个 `path` 都必须是**已经能读**的文件
+   * （"不允许按需再下载"——那等于把通道的复杂度漏给核心层）。所以这里 `await` 完才 `emitMessage`。
+   *
+   * 三条纪律：
+   *   · **一个附件失败不拖累整条消息**：记一条 warn、跳过它，正文照走。
+   *     少一个附件是遗憾，整条消息不回是事故。
+   *   · **超上限的不交出去**：落了盘才发现太大，就删掉 —— 别让 agent 去读一个
+   *     100 MB 的文件（它多半会整个读进上下文）。
+   *   · **文件名是对方给的**：所以一律过 `destFor` 消毒，绝不用它直接拼路径。
+   */
+  private async fetchFiles(msg: NormalizedMessage): Promise<LocalFile[]> {
+    const res = msg.resources ?? [];
+    if (res.length === 0) return [];
+    const dir = join(this.home, 'state', 'files', 'feishu');
+    const cap = this.config.maxFileMb * 1024 * 1024;
+    const out: LocalFile[] = [];
+
+    for (const r of res) {
+      const { path: dest, name } = destFor(dir, r);
       try {
-        const quoted = await this.lark.fetchMessage(msg.replyToMessageId);
-        if (quoted) quote = toQuoteLine(quoted);
+        // 官方包的下载是 **pipe 到磁盘**（不把整个文件读进内存），前提是父目录已存在
+        mkdirSync(dir, { recursive: true });
+        const { contentType, bytesWritten } = await this.lark.downloadResourceToFile(
+          msg.messageId,
+          r.fileKey,
+          downloadTypeOf(r.type),
+          dest,
+        );
+        if (bytesWritten > cap) {
+          rmSync(dest, { force: true });
+          this.ctx.logger?.warn(
+            'feishu: 附件太大（%s MB > %s MB），没交给 agent：%s',
+            (bytesWritten / 1024 / 1024).toFixed(1),
+            String(this.config.maxFileMb),
+            name,
+          );
+          continue;
+        }
+        out.push({
+          path: dest,
+          name,
+          mime: guessMime(name, contentType),
+          size: bytesWritten,
+          kind: kindOf(r.type),
+        });
       } catch (error) {
-        this.ctx.logger?.debug('feishu: 取被引消息失败（当没引用）: %o', error);
+        // 下载失败常常是权限点没开（`im:resource`），把原始错误留着给用户看
+        this.ctx.logger?.warn('feishu: 附件下载失败（跳过它，消息照走）%s: %o', name, error);
       }
     }
-
-    this.emitMessage(toInbound(msg, { ...(quote ? { quote } : {}), channelId: this.id }));
+    return out;
   }
 
   /**
@@ -217,11 +290,11 @@ export class FeishuChannel extends ChannelService {
     } catch {
       throw new Error(`要发的文件读不到：${path}`);
     }
-    const cap = isImage ? MAX_IMAGE_BYTES : MAX_FILE_BYTES;
+    const cap = isImage ? MAX_IMAGE_BYTES : this.config.maxFileMb * 1024 * 1024;
     if (size > cap) {
       throw new Error(
         `文件太大，飞书收不下：${name} 是 ${(size / 1024 / 1024).toFixed(1)} MB，`
-        + `上限 ${cap / 1024 / 1024} MB。把它压小或切成几份再发。`,
+        + `上限 ${(cap / 1024 / 1024).toFixed(0)} MB。把它压小或切成几份再发。`,
       );
     }
 

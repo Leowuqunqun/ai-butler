@@ -8,7 +8,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, truncateSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -189,4 +189,80 @@ test('自检：没凭据时说清怎么拿，有凭据时不假装探过活', as
   await ok.start();
   const after = await ok.check();
   assert.match(after[0].detail, new RegExp(fake.identity.name));
+});
+
+// ───────────────────────── M-b：入站附件落盘 ─────────────────────────
+
+test('★ 收到图片：真落到本机，接缝要的那几项都对', async () => {
+  const home = freshHome();
+  const { channel, fake } = makeFeishu({ home });
+  await channel.start();
+
+  const got = [];
+  channel.onMessage((msg) => got.push(msg));
+  fake.downloadContentType = 'image/png';
+  fake.downloadBytes = Buffer.from('假装这是一张图');
+  fake.emit(normalized({
+    content: '',
+    rawContentType: 'image',
+    resources: [{ type: 'image', fileKey: 'file_v2_abc', fileName: '截图.png' }],
+  }));
+  await settle();
+
+  assert.equal(fake.downloads.length, 1);
+  assert.equal(fake.downloads[0].messageId, 'om_1', '下载要拿这条消息的 id 去换资源');
+  assert.equal(fake.downloads[0].type, 'image', '图片走 image 那条下载路');
+
+  const files = got[0].files;
+  assert.equal(files.length, 1);
+  const f = files[0];
+  // 接缝的硬要求：拿到它的时候，这个路径已经是**一个能读的真实文件**
+  assert.ok(existsSync(f.path), 'path 必须已经可读');
+  assert.ok(f.path.startsWith(join(home, 'state', 'files', 'feishu')), '落到管家目录下的收件箱');
+  assert.equal(f.name, '截图.png');
+  assert.equal(f.kind, 'image');
+  assert.equal(f.mime, 'image/png');
+  assert.equal(f.size, fake.downloadBytes.length);
+  // 纯附件消息没有正文 —— 核心层会用"看看是什么"那类默认提示词，不用我们编
+  assert.equal(got[0].text, undefined);
+});
+
+test('★ 一个附件下载失败：消息照走，正文一个字都不丢', async () => {
+  const { channel, fake } = makeFeishu({ home: freshHome() });
+  await channel.start();
+
+  const got = [];
+  channel.onMessage((msg) => got.push(msg));
+  fake.downloadFails = 'permission denied: im:resource';
+  fake.emit(normalized({
+    content: '看下这个报价',
+    resources: [{ type: 'file', fileKey: 'k', fileName: '报价.pdf' }],
+  }));
+  await settle();
+
+  // 少一个附件是遗憾，整条消息不回是事故
+  assert.equal(got.length, 1);
+  assert.equal(got[0].text, '看下这个报价');
+  assert.equal(got[0].files, undefined);
+});
+
+test('★ 附件超过上限：不交给 agent，而且不留在收件箱里', async () => {
+  const home = freshHome();
+  // 上限设成 ~10 字节，下面那个 64 字节的附件必然超
+  const { channel, fake } = makeFeishu({ home, maxFileMb: 0.00001 });
+  await channel.start();
+
+  const got = [];
+  channel.onMessage((msg) => got.push(msg));
+  fake.downloadBytes = Buffer.alloc(64, 1);
+  fake.emit(normalized({
+    content: '',
+    rawContentType: 'file',
+    resources: [{ type: 'file', fileKey: 'k', fileName: '大文件.bin' }],
+  }));
+  await settle();
+
+  assert.equal(got.length, 1, '消息本身还是要走的');
+  assert.equal(got[0].files, undefined, '太大的不能交出去（agent 多半会整个读进上下文）');
+  assert.deepEqual(readdirSync(join(home, 'state', 'files', 'feishu')), [], '落了盘发现太大，要删掉');
 });

@@ -8,7 +8,7 @@
  * @module @butler/channel-feishu/map
  */
 
-import type { InboundMessage } from '@butler/seam-channel';
+import type { InboundMessage, LocalFile } from '@butler/seam-channel';
 import type { NormalizedMessage } from '@larksuite/channel';
 
 /**
@@ -87,10 +87,16 @@ export function toQuoteLine(msg: NormalizedMessage, max = 50): string {
   return one.length > max ? `${one.slice(0, max)}…` : one;
 }
 
-/** 归一化消息 → `InboundMessage`。引用那段由调用方取好原文传进来（取不到就不传） */
+/**
+ * 归一化消息 → `InboundMessage`。
+ *
+ * 引用原文和附件都**由调用方准备好再传进来**：引用要取一次网络（`fetchMessage`），
+ * 附件要落一次盘（`downloadResourceToFile`）—— 两件都不属于"纯映射"，
+ * 所以这个文件里一个 `await` 都没有，全部能离线测。
+ */
 export function toInbound(
   msg: NormalizedMessage,
-  opts: { quote?: string; channelId?: string } = {},
+  opts: { quote?: string; channelId?: string; files?: LocalFile[] } = {},
 ): InboundMessage {
   const out: InboundMessage = {
     channel: opts.channelId ?? 'feishu',
@@ -102,5 +108,6 @@ export function toInbound(
   const textual = msg.rawContentType === 'text' || msg.rawContentType === 'post';
   if (textual && text) out.text = text;
   if (opts.quote) out.quote = opts.quote;
+  if (opts.files?.length) out.files = opts.files;
   return out;
 }
