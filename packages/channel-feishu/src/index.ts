@@ -103,6 +103,15 @@ export function sdkLoggerOf(log: LoggerLike | undefined): SdkLogger {
 }
 
 /**
+ * 谁能私聊机器人。四个取值来自官方 `policy.dmMode` 的**类型声明**（@larksuite/channel 0.7.1：
+ * `dmMode?: 'open' | 'allowlist' | 'pair' | 'disabled'`）—— 别自己加第五个，官方不认的取值
+ * 会**悄悄按"不拦"处理**，也就是你以为收紧了、其实没有。所以这里用联合类型钉住，
+ * 拼错在装载时就报错，而不是变成一条静默的放行（第 59 轮）。
+ */
+export const DM_MODES = ['open', 'allowlist', 'pair', 'disabled'] as const;
+export type DmMode = (typeof DM_MODES)[number];
+
+/**
  * 交给官方 `createLarkChannel` 的那份选项。
  *
  * 抽成**纯函数**只为可测：这里面有两条规矩值得用**用例**钉住，而不是写在注释里 ——
@@ -120,7 +129,18 @@ export function larkOptionsOf(
     logger: sdkLoggerOf(log),
     policy: {
       requireMention: config.requireMention,
-      ...(config.allowChats.length > 0 ? { groupAllowlist: config.allowChats } : {}),
+      // 私聊谁理：透传官方那套（第 59 轮）。默认 `open` = 和以前一模一样，
+      // 想收紧就把 dmMode 改成 allowlist 并给 dmAllowlist（见 README / 手册）。
+      //
+      // ⚠️ 这里是**导出**的纯函数，会被直接拿裸 config 调用（`sdk-log.mjs` 就那么干），
+      //    所以**不能**假设构造函数已经兜过底 —— 少了 `?.` / `??` 就是一个 TypeError
+      //    （第 59 轮踩过：`config.dmAllowlist.length` 直接炸）。构造函数那段注释里
+      //    记的同一个坑，在导出函数这儿要再兜一次。
+      dmMode: config.dmMode ?? 'open',
+      ...(config.allowChats?.length > 0 ? { groupAllowlist: config.allowChats } : {}),
+      // 空着就**不传**这个字段（和 groupAllowlist 一个写法）：传空数组和"没传"在官方那边
+      // 都是"没人放行"，但少传一个字段更不容易让人误会成"配过了"。
+      ...(config.dmAllowlist?.length > 0 ? { dmAllowlist: config.dmAllowlist } : {}),
     },
     // 去重分工：官方包管**进程内**（官方重推最密的那几波），
     // 落盘表管**跨重启**（重推最远 6 小时后才来，那时内存早空了）。见 seen.ts。
@@ -138,6 +158,22 @@ export interface FeishuChannelConfig {
   requireMention: boolean;
   /** 只理这些群（chat_id，`oc_…`）。空 = 不筛（真正的门在核心层的"认主"） */
   allowChats: string[];
+  /**
+   * 私聊谁来都理（`open`）、只理名单里的（`allowlist`）、只理配对的（`pair`）、
+   * 谁也不理（`disabled`）。默认 `open` —— 与企业租户里官方的默认一致。
+   *
+   * ⚠️ 企业租户里默认 `open` 意味着**同公司谁先私聊谁就是主人**。想收紧就改这里
+   * （`config.json` 里那条通道的 config 下加 `"dmMode": "allowlist"`）。
+   */
+  dmMode: DmMode;
+  /**
+   * `dmMode: 'allowlist'` 时谁能私聊。填的是**发送者**的 id（`ou_…` / `user_id` / `union_id`）
+   * —— 从探针打出来的那条消息 JSON 里抄 `senderId`。
+   *
+   * ⚠️ **别填应用 id（`cli_…`）**：官方要的是发送者，`cli_` 开头的条目等于谁也没放行
+   * （官方 SDK 会警告一句，但很容易被刷过去）。`start()` 里我们也会替你喊一声。
+   */
+  dmAllowlist: string[];
   /** 去重表记多少条 messageId */
   seenLimit: number;
   /** 单文件上限（MB）：收进来的超过它不落盘，发出去的超过它直接报错。飞书自己也是 30 */
@@ -223,6 +259,11 @@ export class FeishuChannel extends ChannelService {
     home: z.string().default(''),
     requireMention: z.boolean().default(true),
     allowChats: z.array(z.string()).default([]),
+    // ⚠️ 用 union+const 而不是 `z.string().default('open')`：后者会把拼错的取值
+    //    原样传下去，而官方对不认识的 dmMode 是**照 open 处理**的 —— 那种"配了等于没配"
+    //    是本项目最忌讳的一类失败（沉默）。联合类型让它在装载时就炸（第 59 轮）。
+    dmMode: z.union(DM_MODES.map((mode) => z.const(mode))).default('open'),
+    dmAllowlist: z.array(z.string()).default([]),
     seenLimit: z.number().default(1000),
     maxFileMb: z.number().default(30),
     checkTimeoutMs: z.number().default(5000),
@@ -259,6 +300,8 @@ export class FeishuChannel extends ChannelService {
       home: this.home,
       requireMention: config.requireMention ?? true,
       allowChats: config.allowChats ?? [],
+      dmMode: config.dmMode ?? 'open',
+      dmAllowlist: config.dmAllowlist ?? [],
       seenLimit: config.seenLimit ?? 1000,
       maxFileMb: config.maxFileMb ?? 30,
       checkTimeoutMs: config.checkTimeoutMs ?? 5000,
@@ -318,6 +361,15 @@ export class FeishuChannel extends ChannelService {
     if (!this.hasCreds) {
       // 这条错会原样出现在 `butler run` 的"起不来：…"里，所以要写成人话（见 missingCreds）
       throw missingCreds(this.home);
+    }
+    // 收紧之前先喊一声：`dmAllowlist` 里填成应用 id（cli_…）是最容易犯的错 ——
+    // 官方要的是**发送者**的 id，填 cli_ 等于谁也没放行，而表面上"我配了白名单"（第 59 轮）。
+    const cliIds = this.config.dmAllowlist.filter((id) => id.startsWith('cli_'));
+    if (cliIds.length > 0) {
+      this.ctx.logger?.warn(
+        'feishu: dmAllowlist 里有应用 id（cli_…），那不是发送者 —— 官方要的是 open_id/user_id/union_id，填 cli_ 等于谁也没放行: %o',
+        cliIds,
+      );
     }
     // 先订阅、再连：连上之后立刻到达的消息不能漏。
     const off = this.lark.on('message', (msg) => {

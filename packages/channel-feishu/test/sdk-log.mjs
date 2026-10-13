@@ -74,8 +74,15 @@ test('★★ 交给官方的选项：有 logger，而且**没有** loggerLevel',
     !('loggerLevel' in opts),
     '⚠️ 不能传 loggerLevel：它是数字枚举，而 README 那张表写的是字符串 —— 传了就一条都不打',
   );
-  // 顺手钉住既有的那条规矩：空白名单**不传** groupAllowlist
-  assert.deepEqual(opts.policy, { requireMention: true });
+  // 顺手钉住既有的两条规矩：空白名单**不传** groupAllowlist / dmAllowlist。
+  //
+  // ⚠️ 这里用**精确** deepEqual（不是"包含"）：这份 policy 会原样交给官方，
+  //    多一个字段、少一个字段都是我们和官方之间的契约变了，就该在这儿红一次。
+  //    第 59 轮加 `dmMode` 时这条就红过一次 —— 那次红是**对的**，它逼着我把新字段想清楚。
+  //    另外：这个用例喂的是**裸 config**（没有 dm* 两个字段），所以它同时也是
+  //    "导出的纯函数不能假设构造函数兜过底"的回归守卫 —— 第 59 轮 `larkOptionsOf`
+  //    正是在这里以 `config.dmAllowlist.length` 抛 TypeError 露的馅。
+  assert.deepEqual(opts.policy, { requireMention: true, dmMode: 'open' });
 });
 
 test('★★ 钉住官方行为：它真会把日志送进传入的 logger，而多传一个 loggerLevel 就会全灭', async () => {

@@ -472,6 +472,36 @@ test('★ 断开时报错不影响"停下来"：记一条 warn，但绝不往外
   assert.ok(warned.some((m) => m.includes('断开时出错')), `实际日志：${JSON.stringify(s.got)}`);
 });
 
+test('★ dmAllowlist 里填了应用 id（cli_…）：照传，但 start() 会替你喊一声', async () => {
+  // "透传"那半在 policy.mjs 用**真的** @larksuite/channel 钉着（这个假实现没有 policy）。
+  // 这里只钉"我们有没有说一声"：官方要的是**发送者** id，填 cli_ 等于谁也没放行，
+  // 而用户看着自己写的白名单只会以为配好了 —— 这种沉默正是最该打破的（第 59 轮）。
+  const { channel } = makeFeishu({
+    home: freshHome(),
+    dmMode: 'allowlist',
+    dmAllowlist: ['ou_a_real_person', 'cli_this_is_an_app_id'],
+  });
+  const s = spyLogger();
+  channel.ctx.logger = s.log;
+  await channel.start();
+
+  const warned = s.got.filter((g) => g[0] === 'warn').map((g) => String(g[1]));
+  assert.ok(
+    warned.some((m) => m.includes('dmAllowlist 里有应用 id')),
+    `填成 cli_ 要喊一声，实际日志：${JSON.stringify(s.got)}`,
+  );
+});
+
+test('没配 dmAllowlist（默认 open）时**一声不吭** —— 别拿警告淹用户', async () => {
+  const { channel } = makeFeishu({ home: freshHome() });
+  const s = spyLogger();
+  channel.ctx.logger = s.log;
+  await channel.start();
+
+  const warned = s.got.filter((g) => g[0] === 'warn').map((g) => String(g[1]));
+  assert.deepEqual(warned, [], `默认路径不该有警告：${JSON.stringify(s.got)}`);
+});
+
 test('★ 取被引消息失败：当没引用，正文一个字不少地照送', async () => {
   const { channel, fake } = makeFeishu({ home: freshHome() });
   await channel.start();

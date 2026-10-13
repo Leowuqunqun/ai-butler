@@ -2074,6 +2074,39 @@ token 的引导页 ｜ 五份输出里**没有** `app_secret` 的值 ｜ **真 `
 没在 CI 里断言输出文案的**措辞**（只断言关键短语，将来改文案不必跟着改脚本）。
 **没验**：真机验收 —— 仍然卡在这里，目标继续 active。
 
+### 第 59 轮：把单聊准入透出来 —— `dmMode` / `dmAllowlist`（README 里挂着的那条"还没做"）
+
+README 的"它不做什么"里挂着一条：「没把单聊的准入策略透出来」—— 官方的 `dmMode` 默认
+`'open'`，也就是**企业里谁都能私聊驱动机器人**。这轮把它补上（那句如实的话也跟着改了）。
+
+**先查官方声明，不猜**（猜错就等于配了没配）：`@larksuite/channel` 0.7.1 的 `.d.mts` 写着
+`dmMode?: 'open' | 'allowlist' | 'pair' | 'disabled'` —— **四个**取值，不是两个；而且
+`dmAllowlist` 要的是**发送者**的 id（`ou_…` / `user_id` / `union_id`），类型注释里点名：
+「别把应用 id（`cli_…`）放进来：真实的发送者永远不是 `cli_`，所以填了等于谁也没放行」
+（官方 SDK 会打一句 warn，很容易被刷过去）。
+
+**做了什么**：Config 加 `dmMode`（默认 `'open'`，和官方一致 ⇒ 不配的人行为一点不变）
+和 `dmAllowlist`；两样都原样透给官方；`dmAllowlist` 空着就**不传**这个字段（和
+`groupAllowlist` 一个写法）；里面有 `cli_` 条目时 `start()` **喊一声** —— 但**不替你改**，
+照传（和 `groupAllowlist` 那条"只转达、不判断"的立场一致）。
+
+⭐ **为什么 schema 用联合类型而不是 `z.string()`**：官方对**不认识的** `dmMode` 是照 `open`
+处理的 —— 用户把 `allowlist` 写成 `allowList`，拿到的不是报错，而是**悄悄全放开**。
+联合类型把这个错误挡在装载时，有用例钉着（六个错值全试）。
+
+**一个真被咬到的坑**：`larkOptionsOf` 是**导出**的纯函数，`sdk-log.mjs` 会拿**裸 config**
+直接调它 —— 我照着 `allowChats` 的写法写了 `config.dmAllowlist.length`，当场 TypeError。
+构造函数里那段"所有默认值都在这里兜一次底"的注释救不了导出函数：**导出函数要自己兜**。
+（现在有用例守着：那条精确 `deepEqual` 的用例喂的就是裸 config。）
+
+**突变控制**（三处新守卫各改坏一次，红的必须是**对**那条）：`dmMode` 兜底拿掉 ⇒ 红的在
+`sdk-log`（裸 config 那条路径）；`cli_` 警告删掉 ⇒ 红的在 `plugin`；schema 换回
+`z.string()` ⇒ 红的在 `policy`。三次都逐字节还原（full sha）。
+
+**没做的**：没让 `doctor` 报告当前的 `dmMode`（值得做，是另一件事）；审批卡片、入站语音
+转写还在"它不做什么"里挂着。
+**没验**：真机验收 —— 仍然卡在这里，目标继续 active。
+
 ## 十二、真机验收手册（给"第一枪"用）
 
 三分钟，两条命令。**这一步只能人来做**（要手机扫码），所以把"看到什么 → 说明什么"
@@ -2192,6 +2225,19 @@ BUTLER_CLI=/tmp/butler-stub.sh sh scripts/rehearse-feishu-manual.sh
 > **装得早的机器**当初没有这个字段（认主只在内存里，重启就忘，谁先说话谁又当家）：
 > 跑一次 `butler init` 就会补上 —— `butler doctor` 和 `butler run` 都会明说这件事。
 > 补完再按上面那句钉死。
+>
+> **还有一层：谁能私聊它。** 上面钉的是"谁是主人"，但飞书那边还有一道**更靠前**的闸门：
+> 官方的 `dmMode` 默认是 `open` —— 企业里**谁都能私聊驱动机器人**（认主只决定"谁是主人"，
+> 不决定"谁能跟它说话"）。要让**只有某人**能私聊（第 59 轮起可以了），把探针那段 JSON 里的
+> `senderId` 抄下来，写进 `config.json` 那条通道的 `config` 下：
+>
+> `{ "dmMode": "allowlist", "dmAllowlist": ["ou_从探针那段JSON里抄的senderId"] }`
+>
+> ⚠️ 填的是**发送者** id（`ou_…` / `user_id` / `union_id`），**别填应用 id**（`cli_…`）——
+> 官方要的是发送者，填 `cli_` 等于谁也没放行（`start()` 会替你喊一声，但**不替你改**，照传）。
+> `dmMode` 写错（比如 `allowList`）会在**装载时**直接报错，不会悄悄按 `open` 放行。
+> 四个取值：`open`（默认，谁都行）/ `allowlist`（名单里才行）/ `pair`（只理配对的）/
+> `disabled`（谁也不理，等于关掉私聊）。改完要重启管家才生效。
 
 ### 看到什么 → 大概率是什么
 
