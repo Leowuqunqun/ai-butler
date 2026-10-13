@@ -35,13 +35,18 @@ export function probePath(): string {
 }
 
 /**
- * 默认的管家目录：`~/.butler`。
+ * 默认的管家目录：`$BUTLER_HOME` > `~/.butler`。
  *
- * 三个地方必须是同一条约定（探针的 `homeOf`、CLI 的 `--config` 默认值、这里）——
- * `packages/cli/test/probe-contract.mjs` 把它们真的凑在一起跑一遍。
+ * 四处必须是同一条约定（探针的 `homeOf`、CLI 的一切默认路径 —— 见 `butlerHome()`、
+ * 这里、以及生成的通道行里的 `home`）—— `packages/cli/test/probe-contract.mjs`
+ * 把它们真的凑在一起跑一遍。
+ *
+ * ⚠️ `BUTLER_HOME` 是第 37 轮补上的：探针一直认它，另外几处不认，于是设了它的人会看到
+ * "探针说存好了，`butler run` 却说还没有 app_id"。**别只改这一处** —— 改的是那条规则。
  */
-export function defaultHome(): string {
-  return join(homedir(), '.butler');
+export function defaultHome(env: NodeJS.ProcessEnv = process.env): string {
+  const fromEnv = (env.BUTLER_HOME ?? '').trim();
+  return fromEnv || join(homedir(), '.butler');
 }
 
 /** 这个管家目录是不是默认那个（是的话，命令里不必加 `--home=`，保持最短） */

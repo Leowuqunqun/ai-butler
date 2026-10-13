@@ -18,11 +18,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 
 import {
-  DEFAULT_CONFIG_PATH, FALLBACK_PATCH, IM_NAMES, butlerHome, coreStateFileMissing, defaultConfigText,
+  FALLBACK_PATCH, IM_NAMES, butlerHome, coreStateFileMissing, defaultConfigPath, defaultConfigText,
   defaultPatchPath, initButlerHome, patchTemplate,
 } from '../lib/setup.js';
 import { DEFAULT_KEY_REF, credentialsFileOf, keyRefOf } from '../lib/credentials.js';
@@ -167,8 +167,34 @@ test('init --node：给被遥控的那台写配置（两行，没有通道）', 
 });
 
 test('默认路径就是 ~/.butler/ 下的那两个（不给 --config 时）', () => {
-  assert.equal(DEFAULT_CONFIG_PATH, join(butlerHome(), 'config.json'));
-  assert.equal(defaultPatchPath(), join(butlerHome(), 'dsh.patch.yml'));
+  const before = process.env.BUTLER_HOME;
+  delete process.env.BUTLER_HOME; // 这条讲的是"没有那条环境变量时"的默认
+  try {
+    assert.equal(defaultConfigPath(), join(butlerHome(), 'config.json'));
+    assert.equal(defaultPatchPath(), join(butlerHome(), 'dsh.patch.yml'));
+  } finally {
+    if (before !== undefined) process.env.BUTLER_HOME = before;
+  }
+});
+
+test('★ 家跟着 BUTLER_HOME 走：默认配置/补丁路径都换到那个家里（空串＝没设）', () => {
+  const before = process.env.BUTLER_HOME;
+  const dir = home();
+  try {
+    process.env.BUTLER_HOME = dir;
+    assert.equal(butlerHome(), dir, '设了 BUTLER_HOME，家就是它 —— 探针一直是这么认的');
+    assert.equal(defaultConfigPath(), join(dir, 'config.json'));
+    assert.equal(defaultPatchPath(), join(dir, 'dsh.patch.yml'));
+
+    // 空串 / 空白 = 没设。**这一条防的是"被当成一个叫空字符串的家"**：
+    // `BUTLER_HOME= butler run` 是很常见的写法（清掉它），不能因此把家搬到 ""。
+    process.env.BUTLER_HOME = '   ';
+    assert.equal(butlerHome(), join(homedir(), '.butler'));
+    assert.equal(defaultConfigPath(), join(homedir(), '.butler', 'config.json'));
+  } finally {
+    if (before === undefined) delete process.env.BUTLER_HOME;
+    else process.env.BUTLER_HOME = before;
+  }
 });
 
 // ───────────────────────── 真命令、真进程 ─────────────────────────

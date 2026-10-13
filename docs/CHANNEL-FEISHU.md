@@ -966,6 +966,11 @@ const configPath = opts.configPath ?? join(butler, 'config.json');    // 配置�
 跟着走），要么干脆从探针里去掉。留着这一段，是因为它现在是一条**已知的、写下来的**不一致，
 而不是没发现的那种。
 
+> ✅ **第 37 轮修了**（选的是"让 CLI 也认它"）。当时估的"改动面大"其实**被第 35 轮那次改动消掉了**
+> —— 那一轮把 `autostartLogFile(home)`、`scanHint(butlerDir)`、`probeCommand(butlerDir)` 的参数
+> 全改成**必填**，默认值就只剩 `butlerHome()` / `DEFAULT_CONFIG_PATH` / `defaultHome()` 三处，
+> 于是这一轮改三行就齐了。
+
 ### 第 34 轮：手册教人改的那个文件，**根本不存在**（"认主"从来没落过盘）
 
 起点是**照着手册自己走一遍**：§十二 第 5 步说"想彻底钉死，就把探针打印的 `senderId` 写进
@@ -1095,6 +1100,58 @@ TypeScript 一声没吭（可选参数，不传合法）。**这就是"随手加
 没做的（记在这儿）：官方 SDK 那两行 `[info]` 只是**写进手册**，没有去关掉它 —— 那是人家客户端的
 日志，关它属于另一件事，得先想清楚要不要动官方包的行为。
 
+### 第 37 轮：`BUTLER_HOME` 是**第四个**说"家在哪"的地方 —— 让它和另外三处说同一句话
+
+第 33 轮把它记成"已知未修、暴露面低"。这一轮真去复现了一遍，发现它比"路径不统一"要重：
+
+> 探针（`--save`）会对用户说："**凭据已存进 `/data/butler/state/secrets.json`（0600）—— 下次
+> `butler run` 选飞书时会直接用它，不用再扫。**"
+
+而 CLI 读的是 `~/.butler` —— 设了 `BUTLER_HOME` 的人拿到的是一句**假承诺**，紧接着就是那句熟悉的
+"探针说存好了，`butler run` 却说还没有 app_id"。复现里还看到更钝的一面：`init` 把**全新的**配置
+写进 `~/.butler`，`doctor` 于是说"实际读的文件：`~/.butler/config.json`"、装载全 ✓ —— 一切正常，
+而凭据在另一个家里。
+
+改的是**那条规则**，不是某一处：家 = `$BUTLER_HOME` > `~/.butler`，四处一起认 ——
+
+| 谁 | 之前 | 现在 |
+| --- | --- | --- |
+| 探针 `probe/save.mjs` 的 `homeOf` | 认 `BUTLER_HOME` | 不变（它是基准） |
+| `cli/src/setup.ts` 的 `butlerHome()` | 只认 `~/.butler` | 认 `BUTLER_HOME` |
+| `cli/src/setup.ts` 的 `DEFAULT_CONFIG_PATH` | **常量**，import 那一刻定死 | 换成函数 `defaultConfigPath()`：常量会在测试设环境变量**之前**就把家定死 |
+| `channel-feishu/src/probe-path.ts` 的 `defaultHome()` | 只认 `~/.butler` | 认 `BUTLER_HOME` |
+
+`DEFAULT_CONFIG_PATH` 由常量换成函数之后，编译器把**四处**调用点一次找齐（`cli.ts` 的解析器默认值、
+`cli.ts` 里"要不要印 `--config`"、`setup.ts` 的兜底、测试里的断言）—— 第 35 轮那条教训：**别用可选
+参数或常量，让编译器替你数**。
+
+两条新用例（跨两个半球的那条才是契约本身）：
+
+1. **单元**：设了 `BUTLER_HOME` → `butlerHome()` / `defaultConfigPath()` / `defaultPatchPath()` 全换
+   过去；**空串 / 空白 = 没设**（`BUTLER_HOME= butler run` 是很常见的写法，不能因此把家搬到 `""`）。
+2. **跨半球**（`probe-contract.mjs`）：`BUTLER_HOME=<临时家>` → `init`（不给 `--config`）→ 从它印出来
+   的命令里抠出探针那行 → **原样粘进 shell** 跑一遍 → 凭据落在那个家里 → 再用 **CLI 自己的读法**
+   （`readSecrets`）读回来 ⇒ 探针那句"下次 `butler run` 直接用它"**兑现**；并且那条命令**不带**
+   `--home=`（它就是默认家，保持最短）；再加一条：显式 `--config` 仍然**压过**环境变量。
+
+反验三处，每处都红在该红的那条断言上：
+
+- **M1** `butlerHome()` 不认环境变量 → 单元那条报 `actual: '/Users/leo/.butler'`；跨半球那条报
+  "设了 BUTLER_HOME，init 就该把家安在那儿（不是 ~/.butler）"。
+- **M2** `defaultHome()` 不认环境变量 → **只有**"不必带 `--home=`"那条红，并原样打出两边各执一词的
+  那条命令（`--home="/var/folders/…/data"`）；同一时刻 `setup.mjs` **30/30 全绿** —— 变异只碰了探针那半。
+- **M3** `init` 无视 `--config`、永远用默认家 → 红两条：一条是"`--config` 比 BUTLER_HOME 优先"，
+  一条是第 35 轮那条"别处的家必须带上 `--home=`"。
+
+用例总数 947 → **949**（+2）/ 17 包 / 0 失败。
+
+没做的（记在这儿）：全仓还有 **5 处**库级兜底也写死 `~/.butler`（`approval-im`、`channel-feishu`、
+`channel-telegram`、`memory-file` 的 `config.home || join(homedir(), '.butler')`，以及 `link-lan` 的
+身份文件位置）。它们只在**配置行里没写 `home`** 时才用到 —— 而 `init` 生成的每一行都写了 `home`，
+所以现状够用；真要让它们也认环境变量，那是另一次"一条规则、十处定义"的清理。
+
+**没验**：真机上用 `BUTLER_HOME` 走一遍完整验收（走的是同一条代码，只是家换了地方）。
+
 ## 十二、真机验收手册（给"第一枪"用）
 
 三分钟，两条命令。**这一步只能人来做**（要手机扫码），所以把"看到什么 → 说明什么"
@@ -1188,7 +1245,7 @@ bash packages/channel-feishu/probe/run.sh --save   # ② 顺手把凭据装好�
 | 保存长连接配置时一直失败 | 官方原文：**保存时长连接客户端必须已经在线**，顺序反了就一直失败 | 先把探针跑起来连上，再去后台保存 |
 | 收到了，但回复失败 | 缺发消息的权限 | 看那行错误。⚠️ 若错误里带一条**一次性授权链接**，那是凭据，别贴给别人 |
 | 附件没落进 `state/files/feishu/` | 缺读资源的权限（终端会有 `附件下载失败` 的 warn） | 加权限 → 发版 → 重试 |
-| `butler run` 说"还没有 app_id / app_secret"，可你明明存过 | **存到了另一个管家目录**：凭据按"配置所在目录"找，用了 `--config` 就未必是 `~/.butler` | 给探针加 `--home=<那个目录>` 重新 `--save`（错误信息里会打印它去哪儿找过） |
+| `butler run` 说"还没有 app_id / app_secret"，可你明明存过 | **存到了另一个管家目录**：凭据按"配置所在目录"找，用了 `--config` 就未必是 `~/.butler` | 给探针加 `--home=<那个目录>` 重新 `--save`（错误信息里会打印它去哪儿找过）。设了 `BUTLER_HOME` 的话：**从第 37 轮起 CLI 和探针认同一个家** —— 两边都不用再补 `--home=`/`--config`（那之前只有探针认它，别照着老版本的经验对） |
 | `butler run` 起了一个本地页面，写着"飞书应用的 app_id：还没有，起了一个本地页面让你贴" | **正常**，它在等你粘贴（**会开二维码的是探针**，不是它） | 在那个页面里贴进去；或 `Ctrl-C` 掉，改跑 `probe/run.sh --save` 扫码 |
 | `doctor` 说"配置里一行都没有" / "1 个插件没装上来"（而配置里明明有飞书那行） | 老代码的老毛病：凭据还没填时，官方包在**构造**就抛 `appId is needed`，插件装载失败 | 升到含"官方通道懒造"那版的代码；这一版飞书那行会**装上**，只在自检里报 ✗ |
 

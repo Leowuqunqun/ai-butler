@@ -167,10 +167,10 @@ export function startNode(args, { timeoutMs = 15_000, home = tempHome() } = {}) 
  *   所以"测试自己起了个假服务器、CLI 去连它"这种用法一定会超时 ——
  *   服务器在同一个进程里，而那个进程正卡在 spawnSync 上。
  */
-export function runAsync(args, { home = tempHome(), timeoutMs = 30_000 } = {}) {
+export function runAsync(args, { home = tempHome(), timeoutMs = 30_000, env = {} } = {}) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [CLI, ...args], {
-      env: { ...process.env, HOME: home },
+      env: { ...process.env, HOME: home, ...env },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let out = '';
@@ -185,10 +185,19 @@ export function runAsync(args, { home = tempHome(), timeoutMs = 30_000 } = {}) {
   });
 }
 
-export function runSync(args, { home = tempHome() } = {}) {
+/**
+ * 一次性跑完的命令（会自己退出的那种）。
+ *
+ * `home` 可以显式给 —— 「先 init 再 doctor」这种要用**同一个家**的用例需要它；
+ * 不给就一个新的临时家（互不干扰）。
+ *
+ * `env` 用来加**额外的**环境变量（覆盖 `HOME` 之外的东西），例如 `BUTLER_HOME`
+ * —— 那是"家在哪"的另一条说法，得能和 `HOME` 一起被测试指定。
+ */
+export function runSync(args, { home = tempHome(), env = {} } = {}) {
   const r = spawnSync(process.execPath, [CLI, ...args], {
     encoding: 'utf8',
-    env: { ...process.env, HOME: home },
+    env: { ...process.env, HOME: home, ...env },
   });
   return { code: r.status, out: r.stdout ?? '', err: r.stderr ?? '' };
 }

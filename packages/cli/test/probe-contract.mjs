@@ -167,3 +167,65 @@ test('★★ 家安在别处：从 `init` 输出里抠出的那条命令，照�
     rmSync(home, { recursive: true, force: true });
   }
 });
+
+/**
+ * 家可以用两条路说：`--config`（CLI 的选项）和 `BUTLER_HOME`（探针的用法里写着的那条）。
+ *
+ * 第 37 轮之前它们**不是**一回事：探针认 `BUTLER_HOME`，CLI 只认 `~/.butler` —— 于是设了它的
+ * 人会看到探针说"凭据已存进 <那个家>，下次 `butler run` 会直接用它"，而 CLI 在**另一个家里**
+ * 读，现象还是那句"探针说存好了，`butler run` 却说还没有 app_id"。
+ *
+ * 这条不验"某一侧算得对"，验的是**两侧说的是同一个家**：CLI 把家安在 `$BUTLER_HOME`，
+ * 它自己印出来的命令照抄一遍，再用 CLI 自己的读法读回来。
+ */
+test('★★ 设了 BUTLER_HOME：init 安的家、探针存的家、CLI 读的家是同一个', () => {
+  const home = mkdtempSync(join(tmpdir(), 'butler-env-home-'));
+  const butler = join(home, 'data'); // 家不在默认位置，而且是用**环境变量**说的
+
+  try {
+    const r = runSync(['init', '--im', 'feishu'], { home, env: { BUTLER_HOME: butler } });
+    assert.equal(r.code, 0, `init 该成功：\n${r.out}\n${r.err}`);
+    assert.ok(
+      existsSync(join(butler, 'config.json')),
+      `设了 BUTLER_HOME，init 就该把家安在那儿（不是 ~/.butler）：\n${r.out}`,
+    );
+
+    const cmd = /`(node [^`]+)`/.exec(r.out)?.[1];
+    assert.ok(cmd, `引导里必须有一条能照着敲的命令：\n${r.out}`);
+    // 它**就是**默认家（这条规则里 $BUTLER_HOME 优先），所以不必带 --home=、保持最短
+    assert.ok(!cmd.includes('--home='), `$BUTLER_HOME 就是默认家，不必带 --home=（实际：${cmd}）`);
+
+    // 原样交给 shell —— 就是用户把这句话粘进终端的动作
+    spawnSync('bash', ['-c', cmd], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        HOME: home,
+        BUTLER_HOME: butler,
+        LARK_APP_ID: 'env_home_id',
+        LARK_APP_SECRET: 'env_home_secret',
+      },
+      timeout: 4000,
+    });
+
+    const file = join(butler, 'state', 'secrets.json');
+    assert.equal(secretOf(file, 'feishu', 'appId'), 'env_home_id', '探针该存进这个家');
+    // ⭐ 这一步才是契约：用 CLI 自己的读法读到它 —— 探针那句"下次 butler run 直接用它"兑现
+    assert.equal(
+      readSecrets(file).channels.feishu?.appId,
+      'env_home_id',
+      'CLI 的读法要能读回探针写下的那个家',
+    );
+
+    // 反过来：显式给了 `--config` 就听它的 —— 环境变量只是**默认值**，不能压过明确的选项
+    const other = join(home, 'another', 'config.json');
+    const r2 = runSync(['init', '--config', other, '--im', 'feishu'], {
+      home,
+      env: { BUTLER_HOME: butler },
+    });
+    assert.equal(r2.code, 0, `init --config 该成功：\n${r2.out}\n${r2.err}`);
+    assert.ok(existsSync(other), '`--config` 比 BUTLER_HOME 优先');
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});

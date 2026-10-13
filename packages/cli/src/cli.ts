@@ -17,7 +17,6 @@
  * @module @butler/cli/cli
  */
 
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -26,7 +25,7 @@ import { boot, type Booted } from './boot.js';
 import { doctor, formatDoctor } from './doctor.js';
 import { collectReport, writeReport } from './report.js';
 import {
-  DEFAULT_CONFIG_PATH, IM_NAMES, LINK_NAMES, coreStateFileMissing, initButlerHome, missingAbilityRows,
+  IM_NAMES, LINK_NAMES, coreStateFileMissing, defaultConfigPath, initButlerHome, missingAbilityRows,
   type ImName, type LinkName,
 } from './setup.js';
 import { autostartOff, autostartOn, autostartPlan, autostartStatus, formatPlan } from './autostart.js';
@@ -177,7 +176,7 @@ interface Args {
 export function parseArgs(argv: readonly string[]): Args {
   const args: Args = {
     command: '',
-    config: join(homedir(), '.butler', 'config.json'),
+    config: defaultConfigPath(),
     patches: [],
     help: false,
     version: false,
@@ -262,7 +261,7 @@ function report(b: Booted): void {
 function noConfig(path: string, node: boolean): number {
   console.error(`还没有配置：${path}`);
   console.error('\n跑一次这个就好 —— 它会把默认配置写好，你什么都不用填：\n');
-  const flag = path === DEFAULT_CONFIG_PATH ? '' : ` --config ${path}`;
+  const flag = path === defaultConfigPath() ? '' : ` --config ${path}`;
   console.error(`  butler init${flag}${node ? ' --node' : ''}`);
   return 1;
 }

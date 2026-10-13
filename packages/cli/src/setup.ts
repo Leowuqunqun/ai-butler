@@ -30,12 +30,32 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-/** 什么都还没配的时候，配置在哪。`--config` 不给就用这个 */
-export const DEFAULT_CONFIG_PATH = join(homedir(), '.butler', 'config.json');
+/**
+ * 管家自己的家：`$BUTLER_HOME` > `~/.butler`。
+ *
+ * ⚠️ 这条规则**必须是同一条**，四处一起认：
+ *   ① 探针（`probe/save.mjs` 的 `homeOf`）  ② 这里（CLI 的一切默认路径）
+ *   ③ `@butler/channel-feishu/probe-path` 的 `defaultHome()`  ④ 生成的通道行里的 `home`
+ * 少认一处的后果不是"路径不统一"这么轻：探针会对用户说"凭据存好了，下次 `butler run`
+ * 直接用它"，而 CLI 在**另一个家里**读 —— 现象正是"探针说存好了，`butler run` 却说还没有
+ * app_id"。`packages/cli/test/probe-contract.mjs` 把这几处真的凑在一起跑一遍。
+ *
+ * （第 33 轮记过这条不一致、当时判"暴露面低"没修；第 37 轮复现后发现探针那句承诺在设了
+ *  `BUTLER_HOME` 时是**假的** —— 于是补齐，不再留"已知未修"。）
+ */
+export function butlerHome(env: NodeJS.ProcessEnv = process.env): string {
+  const fromEnv = (env.BUTLER_HOME ?? '').trim();
+  return fromEnv || join(homedir(), '.butler');
+}
 
-/** 管家自己的家。放在用户 home 下，但只归它用 */
-export function butlerHome(): string {
-  return join(homedir(), '.butler');
+/**
+ * 什么都还没配的时候，配置在哪。`--config` 不给就用这个。
+ *
+ * ⚠️ 是**函数**不是常量：`BUTLER_HOME` 可能在 import 之后才被设上（测试就是这么做的），
+ * 常量在 import 那一刻就把家定死了，后面读到的还是旧的那个。
+ */
+export function defaultConfigPath(env: NodeJS.ProcessEnv = process.env): string {
+  return join(butlerHome(env), 'config.json');
 }
 
 export function defaultPatchPath(): string {
@@ -482,7 +502,7 @@ function topUpRows(
  * 一次"初始化"把它抹掉是不可接受的。
  */
 export function initButlerHome(opts: InitOptions = {}): InitResult {
-  const configPath = opts.configPath ?? DEFAULT_CONFIG_PATH;
+  const configPath = opts.configPath ?? defaultConfigPath();
   // **家 = 配置文件住的地方。** 所以 `--config /某处/config.json` 意味着
   // 补丁和 dsh-home 也在 /某处/ 下 —— 否则用户把家搬到别处之后，
   // 补丁会悄悄落回 ~/.butler，而配置里写着的是另一个路径，两边对不上。
