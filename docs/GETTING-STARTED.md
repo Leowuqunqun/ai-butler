@@ -16,7 +16,7 @@
 已经有的话先看看里面是不是你的数据，别硬来。
 
 ```sh
-# ① 解开分发包（名字里的版本号以后会变，所以这里用通配），装（十几秒：包里的 install.sh 用自带的 tarballs，<br>我们自己的包不去网上取；第三方依赖 npm 会自己下）
+# ① 解开分发包（名字里的版本号以后会变，所以这里用通配），装（十几秒：包里的 install.sh 用自带的 tarballs，我们自己的包不去网上取；第三方依赖 npm 会自己下）
 mkdir -p ~/butler-试 && tar -xzf butler-installer-*.tar.gz -C ~/butler-试
 sh ~/butler-试/install.sh --no-start
 
