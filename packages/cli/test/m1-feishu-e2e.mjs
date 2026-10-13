@@ -25,7 +25,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -48,9 +48,14 @@ class RecordingAgent extends AgentService {
   }
 }
 
-/** 起一套"真通道 + 真内核 + 假大脑"。和 `packages/cli/test/m2-e2e.mjs` 的 hub 一个路子。 */
-async function hub() {
-  const dir = mkdtempSync(join(tmpdir(), 'butler-feishu-e2e-'));
+/**
+ * 起一套"真通道 + 真内核 + 假大脑"。和 `packages/cli/test/m2-e2e.mjs` 的 hub 一个路子。
+ *
+ * 传 `home` 进来就**借用**它（跨重启那条要复用同一个管家目录）；不传就自己建一个、
+ * 并负责收拾干净。
+ */
+async function hub(home) {
+  const dir = home ?? mkdtempSync(join(tmpdir(), 'butler-feishu-e2e-'));
   const fake = new FakeLark();
 
   class TestFeishu extends FeishuChannel {
@@ -73,11 +78,13 @@ async function hub() {
   await ctx.core.start(); // ← 这一步会真的调 `ctx.channel.start()`：先订阅、再连
 
   return {
+    dir,
     fake,
     agent: ctx.agent,
     async cleanup() {
       await ctx.fiber.dispose();
-      rmSync(dir, { recursive: true, force: true });
+      // 借来的 home 不删（跨重启那条还要用它再起一次）
+      if (!home) rmSync(dir, { recursive: true, force: true });
     },
   };
 }
@@ -115,6 +122,68 @@ test('★ 端到端去重：同一条 messageId 重推，大脑只跑一次（�
     // 等一会儿：如果去重是假的，第二条会在这段时间里露头
     await new Promise((resolve) => setTimeout(resolve, 120));
     assert.equal(h.agent.seen.length, 1, '同一条消息只能算一次 —— 这是"别把删文件跑两遍"的底线');
+  } finally {
+    await h.cleanup();
+  }
+});
+
+test('★ 端到端 M-a（跨重启）：换个内核、同一个管家目录，重推的那条仍然不算数', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'butler-feishu-restart-'));
+  const msg = normalized({ messageId: 'om_restart', content: '把日志清了' });
+
+  try {
+    // 第一次：正常收下、正常办
+    const first = await hub(home);
+    try {
+      first.fake.emit(msg);
+      await waitFor(() => first.agent.seen.length === 1, '第一次要送到大脑');
+    } finally {
+      await first.cleanup();
+    }
+
+    // 「重启」：同一个管家目录，全新的容器和内核 —— 去重表只能从盘上认出这条
+    const second = await hub(home);
+    try {
+      second.fake.emit(msg);
+      // 给"如果没有去重就会跑"留出时间；跑过就一定会被看见
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      assert.equal(
+        second.agent.seen.length,
+        0,
+        '跨重启重推同一句话不该再办一次 —— 飞书会重推，而这条命令是"清日志"',
+      );
+    } finally {
+      await second.cleanup();
+    }
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('★ 端到端 M-b：一张图经真内核交到大脑手上时，已经是**本机可读的真实文件**', async () => {
+  const h = await hub();
+  try {
+    h.fake.downloadContentType = 'image/png';
+    h.fake.downloadBytes = Buffer.from('假装这是一张图');
+    h.fake.emit(normalized({
+      messageId: 'om_e2e_img',
+      content: undefined, // 纯附件、没打字
+      resources: [{ type: 'image', fileKey: 'img_1', fileName: '截图.png' }],
+    }));
+
+    await waitFor(() => h.agent.seen.length === 1, '带图的消息也要走到大脑');
+    const req = h.agent.seen[0];
+    assert.equal(req.files?.length, 1);
+
+    const f = req.files[0];
+    assert.ok(existsSync(f.path), `大脑拿到的路径必须已经可读：${f.path}`);
+    assert.equal(readFileSync(f.path, 'utf8'), '假装这是一张图', '内容要对得上，不能只是个空壳路径');
+    assert.equal(f.kind, 'image');
+    assert.equal(f.name, '截图.png');
+
+    // 纯附件消息没有正文，内核会自己补一句提示 —— 里面必须带上"在本机哪里"
+    assert.match(req.text, /image\/png/, '提示里要有 mime 之类，大脑才知道这是什么、去哪读');
+    assert.match(req.text, /截图\.png/);
   } finally {
     await h.cleanup();
   }
