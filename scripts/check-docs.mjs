@@ -346,6 +346,54 @@ function selfRepoUrlViolations(text, exists) {
 }
 
 /** 这些是**规则自己的承诺**（改规则就把这里一起改，改不了说明你改的是承诺） */
+// ───────── ⑧ 用户面文档里的"数"得跟仓库对上（第 73 轮） ─────────
+//
+// 为什么范围**写死**成这两份 README：它们里面的数是**给用户看的承诺** ——
+// "全仓九百多个离线测试"、"18 张图"、"装哪个 release"。而 docs/CHANNEL-FEISHU.md 里
+// 那些 `v0.2.0` 是**历史记录**（"第 34 轮那次发布"），是有意留着的。
+// 拿一把尺子全仓扫，它立刻就变成一台误报机器 —— 这个文件下面那条注释记着同一个教训：
+// **"一个会误报的守卫比没有守卫更糟"**。所以宁可少查，不要乱报。
+//
+// ⚠️ 这里查的是**文档 ↔ 仓库**（`packages/cli/package.json` 的版本、`docs/diagrams` 下
+//    真有几张 .svg），**不是** zh ↔ en。上面放弃的是后者（分词差异、译文天然多一个数字），
+//    那些噪声在这儿不存在：两边各自跟**事实**比。
+const README_NUMBER_DOCS = ['README.md', 'README.en.md'];
+
+function staleCountViolations(text, { version, svgCount }) {
+  const hits = [];
+  let examined = 0;
+  text.split('\n').forEach((line, i) => {
+    // ① 安装指令里的 release tag 必须是当前版本
+    for (const m of line.matchAll(/releases\/download\/(v\d+\.\d+\.\d+)\//g)) {
+      examined++;
+      if (m[1] !== `v${version}`) {
+        hits.push({
+          line: i + 1,
+          text: line.trim(),
+          why: `安装指令指向 ${m[1]}，而当前版本是 v${version} —— 照着这行装的人拿到的是旧包`,
+        });
+      }
+    }
+    // ② 「docs/ …… N 张图」得等于 docs/diagrams 下真有的 .svg 数
+    //    ⚠️ 锚在**以 docs/ 开头的那一行**上：README 的示例对话里也有一句"32 张图"
+    //    （那是用户的照片），不锚行首就会把它当成本仓的图。
+    // ⚠️ 结尾**不能**加 \b：`图` 在 JS 正则里是非词字符，后面跟 `，` 或行尾也非词，
+    //    `\b` 于是永远不成立 —— 这条夹具当场把它抓出来了（该看 1 条、实际 0 条）。
+    const g = /^\s*docs\/\s.*?(\d+)\s*(?:张图|diagrams)/.exec(line);
+    if (g) {
+      examined++;
+      if (Number(g[1]) !== svgCount) {
+        hits.push({
+          line: i + 1,
+          text: line.trim(),
+          why: `说 docs/ 有 ${g[1]} 张图，而 docs/diagrams 下真有 ${svgCount} 张 .svg`,
+        });
+      }
+    }
+  });
+  return { hits, examined };
+}
+
 const SELF_TEST = [
   { why: '指向别的包（npm 读者够不着）', file: 'packages/a/README.md', link: '../b/README.md', shipped: ['README.md'], want: 1 },
   { why: '指向仓库根（更够不着）', file: 'packages/a/README.md', link: '../../docs/x.md', shipped: ['README.md'], want: 1 },
@@ -463,6 +511,45 @@ const fakeExists = (urlKind, path) => {
   return urlKind === 'blob' ? kind === 'file' : kind === 'dir';
 };
 
+// ── 规则 ⑧ 的夹具。⭐ 第 4、5 条是**关键**：它们钉住"范围"本身 ——
+//    "示例对话里的 32 张图不算"、"零散提到的旧版本不算"，正是这两条让这把尺子不误报。
+const COUNT_TEST = [
+  {
+    why: '版本和图数都对 → 不报',
+    text: 'curl …/releases/download/v1.2.3/x.tar.gz\ndocs/   产品与技术架构、3 张图',
+    ctx: { version: '1.2.3', svgCount: 3 },
+    want: 0, examined: 2,
+  },
+  {
+    why: '安装指令指向旧 release → 报',
+    text: 'curl …/releases/download/v1.2.2/x.tar.gz',
+    ctx: { version: '1.2.3', svgCount: 3 },
+    want: 1, examined: 1,
+  },
+  {
+    why: 'docs/ 那行的图数不对 → 报',
+    text: 'docs/                  产品与技术架构、9 张图',
+    ctx: { version: '1.2.3', svgCount: 3 },
+    want: 1, examined: 1,
+  },
+  {
+    why: '⭐ 示例对话里的"N 张图"不算（它说的是用户的照片）→ 不报',
+    text: '管家（你的电脑）：「32 张图，按拍摄月份分成了 5 个文件夹。」',
+    ctx: { version: '1.2.3', svgCount: 3 },
+    want: 0, examined: 0,
+  },
+  {
+    why: '⭐ 零散提到的旧版本（手册里的历史记录）不算 → 不报',
+    text: '那一轮发的是 v0.2.0，附了 butler-dsh-plugin-0.2.0.tar.gz',
+    ctx: { version: '1.2.3', svgCount: 3 },
+    want: 0, examined: 0,
+  },
+];
+
+/** 自检夹具的总条数。两处汇总都用它，免得改了一处忘了另一处 */
+const RULE_FIXTURE_COUNT = () =>
+  SELF_TEST.length + URL_TEST.length + CMD_TEST.length + PROV_TEST.length + COUNT_TEST.length;
+
 function runSelfTest() {
   const bad = [
     ...SELF_TEST.map((c) => ({
@@ -502,6 +589,18 @@ function runSelfTest() {
             : `（另外：像出处声明的块应该看 ${c.examined} 条，实际 ${r.examined} 条）`,
       };
     }),
+    ...COUNT_TEST.map((c) => {
+      const r = staleCountViolations(c.text, c.ctx);
+      return {
+        ...c,
+        got: r.hits.length,
+        shown: JSON.stringify(c.text).replace(/\\n/g, '⏎'),
+        whyWrong:
+          r.examined === c.examined
+            ? ''
+            : `（另外：像"数"的行应该看 ${c.examined} 条，实际 ${r.examined} 条）`,
+      };
+    }),
   ].filter((c) => c.got !== c.want || c.whyWrong);
 
   if (!bad.length) return;
@@ -511,15 +610,16 @@ function runSelfTest() {
     console.error(`    ${c.shown}`);
   }
   console.error('\n改法：这是 scripts/check-docs.mjs 里 shippedDocViolations / selfRepoUrlViolations /');
-  console.error('sourceTreeCommandViolations / provenanceViolations 的规则被改动了。要是故意放宽/收紧，');
-  console.error('请把 SELF_TEST / URL_TEST / CMD_TEST / PROV_TEST 一起改，并在 docs/CHANNEL-FEISHU.md 里写清楚为什么。');
+  console.error('sourceTreeCommandViolations / provenanceViolations / staleCountViolations 的规则被改动了。');
+  console.error('要是故意放宽/收紧，请把 SELF_TEST / URL_TEST / CMD_TEST / PROV_TEST / COUNT_TEST 一起改，');
+  console.error('并在 docs/CHANNEL-FEISHU.md 里写清楚为什么。');
   process.exit(1);
 }
 
 if (process.argv.includes('--self-test')) {
   runSelfTest();
   console.log(
-    `文档体检：规则自检 ${SELF_TEST.length + URL_TEST.length + CMD_TEST.length + PROV_TEST.length} 条 → ✅ 规则本身是好的`,
+    `文档体检：规则自检 ${RULE_FIXTURE_COUNT()} 条 → ✅ 规则本身是好的`,
   );
   process.exit(0);
 }
@@ -687,6 +787,38 @@ if (!problems.length && provExamined === 0) {
   );
 }
 
+// ───────── ⑧ 用户面文档里的"数"得跟仓库对上（第 73 轮） ─────────
+
+const cliPkg = JSON.parse(readFileSync(resolve(ROOT, 'packages/cli/package.json'), 'utf8'));
+const diagramDir = resolve(ROOT, 'docs/diagrams');
+const svgCount = existsSync(diagramDir)
+  ? readdirSync(diagramDir).filter((f) => f.endsWith('.svg')).length
+  : 0;
+
+let staleBad = 0;
+let staleExamined = 0;
+for (const file of files) {
+  if (!README_NUMBER_DOCS.includes(file)) continue;
+  const raw = readFileSync(resolve(ROOT, file), 'utf8');
+  const { hits, examined } = staleCountViolations(raw, { version: cliPkg.version, svgCount });
+  staleExamined += examined;
+  for (const hit of hits) {
+    problems.push(
+      `❌ 用户面文档里的"数"跟仓库对不上  ${file}:${hit.line}\n       → ${hit.text}\n` +
+        `       （${hit.why}。这些数是**给用户看的承诺** —— 他要照着这行去装东西，或者据此判断` +
+        '这仓库有多大。数过期不是"文字旧了"，是**读者会照着做错事**）',
+    );
+    staleBad++;
+  }
+}
+// 防沉默：理由同规则 ⑥⑦。这两份 README 里一定既有安装指令、又有那张状态表。
+if (!problems.length && staleExamined === 0) {
+  problems.push(
+    '❌ 规则 ⑧ 一条"数"都没看到\n' +
+      '       → README.md / README.en.md 里一定有 `releases/download/v…` 和 `docs/ … N 张图`。检查那两条正则，别让它空转。',
+  );
+}
+
 // ───────────────────────── 双语结构守卫 ─────────────────────────
 //
 // 第 4 条检查，也是唯一一条跟"内容"有关的：**中文版和英文版的结构要对得上**。
@@ -777,7 +909,7 @@ if (problems.length) console.log(`${problems.join('\n')}\n`);
 console.log(
   `检查 ${files.length} 个 md、${checked} 个链接/图片、${pairs.length} 对双语 → ` +
   (problems.length
-    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}、本仓地址 ${selfUrlBad}、照抄命令 ${cmdBad}、出处 ${provBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
-    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着、本仓地址指得到、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、双语结构对齐（规则自检 ${SELF_TEST.length + URL_TEST.length + CMD_TEST.length + PROV_TEST.length} 条通过）`),
+    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}、本仓地址 ${selfUrlBad}、照抄命令 ${cmdBad}、出处 ${provBad}、用户面数字 ${staleBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
+    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着、本仓地址指得到、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、用户面文档里的数跟仓库对得上（看了 ${staleExamined} 条）、双语结构对齐（规则自检 ${RULE_FIXTURE_COUNT()} 条通过）`),
 );
 process.exit(problems.length ? 1 : 0);

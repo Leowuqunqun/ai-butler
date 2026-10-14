@@ -49,13 +49,13 @@ curl -fsSL https://github.com/Leowuqunqun/ai-butler/releases/latest/download/ins
 （macOS 第一次双击会被系统拦一下 —— 在它上面右键 →「打开」；我们没买 Apple 的签名证书。）
 
 详细走一遍（给完全不懂技术的人看，附可打勾的验收清单和「卡住了看这里」对照表）→ [**从零到「用微信遥控这台电脑」：三步**](docs/GETTING-STARTED.md)
-命令行细节在 [`packages/cli`](packages/cli)（全仓 937 个离线测试）
+命令行细节在 [`packages/cli`](packages/cli)（全仓九百多个离线测试，现跑现数：`pnpm test`）
 
 **已经在跑 DSH，只想给 DSH 加一条微信通道？** 不用装上面这一整套 —— 打包好的 bundle 就在 Release 里，一条命令装进某个 profile：
 
 ```sh
-curl -fsSL https://github.com/Leowuqunqun/ai-butler/releases/download/v0.2.0/butler-dsh-plugin-0.2.0.tar.gz | tar xz
-dsh plugin --profile web add "file:$(pwd)/butler-dsh-plugin-0.2.0/plugin"
+curl -fsSL https://github.com/Leowuqunqun/ai-butler/releases/download/v0.2.1/butler-dsh-plugin-0.2.1.tar.gz | tar xz
+dsh plugin --profile web add "file:$(pwd)/butler-dsh-plugin-0.2.1/plugin"
 ```
 
 配置（`cwd` / `owner` / 扫码端口 / `autostart`）、它不做什么、以及怎么先自己验一遍 → [**dsh-plugin/README.md**](packages/dsh-plugin/README.md)
@@ -78,7 +78,7 @@ dsh plugin --profile web add "file:$(pwd)/butler-dsh-plugin-0.2.0/plugin"
 | ④ 设备 | 多终端（中枢 + 节点 + 别名路由 + 微信里配对收设备） | ✅ **能用**（两台机器，微信里 `@家里那台` 就指过去） |
 | ⑤ 信任 | 审批、审计 | 审批 ✅ 能用（在微信里问一句；可给带期限的长期授权）；审计 📐 未开工 |
 
-上面每一层的证据（M1/M2/M3 明细、937 个用例怎么分布、哪些是端到端、
+上面每一层的证据（M1/M2/M3 明细、九百多个用例怎么分布、哪些是端到端、
 干净环境验收抓到过什么 bug）→ [**EVIDENCE.md**](docs/EVIDENCE.md)
 
 ---
@@ -102,7 +102,7 @@ packages/
   link-lan/            ✅ 链路实现：局域网（HTTP + SSE，零依赖；认证是红线；配对码收设备）
   link-tailscale/      ✅ 链路实现：跨网（名册问 Tailscale；线上复用 link-lan 那套协议）
   cli/                 ✅ 入口 `butler`：配置 + patch 叠加 → 拉起容器 → 上线 / doctor 自检
-  channel-feishu/      📐 第三个通道：飞书（站在官方 @larksuite/channel 上；60 个离线用例，收到图片/文件会落盘；真机未验收）
+  channel-feishu/      📐 第三个通道：飞书（站在官方 @larksuite/channel 上；八十多个离线用例，收到图片/文件会落盘；真机未验收）
   （以下还没拆成包）
   hub/ node/           —— 角色已有归属：hub 由 core/ 承担，node 由 link-lan/node 承担
   installer/           —— 引导器脚本已在仓库根目录（install.sh），包还没拆
@@ -159,7 +159,7 @@ pnpm diagrams           # 重新渲染 docs/diagrams/*.svg
 
 | | 内容 | 验收 | 状态 |
 | --- | --- | --- | --- |
-| **M0** | 通道层跑通：扫码、收发、附件、引用、可插拔后端 | 19 个离线测试 | ✅ 已完成 |
+| **M0** | 通道层跑通：扫码、收发、附件、引用、可插拔后端 | 当时 19 个离线测试 | ✅ 已完成 |
 | **M1** | 通道层插件化 + 收图片/文件 + `doctor` 自检 + CI + 中英文档 | **做完就能开源出去** | ✅ 已完成 |
 | **M2** | 多终端（中枢 + 节点 + 别名路由）+ 微信内配置 | 两台机器，微信里说"家用电脑上那个文件"能拿到 | ✅ 已完成 |
 | **M3** | 小白安装器（双击装、引导页扫码、不问 key）+ 第二个 IM 通道 | 一个不懂技术的人独立走完 | 🚧 进行中 |
