@@ -705,6 +705,34 @@ const MUTATIONS = [
       'console.log(`长连接已建立。机器人身份：${me.name}（${me.openId}）`);',
       '// 长连接已建立。机器人身份：……（这条打印被拿掉了，注释还在）']],
   },
+  // 第 70 轮：手册第五节那句"新通道的全部契约就是 5 个方法（…）"是那一整节的地基
+  // （下面那张"逐项对到飞书"的表全挂在它上面）。现在由
+  // `packages/channel-feishu/test/contract.mjs` 用 TypeScript 语法树和真接口对账。
+  //
+  // ⚠️ 为什么这条打的是**手册**、不是接口：mutate 的 `recompile()` 会**正确地**拒绝
+  //    "改了源码但编译产物没变"的变异（见它那句"编译产物没变 —— 这次不算数"）。
+  //    而**纯抽象方法**在 JS 里不产生任何输出 —— 往 `ChannelService` 上再加一个 abstract
+  //    方法，`lib/index.js` 一个字节都不会动。所以"接口多一个方法"那个方向用不了这条工具
+  //    （第 70 轮实测：加了会被判**不算数**，不是红）。
+  //    改成让**手册那句话**漂移：既绕开那个限制，又恰好是真正要防的失效模式 ——
+  //    文档和接口各说各的。这条路不碰 .ts，所以 `pkg` 省掉（不重编译）。
+  {
+    name: '手册第五节的契约句漂移：列出的方法少了一个（sendFile）',
+    claim: '手册说契约是 start / stop / sendText / sendFile（+ 可选 check）—— 少列一个就是假话，接通道的人会漏实现',
+    tests: ['packages/channel-feishu/test/contract.mjs'],
+    files: [['docs/CHANNEL-FEISHU.md',
+      '新通道的全部契约就是 5 个方法（`start` / `stop` / `sendText` / `sendFile` + 可选 `check`）',
+      '新通道的全部契约就是 5 个方法（`start` / `stop` / `sendText` + 可选 `check`）']],
+  },
+  {
+    name: '手册说 setTyping"基类默认 no-op，不用管"：基类那具空实现被填上了',
+    claim: '手册让人跳过 setTyping，所以 ChannelService 上那具实现必须是空的',
+    pkg: './packages/seam-channel',
+    tests: ['packages/channel-feishu/test/contract.mjs'],
+    files: [['packages/seam-channel/src/index.ts',
+      '  async setTyping(_to: string, _on: boolean, _opts?: SendOpts): Promise<void> {}',
+      '  async setTyping(_to: string, _on: boolean, _opts?: SendOpts): Promise<void> {\n    void this.handlers.length;\n  }']],
+  },
 ];
 
 // ─────────────────────────── 参数 ───────────────────────────
