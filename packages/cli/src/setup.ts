@@ -17,7 +17,7 @@
  *   ~/.butler/dsh.patch.yml      给 agent 用的补丁：模型通道 + **人格**
  *   ~/.butler/dsh-home/          管家私有的 DSH 数据目录（不含密钥，运行时才建）
  *
- * 人格那份是**产品契约**，不是示例：微信里发出去的是纯文本、发文件走
+ * 人格那份是**产品契约**，不是示例：对话里发出去的是纯文本、发文件走
  * `[[file:…]]` 那一行、不许拿截图模拟鼠标去点界面。这些约定写在
  * `@butler/agent-dsh` 的模板里，每次 init 都照抄一份 —— 用户**不需要**理解它，
  * 但少了它，用户会天天收到 Markdown 表格。
@@ -100,13 +100,13 @@ export const FALLBACK_PATCH = `# 模型通道（默认 DeepSeek，不用改；ke
     provider: deepseek-official
     model: deepseek-flash
 
-# 人格：输出会原样发进微信，禁止 Markdown
+# 人格：输出会原样发进对话，禁止 Markdown
 - id: system-prompt
   name: '@deepseek-ai/dsh-system-prompt'
   config:
     personaPrefix: >-
-      你是一个通过微信被远程遥控的私人助理，运行在用户自己的机器上。
-      输出会被原样发进微信：禁止 Markdown（表格、代码围栏、# 标题、** 粗体都不要），
+      你是一个通过手机上的聊天软件被远程遥控的私人助理，运行在用户自己的机器上。
+      输出会被原样发进对话：禁止 Markdown（表格、代码围栏、# 标题、** 粗体都不要），
       用纯文本短句，结论先行，默认 200 字以内。
       要发文件就单独写一行 [[file:/绝对/路径]]，写之前先确认文件真实存在。
       碰到**长期有用**的事（主人的偏好、常用路径、习惯、怎么称呼他），
@@ -115,7 +115,7 @@ export const FALLBACK_PATCH = `# 模型通道（默认 DeepSeek，不用改；ke
       破坏性操作先问一句再动手。
     personaSuffix: 你的工作目录是 {{cwd}}。
 
-# 碰到敏感操作先问一声：应答者把问题问进微信，**到点没人答就是不许**。
+# 碰到敏感操作先问一声：应答者把问题问进对话，**到点没人答就是不许**。
 # （没有应答者也不怕：dsh 的兜底是 unavailable，调用方 fail-closed，不会卡住。）
 - id: approval
   config:
@@ -201,8 +201,8 @@ export interface DefaultConfigOptions {
   /**
    * 这台是「被遥控的那台」（节点）吗。
    *
-   * 节点那份**没有通道、也没有内核** —— 它不登录微信。而且这是硬性的：
-   * 同一个微信号被两个进程同时收信，消息会随机分到两边，看起来就是"时好时坏"。
+   * 节点那份**没有通道、也没有内核** —— 它不登录任何 IM。而且这是硬性的：
+   * 同一个账号被两个进程同时收信，消息会随机分到两边，看起来就是"时好时坏"。
    */
   node?: boolean;
   /**
@@ -258,7 +258,7 @@ function abilityRows(home: string, link: LinkName = 'lan'): { id: string; name: 
     // 没有这一行，子进程里的策略是"一律拒绝"：安全，但管家什么也干不了。
     { id: 'approval', name: '@butler/approval-im', config: { home } },
     // 链路这一行**默认就带着**：它本身不监听任何端口（只有节点那侧才监听），
-    // 留着它，用户以后想在微信里「配对」第二台电脑时不用回来改配置。
+    // 留着它，用户以后想在对话里「配对」第二台电脑时不用回来改配置。
     //
     // 尾巴网络那条**要把名册路径钉在这儿**：不钉就落到"当前的 butler 家"里，
     // 而用户用 `--config` 把家搬到别处时，名册会悄悄落回 ~/.butler —— 跟配置对不上。
@@ -306,7 +306,7 @@ export function defaultConfigText(opts: DefaultConfigOptions = {}): string {
   return `${JSON.stringify({ plugins: rows }, null, 2)}\n`;
 }
 
-/** 节点在微信里叫什么。用户随时可以改，但总得有个能说出口的默认值 */
+/** 节点在对话里叫什么。用户随时可以改，但总得有个能说出口的默认值 */
 function aliasFor(workspace: string): string {
   const base = workspace.split(/[\\/]/).filter(Boolean).pop();
   return base ? `这台（${base}）` : '这台电脑';
@@ -317,7 +317,7 @@ export interface InitResult {
   /**
    * 这一台**最终**用哪个 IM 收信。
    *
-   * `--im` 没给 = 沿用配置里原来那个（用户只是重跑一次 init，不该被悄悄切回微信）——
+   * `--im` 没给 = 沿用配置里原来那个（用户只是重跑一次 init，不该被悄悄切回默认那条）——
    * 所以调用方要按这个值出引导文案，别看自己传了什么。
    */
   im: ImName;

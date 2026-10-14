@@ -101,7 +101,7 @@ test('端到端：中枢按下取消，节点那边的活真的停（不靠超�
 
 // ───────────────────────── 安全闸与错误提示 ─────────────────────────
 
-test('安全闸：配置里有微信通道就拒绝启动，并说清楚为什么', () => {
+test('安全闸：配置里有通道就拒绝启动，并说清楚为什么', () => {
   const r = runSync(['node', '--config', nodeConfig([
     { id: 'channel', name: CHANNEL },
     agentRow,
@@ -109,9 +109,9 @@ test('安全闸：配置里有微信通道就拒绝启动，并说清楚为什�
   ])]);
 
   assert.equal(r.code, 1);
-  assert.match(r.err, /节点不该登录微信/);
+  assert.match(r.err, /节点不该登录/);
   assert.match(r.err, /随机分到两边/, '要讲清楚后果，不是只说"不允许"');
-  assert.match(r.err, /butler run/, '要指路：收微信的那台用哪条命令');
+  assert.match(r.err, /butler run/, '要指路：收信的那台用哪条命令');
 });
 
 test('配置里没有节点那一行：报缺了什么，并给出能抄的一行', () => {

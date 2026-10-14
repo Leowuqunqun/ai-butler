@@ -29,7 +29,7 @@
 | 用例 | test case | |
 | 认主 | claim ownership / owner claiming | 第一个跟管家说话的人成为主人 |
 | 主人 | the owner | |
-| 一声不吭 | goes silent | 陌生微信号发消息时管家的行为（安全设计） |
+| 一声不吭 | goes silent | 陌生人来消息时管家的行为（安全设计） |
 | 逃生舱 | escape hatch | patch 文件的定位 |
 | 小白 / 不懂技术的人 | non-technical user | 别用 *novice*（略带贬义），也别用 *layman* |
 | 自检 | self-check | `check()` 的实现叫 *self-check*；`butler doctor` 整体叫 *doctor* |

@@ -443,14 +443,14 @@ async function runNode(args: Args): Promise<number> {
     return 1;
   }
 
-  // ── 安全闸：节点上不该有微信通道 ──
-  // 这不是洁癖：同一个微信号被两个进程同时长轮询，消息会**随机**落到其中一边。
+  // ── 安全闸：节点上不该有通道 ──
+  // 这不是洁癖：同一个 IM 账号被两个进程同时长轮询，消息会**随机**落到其中一边。
   // 用户看到的是"有时回有时不回"，而两边日志都正常 —— 极难查。
   // 所以宁可拒绝启动，也不让这个状态出现。
   if (b.has('channel')) {
-    console.error('\n这份配置里有微信通道 —— 节点不该登录微信。');
-    console.error('同一个微信号被两个进程同时收信，消息会随机分到两边，看起来就是"时好时坏"。');
-    console.error('节点那份配置只留 agent 和 node 两行；收微信的那台机器用 butler run。');
+    console.error('\n这份配置里有通道 —— 节点不该登录任何 IM。');
+    console.error('同一个账号被两个进程同时收信，消息会随机分到两边，看起来就是"时好时坏"。');
+    console.error('节点那份配置只留 agent 和 node 两行；收信的那台机器用 butler run。');
     await b.dispose();
     return 1;
   }
