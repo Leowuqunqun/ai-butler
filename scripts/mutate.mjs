@@ -935,6 +935,23 @@ const MUTATIONS = [
       '（`README-NOPE-85.md:57`、退出码 1）']],
   },
 
+  {
+    name: '自检：夹具声明了 examined 却没人比(把 URL_TEST 一条的期望值改错)',
+    claim: '自检里"声明了 examined"的 5 族夹具(ANCHOR/EXTERNAL/CONTRACT/WHO/WHERE 共 34 条)一条都没被比过 —— 各 map 先 ...c 把期望值铺开、再用实际值覆盖掉。声明了却没人比，比根本没写更坏：它看起来像一把守卫',
+    script: ['scripts/check-docs.mjs', '--self-test'],
+    files: [['scripts/check-docs.mjs',
+      "{ why: 'blob 指向真文件', url: 'https://github.com/Leowuqunqun/ai-butler/blob/main/README.md', want: 0, examined: 1 }",
+      "{ why: 'blob 指向真文件', url: 'https://github.com/Leowuqunqun/ai-butler/blob/main/README.md', want: 0, examined: 9 }"]],
+  },
+  {
+    name: '④ 指向本仓的地址全没了(把 SELF_URL_FLOOR 抬到 99，等于"一条都没看到")',
+    claim: '④ 以前只报坏消息、不报"看了几条"，于是"指向本仓的完整地址"整体消失它也一声不吭 —— 第 84 轮 §五 那条「>100 MB 要 Range 分片」就是这个形状:规则还在，只是没东西可看了',
+    script: 'scripts/check-docs.mjs',
+    files: [['scripts/check-docs.mjs',
+      'const SELF_URL_FLOOR = 10;',
+      'const SELF_URL_FLOOR = 99;']],
+  },
+
 ];
 
 

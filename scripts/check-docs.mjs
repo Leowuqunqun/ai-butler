@@ -443,12 +443,16 @@ const SELF_REPO = /^https:\/\/github\.com\/Leowuqunqun\/ai-butler\/(blob|tree)\/
 
 function selfRepoUrlViolations(text, exists) {
   const hits = [];
+  let examined = 0; // ⭐ 第 86 轮：这一族以前**只报坏消息**，不报"看了几条" ——
+  // 于是它有一条别的族都有、它没有的暗路：**指向本仓的完整地址全没了，它也一声不吭**。
+  // 第 84 轮 §五 那条「>100 MB 要 Range 分片」的病就是这个形状：规则还在，只是没东西可看了。
   for (const m of text.matchAll(/!?\[[^\]]*\]\(([^)\s]+)\)/g)) {
     const mm = SELF_REPO.exec(m[1]);
     if (!mm) continue;
+    examined++;
     if (!exists(mm[1], mm[2])) hits.push(m[1]);
   }
-  return hits;
+  return { hits, examined };
 }
 
 /** 这些是**规则自己的承诺**（改规则就把这里一起改，改不了说明你改的是承诺） */
@@ -693,13 +697,13 @@ const SELF_TEST = [
 
 /** 本仓地址那条的承诺：blob 要指向文件、tree 要指向目录，都得真在 */
 const URL_TEST = [
-  { why: 'blob 指向真文件', url: 'https://github.com/Leowuqunqun/ai-butler/blob/main/README.md', want: 0 },
-  { why: 'blob 指向不存在的路径', url: 'https://github.com/Leowuqunqun/ai-butler/blob/main/docs/nope.md', want: 1 },
-  { why: 'blob 写成了目录（差一个词）', url: 'https://github.com/Leowuqunqun/ai-butler/blob/main/packages/cli', want: 1 },
-  { why: 'tree 指向真目录', url: 'https://github.com/Leowuqunqun/ai-butler/tree/main/packages/cli', want: 0 },
-  { why: 'tree 写成了文件', url: 'https://github.com/Leowuqunqun/ai-butler/tree/main/README.md', want: 1 },
-  { why: '别人的仓库不管（那是外部世界）', url: 'https://github.com/o/r/blob/main/nope.md', want: 0 },
-  { why: '本仓的 tag 链接不在范围里', url: 'https://github.com/Leowuqunqun/ai-butler/blob/v0.2.1/README.md', want: 0 },
+  { why: 'blob 指向真文件', url: 'https://github.com/Leowuqunqun/ai-butler/blob/main/README.md', want: 0, examined: 1 },
+  { why: 'blob 指向不存在的路径', url: 'https://github.com/Leowuqunqun/ai-butler/blob/main/docs/nope.md', want: 1, examined: 1 },
+  { why: 'blob 写成了目录（差一个词）', url: 'https://github.com/Leowuqunqun/ai-butler/blob/main/packages/cli', want: 1, examined: 1 },
+  { why: 'tree 指向真目录', url: 'https://github.com/Leowuqunqun/ai-butler/tree/main/packages/cli', want: 0, examined: 1 },
+  { why: 'tree 写成了文件', url: 'https://github.com/Leowuqunqun/ai-butler/tree/main/README.md', want: 1, examined: 1 },
+  { why: '别人的仓库不管（那是外部世界）', url: 'https://github.com/o/r/blob/main/nope.md', want: 0, examined: 0 },
+  { why: '本仓的 tag 链接不在范围里', url: 'https://github.com/Leowuqunqun/ai-butler/blob/v0.2.1/README.md', want: 0, examined: 0 },
 ];
 
 /** 「照着敲的命令」那条的承诺：报几处，以及**看了几条**（防沉默） */
@@ -846,31 +850,31 @@ const TREE_TEST = [
     why: '两棵树一模一样 → 不报',
     zh: '```\npackages/\n├── core/   # 内核（166 个测试）\n└── cli/    # 入口（274 个测试）\n```',
     en: '```\npackages/\n├── core/   # the kernel (166 tests)\n└── cli/    # the entry point (274 tests)\n```',
-    want: 0,
+    want: 0, examined: 4,
   },
   {
     why: '⭐ 同一边改了数、另一边没改 → 报',
     zh: '```\npackages/\n├── core/   # 内核（166 个测试）\n```',
     en: '```\npackages/\n├── core/   # the kernel (92 tests)\n```',
-    want: 1,
+    want: 1, examined: 2,
   },
   {
     why: '⭐ 一边加了包、另一边整行没有 → 报',
     zh: '```\npackages/\n├── core/   # 内核（166 个测试）\n├── dsh-plugin/  # 插件（37 个测试）\n```',
     en: '```\npackages/\n├── core/   # the kernel (166 tests)\n```',
-    want: 1,
+    want: 1, examined: 3,
   },
   {
     why: '⭐ 一边有数、另一边没数 → 也报',
     zh: '```\npackages/\n├── seam-approval/  # 接口（7 个测试）\n```',
     en: '```\npackages/\n├── seam-approval/  # the interface\n```',
-    want: 1,
+    want: 1, examined: 2,
   },
   {
     why: '两边都没写数的（规划中的包）→ 不报',
     zh: '```\npackages/\n├── hub/   # 规划中\n└── node/  # 规划中\n```',
     en: '```\npackages/\n├── hub/   # planned\n└── node/  # planned\n```',
-    want: 0,
+    want: 0, examined: 4,
   },
 ];
 
@@ -979,7 +983,10 @@ function runSelfTest() {
     })),
     ...URL_TEST.map((c) => ({
       ...c,
-      got: selfRepoUrlViolations(`[t](${c.url})`, fakeExists).length,
+      got: selfRepoUrlViolations(`[t](${c.url})`, fakeExists).hits.length,
+      // ⭐ 第 86 轮：顺便验"看不看得到东西"。旧接线比的是一个**没有夹具声明**的 examined,
+      // `undefined === undefined` 永远成立 —— ⭐ 一个永远不可能失败的比较。
+      gotExamined: selfRepoUrlViolations(`[t](${c.url})`, fakeExists).examined,
       shown: c.url,
     })),
     ...CMD_TEST.map((c) => {
@@ -1023,34 +1030,60 @@ function runSelfTest() {
     }),
     ...ANCHOR_TEST.map((c) => {
       const r = unanchoredCountViolations(c.text);
-      return { ...c, got: r.hits.length, examined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（都有锚）' };
+      return { ...c, got: r.hits.length, gotExamined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（都有锚）' };
     }),
     ...EXTERNAL_TEST.map((c) => {
       const r = externalMeasuredViolations(c.text);
-      return { ...c, got: r.hits.length, examined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（有日期）' };
+      return { ...c, got: r.hits.length, gotExamined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（有日期）' };
     }),
     ...CONTRACT_TEST.map((c) => {
       const r = contractGuessViolations(c.text);
-      return { ...c, got: r.hits.length, examined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（定了论）' };
+      return { ...c, got: r.hits.length, gotExamined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（定了论）' };
     }),
     ...WHERE_TEST.map((c) => {
       const r = citedLineViolations(c.line, () => (c.ok ? null : '（假的：这一条本来就该报）'));
-      return { ...c, got: r.hits.length, examined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（指得到）' };
+      return { ...c, got: r.hits.length, gotExamined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（指得到）' };
     }),
     ...WHO_TEST.map((c) => {
       const r = contractWhoViolations(c.text);
-      return { ...c, got: r.hits.length, examined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（每一行都写了谁做的）' };
+      return { ...c, got: r.hits.length, gotExamined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（每一行都写了谁做的）' };
     }),
     ...TREE_TEST.map((c) => {
       const r = pairedTreeViolations(c.zh, c.en);
-      return { ...c, got: r.hits.length, shown: (r.hits[0] && r.hits[0].why) ?? '（两棵树一致）' };
+      return { ...c, got: r.hits.length, gotExamined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（两棵树一致）' };
     }),
-  ].filter((c) => c.got !== c.want || c.whyWrong);
+  ].filter(
+    // ⭐ 第 86 轮：这里原来只看 `got` 和 `whyWrong`，于是**声明了 `examined` 的 5 族夹具
+    // （ANCHOR / EXTERNAL / CONTRACT / WHO / WHERE，共 34 条）一条都没被比过**。
+    // 根因是各 map 先 `...c` 把夹具的 `examined`（期望值）铺开、再用实际值**覆盖**掉 ——
+    // 期望值当场就丢了；而 URL_TEST 反过来，比的是一个**没有任何夹具声明**的 examined，
+    // `undefined === undefined` 永远成立。⭐ 两种写法都等于没守卫。
+    //
+    // ⚠️ "声明了却没人比"比"根本没写"更坏：它**看起来像**一把守卫。
+    //    第 83 轮的教训（一族规则里配了牙的少）这一次坏在**自检自己**身上。
+    //
+    // 修法：比较放进这道共用的过滤里 —— 任何一族只要声明了 `examined`，就自动被比，
+    // ⭐ 以后新写的夹具**由构造保证**逃不掉。各 map 只负责把实际值放进 `gotExamined`。
+    (c) =>
+      c.got !== c.want ||
+      c.whyWrong ||
+      (c.examined !== undefined &&
+        c.gotExamined !== undefined &&
+        c.examined !== c.gotExamined),
+  );
 
   if (!bad.length) return;
-  console.error('文档体检：**规则自己坏了**（不是仓库里的文档有问题）。\n');
+  // ⚠️ 第 86 轮：这几行以前**一个 ❌ 都没有**，于是变异体检那条
+  // 「非零退出码 + 一句 ❌ 都没有 ⇒ 这看着像 witness 自己崩了」的启发式**误报**了它。
+  // ⭐ 那条启发式是对的（它防的是"把崩了当成抓到了"），错的是这里没按"判红就印 ❌"的约定写。
+  console.error('❌ 文档体检：**规则自己坏了**（不是仓库里的文档有问题）。\n');
   for (const c of bad) {
-    console.error(`  ${c.why}：应该 ${c.want} 处，实际 ${c.got} 处${c.whyWrong ?? ''}`);
+    console.error(
+      `  ❌ ${c.why}：应该 ${c.want} 处，实际 ${c.got} 处${c.whyWrong ?? ''}` +
+        (c.examined !== undefined && c.gotExamined !== undefined && c.examined !== c.gotExamined
+          ? `（另外：应该看 ${c.examined} 条，实际 ${c.gotExamined} 条）`
+          : ''),
+    );
     console.error(`    ${c.shown}`);
   }
   console.error('\n改法：这是 scripts/check-docs.mjs 里 shippedDocViolations / selfRepoUrlViolations /');
@@ -1155,6 +1188,11 @@ for (const file of files) {
 // ───────────── ⑤ 指向本仓的完整地址，路径得真在（第 41 轮写下的规矩，第 50 轮做成检查） ─────────────
 
 let selfUrlBad = 0;
+let selfUrlExamined = 0;
+// ⭐ 第 86 轮实测：**15 条**（分在 8 个包内 README 里；`dist/` 不算，它被 files 排除）。
+// 阈值取 10 —— 留出正常增删的余地，但**不许这个形状整体消失**：
+// 掉到 10 以下说明"指向本仓的完整地址"正在从文档里退场，那时 ④ 就成了一条空跑的规则。
+const SELF_URL_FLOOR = 10;
 /** blob ⇒ 得是文件；tree ⇒ 得是目录 */
 const reallyExists = (kind, path) => {
   const abs = resolve(ROOT, path);
@@ -1163,13 +1201,29 @@ const reallyExists = (kind, path) => {
 };
 for (const file of files) {
   const text = readFileSync(resolve(ROOT, file), 'utf8');
-  for (const url of selfRepoUrlViolations(text, reallyExists)) {
+  // ⚠️ 第 86 轮：这里一开始**只加了一行** `selfUrlExamined += …`，
+  //    却把上面那个 `for…of selfRepoUrlViolations(…)` 留着没换 —— 而函数已经改成返回
+  //    `{ hits, examined }` 了，于是 `for (const url of {…})` 当场 TypeError。
+  //    ⭐ 我没发现，是因为改完之后**只跑了 `--self-test`**，而它在主循环之前就 exit 了。
+  //    ⭐⭐ 是第 82 轮那条"非零退出但一句 ❌ 都没有 ⇒ 这看着像 witness 自己崩了"的硬化
+  //    把它抓出来的 —— 铁锈味的证据：那条硬化原本防的是**别人**，这次防住了我。
+  const { hits: selfUrlHits, examined: selfUrlSeen } = selfRepoUrlViolations(text, reallyExists);
+  selfUrlExamined += selfUrlSeen;
+  for (const url of selfUrlHits) {
     problems.push(
       `❌ 指向本仓的完整地址，在仓库里找不到  ${file}\n       → ${url}\n` +
         '       （本地看着没问题是因为它只是个字符串；推上去读者点开就是 404）',
     );
     selfUrlBad++;
   }
+}
+if (!problems.length && selfUrlExamined < SELF_URL_FLOOR) {
+  problems.push(
+    `❌ 规则 ④ 只看了 ${selfUrlExamined} 条"指向本仓的完整地址"，太少\n` +
+      `       → 第 86 轮实测是 15 条。旧版这一族**没有防沉默** —— ` +
+      '它只报坏消息、不报"看了几条"，于是地址全没了也一声不吭。' +
+      '检查 selfRepoUrlViolations 的 SELF_REPO 与那条 matchAll。',
+  );
 }
 
 // ───────── ⑥ 用户文档里"照着敲"的命令，路径得够得着（第 54 轮，从真机那次洞里来） ─────────
@@ -1288,7 +1342,11 @@ let treeExamined = 0;
   }
 }
 // 防沉默：理由同规则 ⑥⑦⑧。两棵树加起来一定不止一两行。
-if (!problems.length && treeExamined < 10) {
+// ⭐ 第 86 轮实测：**42 行**。旧阈值是 10 —— ⭐ 要掉 32 行才响，等于没有预警：
+// 两棵包树掉到四分之一，它还是绿的。改成"实测值的一半"（向上取整 = 21），
+// ⭐ 掉一半就吱声。⚠️ 这个数**跟着实测走**：改了包树就顺手改这里。
+const TREE_FLOOR = 21;
+if (!problems.length && treeExamined < TREE_FLOOR) {
   problems.push(
     `❌ 规则 ⑨ 只看 ${treeExamined} 行"包树"\n       → 两棵加起来应该有二十来行。检查 treeOf 里那个围栏和行形状的正则。`,
   );
@@ -1512,7 +1570,7 @@ if (problems.length) console.log(`${problems.join('\n')}\n`);
 console.log(
   `检查 ${files.length} 个 md、${checked} 个链接/图片、${pairs.length} 对双语 → ` +
   (problems.length
-    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}、本仓地址 ${selfUrlBad}、照抄命令 ${cmdBad}、出处 ${provBad}、用户面数字 ${staleBad}、包树 ${treeBad}、时间锚 ${anchorBad}、契约定论 ${contractBad}、契约谁做的 ${whoBad}、引用指得到 ${citeBad}、外部量测 ${externalBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
-    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着、本仓地址指得到、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、用户面文档里的数跟仓库对得上（看了 ${staleExamined} 条）、架构包树中英对齐（看了 ${treeExamined} 行）、精确数都带时间锚（看了 ${anchorExamined} 条）、量别人仓库的数都带日期（看了 ${externalExamined} 条）、§五 契约行都定了论（看了 ${contractExamined} 条）、都写了"实际怎么做的"（看了 ${whoExamined} 行）、代码引用都指得到（看了 ${citeExamined} 处）、双语结构对齐（规则自检 ${RULE_FIXTURE_COUNT()} 条通过）`),
+    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}、本仓地址 ${selfUrlBad}（看了 ${selfUrlExamined} 条）、照抄命令 ${cmdBad}、出处 ${provBad}、用户面数字 ${staleBad}、包树 ${treeBad}、时间锚 ${anchorBad}、契约定论 ${contractBad}、契约谁做的 ${whoBad}、引用指得到 ${citeBad}、外部量测 ${externalBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
+    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着、本仓地址指得到（看了 ${selfUrlExamined} 条）、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、用户面文档里的数跟仓库对得上（看了 ${staleExamined} 条）、架构包树中英对齐（看了 ${treeExamined} 行）、精确数都带时间锚（看了 ${anchorExamined} 条）、量别人仓库的数都带日期（看了 ${externalExamined} 条）、§五 契约行都定了论（看了 ${contractExamined} 条）、都写了"实际怎么做的"（看了 ${whoExamined} 行）、代码引用都指得到（看了 ${citeExamined} 处）、双语结构对齐（规则自检 ${RULE_FIXTURE_COUNT()} 条通过）`),
 );
 process.exit(problems.length ? 1 : 0);
