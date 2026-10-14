@@ -22,8 +22,8 @@ import { homedir, tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 
 import {
-  FALLBACK_PATCH, IM_NAMES, butlerHome, coreStateFileMissing, defaultConfigPath, defaultConfigText,
-  defaultPatchPath, initButlerHome, patchTemplate,
+  FALLBACK_PATCH, IM_LABEL, IM_NAMES, butlerHome, coreStateFileMissing, defaultConfigPath,
+  defaultConfigText, defaultPatchPath, imOfChannelName, initButlerHome, patchTemplate,
 } from '../lib/setup.js';
 import { DEFAULT_KEY_REF, credentialsFileOf, keyRefOf } from '../lib/credentials.js';
 import { runSync, tempHome } from './fixtures/node-helpers.mjs';
@@ -80,6 +80,27 @@ test('选飞书：通道那一行换成 channel-feishu，两个字段留空', ()
   // 真值不走这个文件 —— 它只进 state/secrets.json（这份 config.json 是给人读的）
   assert.deepEqual(channel.config, { home: '/tmp/butler-home', appId: '', appSecret: '' });
   assert.ok(IM_NAMES.includes('feishu'), '--im feishu 得被认出来');
+});
+
+/**
+ * `butler run` 上线那句里的 IM 名字 —— 第 91 轮真机验飞书时撞见它写死了「微信」。
+ *
+ * 两个方向都要钉：认得出时**说对名字**，认不出时**不猜**（宁可不说，也不能把人支到
+ * 另一个 IM 里去等 —— 那边永远不会有消息）。
+ */
+test('上线那句说的 IM = 配置里实装的那条通道（认不出就不说）', () => {
+  const row = JSON.parse(defaultConfigText({ home: '/tmp/h', im: 'feishu' }))
+    .plugins.find((p) => p.id === 'channel');
+
+  assert.equal(imOfChannelName(row.name), 'feishu');
+  assert.equal(IM_LABEL.feishu, '飞书');
+
+  // 三个 IM 都得有名字 —— 漏一个，那句就会打出一个 `undefined`
+  for (const im of IM_NAMES) assert.equal(typeof IM_LABEL[im], 'string');
+
+  // 认不出的（用户自己接的别的通道）不许猜
+  assert.equal(imOfChannelName('some-other/plugin'), undefined);
+  assert.equal(imOfChannelName(undefined), undefined);
 });
 
 test('节点那份配置：**没有通道**，也没有内核 —— 它不登录微信', () => {

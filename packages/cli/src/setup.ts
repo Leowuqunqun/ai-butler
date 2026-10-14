@@ -442,6 +442,29 @@ function channelImOf(configPath: string): ImName | undefined {
   return typeof row?.name === 'string' ? CHANNEL_PKG[row.name] : undefined;
 }
 
+/**
+ * 通道在终端里怎么称呼。加一个 IM 就在这儿加一行。
+ *
+ * 为什么不留字面量：`butler run` 那句「上线了。用**微信**给它发句话试试」是**一份共享文本** ——
+ * 通道换成飞书/Telegram 时它照旧说微信。这不是文案问题：用户会去微信里等到怀疑人生，
+ * 而飞书那边其实一切正常。（第 91 轮真机验飞书时现场撞见。）
+ */
+export const IM_LABEL: Record<ImName, string> = {
+  wechat: '微信',
+  telegram: 'Telegram',
+  feishu: '飞书',
+};
+
+/**
+ * 一行通道**插件名**属于哪个 IM。认不出来就是 `undefined` —— **别猜**。
+ *
+ * 给 `butler run` 用的那条路：它手上已经有装载好的那几行（含 `--patch` 叠上来的），
+ * 不必再去读一遍配置文件。和 `channelImOf` 共用同一张 `CHANNEL_PKG`，所以两条路不会各说各的。
+ */
+export function imOfChannelName(name: unknown): ImName | undefined {
+  return typeof name === 'string' ? CHANNEL_PKG[name] : undefined;
+}
+
 function topUpRows(
   configPath: string,
   home: string,

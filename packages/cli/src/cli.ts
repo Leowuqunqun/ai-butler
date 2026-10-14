@@ -25,7 +25,8 @@ import { boot, type Booted } from './boot.js';
 import { doctor, formatDoctor } from './doctor.js';
 import { collectReport, writeReport } from './report.js';
 import {
-  IM_NAMES, LINK_NAMES, coreStateFileMissing, defaultConfigPath, initButlerHome, missingAbilityRows,
+  IM_LABEL, IM_NAMES, LINK_NAMES, coreStateFileMissing, defaultConfigPath, imOfChannelName,
+  initButlerHome, missingAbilityRows,
   type ImName, type LinkName,
 } from './setup.js';
 import { autostartOff, autostartOn, autostartPlan, autostartStatus, formatPlan } from './autostart.js';
@@ -382,7 +383,10 @@ async function run(args: Args): Promise<number> {
     process.off('SIGTERM', onSignal);
   }
 
-  await serve('上线了。用微信给它发句话试试。（Ctrl-C 退出）');
+  // 用**这一台实际装的那条通道**的名字，不写死微信：通道是飞书时，写死的那句会把人
+  // 支到微信里去等（第 91 轮真机验飞书时撞见）。认不出通道名就只说"给它发句话"，不猜。
+  const im = imOfChannelName(b.loaded.find((r) => r.id === 'channel')?.name);
+  await serve(`上线了。${im ? `用${IM_LABEL[im]}给它发句话试试。` : '给它发句话试试。'}（Ctrl-C 退出）`);
 
   console.log('\n正在退出…');
   await b.dispose();
@@ -734,7 +738,12 @@ function runInit(args: Args): number {
     console.log('\n第一次它会问你两件事，都不用改任何文件：');
     console.log('  1. 应用的 app_id 和 app_secret（扫码那条路存过的话，它会自动跳过）');
     console.log('  2. 模型 key（AI 要靠它思考）');
-    console.log('\n⚠️ 飞书这条通道还没做过真机验收 —— 真连不上、或连上了却收不到，先照上面那三件事对一遍。');
+    // 这句原来是「⚠️ 飞书这条通道还没做过真机验收」。第 91 轮在真飞书企业里跑通了
+    // （建应用 → 长连接 → 收一条 → 回一条），于是它成了**过期的话**：说"没验过"会让人
+    // 以为出了问题是正常的、不去查；说"验过了"又可能让他以为**他这个应用**一定没问题。
+    // 所以两句都说，且把最常见的三件事留在后面 —— 那三件才是真出事时该对的。
+    console.log('\n（这条通道 2026-10-14 在真飞书企业里跑通过：建应用 → 长连接 → 收一条 → 回一条。）');
+    console.log('  真连不上、或连上了却收不到，最常还是上面那三件事。');
   } else {
     console.log('\n这台是「收微信的那台」。接下来：\n');
     console.log('  butler run');
