@@ -571,6 +571,28 @@ function pairedTreeViolations(zhText, enText) {
   return { hits, examined: zh.size + en.size };
 }
 
+// ───────── ⑮ 中英两套架构图必须一一对应（第 91 轮补（七）） ─────────
+//
+//   ⭐ 为什么需要：这一轮把 18 张图译成了英文放在 docs/diagrams/en/ —— 图从此是
+//   **两套源码**。而图是这套文档里改得最勤的东西：「加了中文图、忘了英文那份」不会让
+//   任何东西报错，只会让英文读者看到一张缺图，或者一张停在几个月前的图。
+//
+//   ⭐ 只查**文件名集合**，不查内容。译文与原文天然不同字，比内容会变成一台乱叫的
+//   机器 —— 那正是第 90 轮从双语守卫里放弃的那条路。能机械保证的是「两套图一张不少」，
+//   不是「英文图跟中文图画得一样」。
+function diagramPairViolations(zhNames, enNames) {
+  const zh = new Set(zhNames);
+  const en = new Set(enNames);
+  const hits = [];
+  for (const name of [...zh].sort()) {
+    if (!en.has(name)) hits.push({ text: name, why: `docs/diagrams/${name} 有中文版，英文版 docs/diagrams/en/${name} 不存在` });
+  }
+  for (const name of [...en].sort()) {
+    if (!zh.has(name)) hits.push({ text: name, why: `docs/diagrams/en/${name} 有英文版，中文原版 docs/diagrams/${name} 不存在` });
+  }
+  return { hits, examined: zh.size + en.size };
+}
+
 // ───────── ⑩ 精确的"当时多少测试"必须带时间锚（第 75 轮） ─────────
 //
 // 第 73/74 轮定下的政策是：**会烂的精确数换成量级**（`九百多个`），**历史记录则加时间锚**。
@@ -884,6 +906,30 @@ const TREE_TEST = [
 ];
 
 // ── 规则 ⑩ 的夹具
+// ── 规则 ⑮ 的夹具
+const DPAIR_TEST = [
+  {
+    why: '两套一一对应 → 不报',
+    zh: ['a.mmd', 'b.mmd'], en: ['a.mmd', 'b.mmd'], want: 0, examined: 4,
+  },
+  {
+    why: '⭐ 中文加了新图、英文没跟着加 → 报',
+    zh: ['a.mmd', 'b.mmd', 'c.mmd'], en: ['a.mmd', 'b.mmd'], want: 1, examined: 5,
+  },
+  {
+    why: '⭐ 英文多一份（中文那边删了）→ 报',
+    zh: ['a.mmd'], en: ['a.mmd', 'b.mmd'], want: 1, examined: 3,
+  },
+  {
+    why: '两边各多一个、名字还不一样 → 报 2 处',
+    zh: ['a.mmd', 'zh-only.mmd'], en: ['a.mmd', 'en-only.mmd'], want: 2, examined: 4,
+  },
+  {
+    why: '两边都空 → 本规则不报（但防沉默那一关会拦住它）',
+    zh: [], en: [], want: 0, examined: 0,
+  },
+];
+
 const ANCHOR_TEST = [
   {
     why: '量级（没有精确数字）→ 不报',
@@ -977,7 +1023,7 @@ const CONTRACT_TEST = [
 ];
 
 const RULE_FIXTURE_COUNT = () =>
-  SELF_TEST.length + URL_TEST.length + CMD_TEST.length + PROV_TEST.length + COUNT_TEST.length + TREE_TEST.length + ANCHOR_TEST.length + EXTERNAL_TEST.length + CONTRACT_TEST.length + WHO_TEST.length + WHERE_TEST.length;
+  SELF_TEST.length + URL_TEST.length + CMD_TEST.length + PROV_TEST.length + COUNT_TEST.length + TREE_TEST.length + ANCHOR_TEST.length + EXTERNAL_TEST.length + CONTRACT_TEST.length + WHO_TEST.length + WHERE_TEST.length + DPAIR_TEST.length;
 
 function runSelfTest() {
   const bad = [
@@ -1058,6 +1104,10 @@ function runSelfTest() {
       const r = pairedTreeViolations(c.zh, c.en);
       return { ...c, got: r.hits.length, gotExamined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（两棵树一致）' };
     }),
+    ...DPAIR_TEST.map((c) => {
+      const r = diagramPairViolations(c.zh, c.en);
+      return { ...c, got: r.hits.length, gotExamined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（两套一一对应）' };
+    }),
   ].filter(
     // ⭐ 第 86 轮：这里原来只看 `got` 和 `whyWrong`，于是**声明了 `examined` 的 5 族夹具
     // （ANCHOR / EXTERNAL / CONTRACT / WHO / WHERE，共 34 条）一条都没被比过**。
@@ -1093,8 +1143,8 @@ function runSelfTest() {
     console.error(`    ${c.shown}`);
   }
   console.error('\n改法：这是 scripts/check-docs.mjs 里 shippedDocViolations / selfRepoUrlViolations /');
-  console.error('sourceTreeCommandViolations / provenanceViolations / staleCountViolations / pairedTreeViolations / unanchoredCountViolations / externalMeasuredViolations / contractGuessViolations / contractWhoViolations / citedLineViolations 的规则被改动了。');
-  console.error('要是故意放宽/收紧，请把 SELF_TEST / URL_TEST / CMD_TEST / PROV_TEST / COUNT_TEST / TREE_TEST / ANCHOR_TEST / EXTERNAL_TEST / CONTRACT_TEST / WHO_TEST / WHERE_TEST 一起改，');
+  console.error('sourceTreeCommandViolations / provenanceViolations / staleCountViolations / pairedTreeViolations / unanchoredCountViolations / externalMeasuredViolations / contractGuessViolations / contractWhoViolations / citedLineViolations 的规则被改动了。 / diagramPairViolations');
+  console.error('要是故意放宽/收紧，请把 SELF_TEST / URL_TEST / CMD_TEST / PROV_TEST / COUNT_TEST / TREE_TEST / ANCHOR_TEST / EXTERNAL_TEST / CONTRACT_TEST / WHO_TEST / WHERE_TEST 一起改， / DPAIR_TEST');
   console.error('并在 docs/CHANNEL-FEISHU.md 里写清楚为什么。');
   process.exit(1);
 }
@@ -1144,6 +1194,7 @@ const RULE_NAMES = [
   'staleCountViolations', 'pairedTreeViolations', 'sourceTreeCommandViolations',
   'unanchoredCountViolations', 'externalMeasuredViolations', 'contractGuessViolations',
   'contractWhoViolations', 'citedLineViolations',
+  'diagramPairViolations',
 ];
 // ───── ⭐ 第 90 轮：防沉默阈值集中成一张表，而且"记账"是被查的 ─────
 //   以前这些数散在九处：三个具名常量、四处内联字面量、两处 `=== 0`、一处**完全没有**。
@@ -1164,6 +1215,7 @@ const FLOORS = {
   //   它们到那一刻为止**完全没有防沉默**。⭐ 现在 11/11 族全都有阈值和记账了。
   externalMeasuredViolations: { m: 2, f: 1, why: '量别人仓库的数都带日期' },
   contractGuessViolations: { m: 11, f: 5, why: '§五 契约行都定了论' },
+  diagramPairViolations: { m: 36, f: 18, why: '两套图的文件名 —— 掉一半就吱声' },
 };
 const FLOOR_OF = (k) => {
   if (!(k in FLOORS)) throw new Error(`FLOORS 里没有 ${k}`);
@@ -1198,6 +1250,7 @@ externalMeasuredViolations = wrapRule('externalMeasuredViolations', externalMeas
 contractGuessViolations = wrapRule('contractGuessViolations', contractGuessViolations);
 contractWhoViolations = wrapRule('contractWhoViolations', contractWhoViolations);
 citedLineViolations = wrapRule('citedLineViolations', citedLineViolations);
+diagramPairViolations = wrapRule('diagramPairViolations', diagramPairViolations);
 
 /** 代码块围栏的条数。多到 3 个空格缩进也算（markdown 允许） */
 const fenceCount = (text) => (text.match(/^ {0,3}```/gm) ?? []).length;
@@ -1457,6 +1510,33 @@ const TREE_FLOOR = FLOOR_OF('pairedTreeViolations');
 if (!problems.length && treeExamined < TREE_FLOOR) {
   problems.push(
     `❌ 规则 ⑨ 只看 ${treeExamined} 行"包树"\n       → 两棵加起来应该有二十来行。检查 treeOf 里那个围栏和行形状的正则。`,
+  );
+}
+
+// ───────── ⑮ 中英两套架构图必须一一对应（第 91 轮补（七）） ─────────
+
+let dpairBad = 0;
+let dpairExamined = 0;
+{
+  const namesIn = (dir) =>
+    existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith('.mmd')).sort() : [];
+  const r = diagramPairViolations(namesIn(diagramDir), namesIn(resolve(diagramDir, 'en')));
+  dpairExamined = r.examined;
+  for (const hit of r.hits) {
+    problems.push(
+      `❌ 中英两套架构图对不上  docs/diagrams/ ↔ docs/diagrams/en/\n       → ${hit.why}\n` +
+        '       （两套图是同一批图的两种标注。加了中文图没加英文版，英文读者点开就是缺图。' +
+        '两套源码分目录放，也正是为了让「docs/ 下 N 张图」那个数只数中文那一套 —— 见 docs/diagrams/README.md）',
+    );
+    dpairBad++;
+  }
+}
+// 防沉默：理由同规则 ⑥⑦⑧⑨。两套图加起来一定有三十来个源文件。
+// ⭐ 记账 36 = 中文 18 + 英文 18（第 91 轮补（七）实测）。掉一半就吱声。
+if (!problems.length && dpairExamined < FLOOR_OF('diagramPairViolations')) {
+  problems.push(
+    `❌ 规则 ⑮ 只看 ${dpairExamined} 个 .mmd\n` +
+      '       → 中文 18 + 英文 18。检查 docs/diagrams/en/ 是不是没被读到。',
   );
 }
 
@@ -1721,8 +1801,8 @@ if (problems.length) console.log(`${problems.join('\n')}\n`);
 console.log(
   `检查 ${files.length} 个 md、${checked} 个链接/图片、${pairs.length} 对双语 → ` +
   (problems.length
-    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}（看了 ${shipExamined} 条）、本仓地址 ${selfUrlBad}（看了 ${selfUrlExamined} 条）、照抄命令 ${cmdBad}、出处 ${provBad}、用户面数字 ${staleBad}、包树 ${treeBad}、时间锚 ${anchorBad}、契约定论 ${contractBad}、契约谁做的 ${whoBad}、引用指得到 ${citeBad}、外部量测 ${externalBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
-    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着（看了 ${shipExamined} 条）、本仓地址指得到（看了 ${selfUrlExamined} 条）、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、用户面文档里的数跟仓库对得上（看了 ${staleExamined} 条）、架构包树中英对齐（看了 ${treeExamined} 行）、精确数都带时间锚（看了 ${anchorExamined} 条）、量别人仓库的数都带日期（看了 ${externalExamined} 条）、§五 契约行都定了论（看了 ${contractExamined} 条）、都写了"实际怎么做的"（看了 ${whoExamined} 行）、代码引用都指得到（看了 ${citeExamined} 处）、双语结构对齐（规则自检 ${RULE_FIXTURE_COUNT()} 条通过）`),
+    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}（看了 ${shipExamined} 条）、本仓地址 ${selfUrlBad}（看了 ${selfUrlExamined} 条）、照抄命令 ${cmdBad}、出处 ${provBad}、用户面数字 ${staleBad}、包树 ${treeBad}、时间锚 ${anchorBad}、契约定论 ${contractBad}、契约谁做的 ${whoBad}、引用指得到 ${citeBad}、外部量测 ${externalBad}、结构 ${h2Mismatch}、图配对 ${dpairBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
+    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着（看了 ${shipExamined} 条）、本仓地址指得到（看了 ${selfUrlExamined} 条）、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、用户面文档里的数跟仓库对得上（看了 ${staleExamined} 条）、架构包树中英对齐（看了 ${treeExamined} 行）、中英两套架构图一一对应（看了 ${dpairExamined} 张）、精确数都带时间锚（看了 ${anchorExamined} 条）、量别人仓库的数都带日期（看了 ${externalExamined} 条）、§五 契约行都定了论（看了 ${contractExamined} 条）、都写了"实际怎么做的"（看了 ${whoExamined} 行）、代码引用都指得到（看了 ${citeExamined} 处）、双语结构对齐（规则自检 ${RULE_FIXTURE_COUNT()} 条通过）`),
 );
 if (SMOKE) {
   const missing = RULE_NAMES.filter((n) => !RAN.has(n));
