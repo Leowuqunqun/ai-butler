@@ -70,7 +70,8 @@ dsh plugin --profile web add "file:$(pwd)/butler-dsh-plugin-0.2.1/plugin"
 | 层 | 内容 | 状态 |
 | --- | --- | --- |
 | ① 接入 | 一行安装（`install.command` 双击）+ 扫码登录 + 引导页 | ✅ **能用**（不装 Node、不要管理员密码） |
-| ① 接入 | **第三个 IM：飞书**（站在官方 `@larksuite/channel` 上，只写映射） | 📐 骨架 + CLI 已接（`--im feishu`）；**真机还没验收** |
+| ① 接入 | **第三个 IM：飞书**（站在官方 `@larksuite/channel` 上，只写映射） | ✅ **能用**（2026-10-14 真机验收过：建应用 → 长连接 → 收一条 → 回一条） |
+| ① 接入 | 同时接**多个** IM（微信 + 飞书并用） | ❌ **未做** —— 一个 context 只能有一个通道位；结论存档见 [CHANNEL-FEISHU.md](docs/CHANNEL-FEISHU.md) 第十三节 |
 | ② 对话 | 收发文本、语音转写、**发文件 / 图片 / 视频**、引用前缀 | ✅ **能用** |
 | ② 对话 | **收图片 / 收文件**（CDN 下载 + 解密 + 落到本机交给 agent） | ✅ **能用** |
 | ③ 能力 | agent 干活（可插拔后端：DSH / 任意命令行） | ✅ **能用** |
@@ -102,7 +103,7 @@ packages/
   link-lan/            ✅ 链路实现：局域网（HTTP + SSE，零依赖；认证是红线；配对码收设备）
   link-tailscale/      ✅ 链路实现：跨网（名册问 Tailscale；线上复用 link-lan 那套协议）
   cli/                 ✅ 入口 `butler`：配置 + patch 叠加 → 拉起容器 → 上线 / doctor 自检
-  channel-feishu/      📐 第三个通道：飞书（站在官方 @larksuite/channel 上；八十多个离线用例，收到图片/文件会落盘；真机未验收）
+  channel-feishu/      ✅ 第三个通道：飞书（站在官方 @larksuite/channel 上；八十多个离线用例，收到图片/文件会落盘；2026-10-14 真机验收过）
   （以下还没拆成包）
   hub/ node/           —— 角色已有归属：hub 由 core/ 承担，node 由 link-lan/node 承担
   installer/           —— 引导器脚本已在仓库根目录（install.sh），包还没拆
@@ -122,7 +123,7 @@ scripts/               图渲染 + 文档/包结构自检 + 变异测试
 | [GLOSSARY.md](docs/GLOSSARY.md) | **中英术语对照表**：翻译的规矩，也是读源码注释的对照 |
 | [docs/diagrams/](docs/diagrams/) | 18 张架构图（含源文件与配色约定）—— 先看 [整体架构](docs/diagrams/arch-00-overview.svg) |
 | [seam-channel/README.md](packages/seam-channel/README.md) | **想接一个新 IM（Telegram/飞书…）看这个**：契约、示例、踩过的坑 |
-| [CHANNEL-FEISHU.md](docs/CHANNEL-FEISHU.md) | **想知道飞书能不能接、要付什么代价看这个**：接入形态与权限点、长连接的硬约束、逐条映射到 `ctx.channel`、工作量估算、开工前要定的五件事（**调研，未开工**） |
+| [CHANNEL-FEISHU.md](docs/CHANNEL-FEISHU.md) | **想知道飞书能不能接、要付什么代价看这个**：接入形态与权限点、长连接的硬约束、逐条映射到 `ctx.channel`、工作量估算、开工前要定的五件事（**已落地，2026-10-14 真机验收过**；文末第十三节是"同时收多个 IM"的结论存档） |
 | [seam-agent/README.md](packages/seam-agent/README.md) | **想换掉干活的大脑看这个**：`ctx.agent` 契约、示例、实现者四条守则 |
 | [seam-link/README.md](packages/seam-link/README.md) | **想接一条新链路（Tailscale/SSH/自建中继）看这个**：`ctx.link` 契约、安全红线、为什么进度挂在请求上 |
 | [cli/README.md](packages/cli/README.md) | **想知道怎么真的跑起来看这个**：`butler init` 生成什么、配置格式、patch 语义、`butler run`、`butler doctor` |

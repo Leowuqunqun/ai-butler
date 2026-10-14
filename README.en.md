@@ -83,7 +83,8 @@ above are still being designed or built:
 | Layer | What | Status |
 | --- | --- | --- |
 | ① Connection | One-line install (double-click `install.command`) + QR login + onboarding page | ✅ **Works** (no Node to install, no admin password) |
-| ① Connection | **Third IM: Feishu** (on top of the official `@larksuite/channel`; we only write the mapping) | 📐 Skeleton + CLI wired (`--im feishu`); **not yet verified on a real device** |
+| ① Connection | **Third IM: Feishu** (on top of the official `@larksuite/channel`; we only write the mapping) | ✅ **Works** (verified on a real tenant on 2026-10-14: create the app → long connection → receive one → reply one) |
+| ① Connection | Several IMs at once (WeChat + Feishu side by side) | ❌ **Not supported** — one context holds a single channel slot; the write-up is in [CHANNEL-FEISHU.md](docs/CHANNEL-FEISHU.md) section 13 (Chinese only) |
 | ② Conversation | Send/receive text, voice transcription, **send files / images / videos**, quote prefix | ✅ **Works** |
 | ② Conversation | **Receiving images / files** (CDN download + decrypt + saved locally, handed to the agent) | ✅ **Works** |
 | ③ Capability | The agent does the work (pluggable backends: DSH / any command line) | ✅ **Works** |
@@ -115,7 +116,7 @@ packages/
   link-lan/            ✅ link implementation: LAN (HTTP + SSE, zero dependencies; authentication is a red line; a pairing code admits devices)
   link-tailscale/      ✅ link implementation: across networks (the roster is asked of Tailscale; the wire protocol is link-lan's)
   cli/                 ✅ the entry point `butler`: config + patch overlay → bring up the container → go online / `doctor` self-check
-  channel-feishu/      📐 third channel: Feishu (on top of the official @larksuite/channel; eighty-odd offline cases, inbound images/files land on disk; not yet verified on a real device)
+  channel-feishu/      ✅ third channel: Feishu (on top of the official @larksuite/channel; eighty-odd offline cases, inbound images/files land on disk; verified on a real tenant on 2026-10-14)
   (the following are not packages yet)
   hub/ node/           —— the roles already have owners: hub is `core/`, node is `link-lan/node`
   installer/           —— the installer script already ships at the repo root (install.sh); the package isn't split out yet
@@ -135,7 +136,7 @@ scripts/               diagram rendering + docs/package-structure checks + mutat
 | [GLOSSARY.md](docs/GLOSSARY.md) | **Chinese↔English term table**: the rules translations follow, and a key to the Chinese source comments |
 | [docs/diagrams/](docs/diagrams/) | 18 architecture diagrams (sources and color conventions included) — start with the [overall architecture](docs/diagrams/arch-00-overview.svg) |
 | [seam-channel/README.md](packages/seam-channel/README.md) | **Read this to wire up a new IM (Telegram/飞书…)**: contract, examples, the foot-guns we hit |
-| [CHANNEL-FEISHU.md](docs/CHANNEL-FEISHU.md) | **Read this to see whether Feishu/Lark can be wired in, and what it costs**: the access model and permission scopes, the hard limits of long-connection mode, a line-by-line mapping onto `ctx.channel`, a cost estimate, and the five decisions to make before starting (**research only, not started**; Chinese only) |
+| [CHANNEL-FEISHU.md](docs/CHANNEL-FEISHU.md) | **Read this to see whether Feishu/Lark can be wired in, and what it costs**: the access model and permission scopes, the hard limits of long-connection mode, a line-by-line mapping onto `ctx.channel`, a cost estimate, and the five decisions to make before starting (**shipped; verified on a real tenant on 2026-10-14**; Chinese only; section 13 at the end records the "several IMs at once" conclusion) |
 | [seam-agent/README.md](packages/seam-agent/README.md) | **Read this to swap out the agent doing the work**: the `ctx.agent` contract, examples, the four rules for implementers |
 | [seam-link/README.md](packages/seam-link/README.md) | **Read this to add a new link (Tailscale/SSH/your own relay)**: the `ctx.link` contract, the security red line, why progress hangs off the request |
 | [cli/README.md](packages/cli/README.md) | **Read this to actually run it**: what `butler init` generates, config format, patch semantics, `butler run`, `butler doctor` |
