@@ -597,6 +597,9 @@ test('check：认了主之后要说清"别人发消息它会一声不吭"（这�
     const c = byName(t.core.check(), '谁能指挥它');
     assert.match(c.detail, /已认主/);
     assert.match(c.detail, /一声不吭/, '这条不说，用户会以为坏了');
+    // 第 64 轮：还要说清**是谁**。手册第十二节让用户跑来 doctor 看这个 id
+    // （钉死认主、或者换人写 allowFrom 时都得先知道它）。
+    assert.ok(c.detail.includes(t.core.owner), `要说清主人是谁，实际：${c.detail}`);
     assert.match(c.fix, /allowFrom|重新认主/, '换人用要给出路');
   } finally { await t.cleanup(); }
 });
@@ -615,6 +618,7 @@ test('★ check：认主**没落盘**时要当场说破（不然重启之后谁�
     const c = byName(t.core.check(), '谁能指挥它');
     assert.match(c.detail, /没落盘/, '不落盘这件事必须说出来');
     assert.match(c.detail, /重启/, '而且要说清后果');
+    assert.ok(c.detail.includes(t.core.owner), `没落盘这一支也要说清主人是谁，实际：${c.detail}`);
     assert.match(c.fix, /stateFile/, '还要给一条能照着做的出路 —— 光说"有问题"等于没说');
   } finally { await t.cleanup(); }
 });

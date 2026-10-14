@@ -249,17 +249,23 @@ export class ButlerCore extends Service {
       out.push({
         name: '谁能指挥它',
         ok: true,
-        detail: `名单里的 ${this.config.allowFrom.length} 个微信号（配置里写死了 allowFrom）`,
+        detail: `名单里的 ${this.config.allowFrom.length} 个 id（配置里写死了 allowFrom）`,
       });
     } else if (owner) {
+      // ⚠️ 第 64 轮：这一行原来只说"已认主"，**不打是谁**。而手册第十二节是让用户跑来 doctor
+      //    确认认主的（它原来写的是"doctor 会显示成 `主人=<你的 id>`"—— 那个措辞 doctor 里
+      //    从来就没有过，只有 `butler run` 的启动日志里有；手册那句已按这里的真实输出改掉）。
+      //    用户想钉死认主、或想换人时都得先知道这个 id 是什么，所以补上。
+      //    打 id 不是打凭据：`ou_…`/`wxid_…` 是标识符，手册本来就教用户从探针那段 JSON 里
+      //    抄它。（真正算凭据的是 `consoleUrl` 那种签了名的一次性链接，那个哪儿都不打。）
       out.push({
         name: '谁能指挥它',
         ok: true,
         detail: this.config.stateFile
-          ? '已认主（第一个跟它说话的人）。别人发消息它会一声不吭'
-          : '已认主（第一个跟它说话的人）—— ⚠️ 但这次认主**没落盘**：重启之后第一个说话的人又会成为主人',
+          ? `已认主（第一个跟它说话的人）：${owner}。别人发消息它会一声不吭`
+          : `已认主（第一个跟它说话的人）：${owner} —— ⚠️ 但这次认主**没落盘**：重启之后第一个说话的人又会成为主人`,
         fix: this.config.stateFile
-          ? `换人用的话：把配置里的 allowFrom 写上新的微信号，或者删掉 ${this.config.stateFile} 重新认主`
+          ? `换人用的话：把配置里的 allowFrom 写上新的 id，或者删掉 ${this.config.stateFile} 重新认主`
           : '想钉死：给 core 这一行加 `stateFile`（例如 <管家目录>/state/state.json）—— 加上之后重启也认这个主人',
       });
     } else {
