@@ -342,6 +342,60 @@ const WHO_TEST = [
   { why: '只有表头没有契约行', text: '## 五、\n| 契约 | 飞书这边怎么做 |\n| --- | --- |\n**三个真问题**', want: 0, examined: 0 },
 ];
 
+// ── 规则 ⑭：手册里的 `路径:行号` 引用得真的指得到（第 85 轮） ──
+//
+// 为什么：第 85 轮把手册里**带行号的代码引用**全部抽出来核了一遍（23 处）。
+// 结果是"行号本身大多是对的，但**路径大多不完整**" ——
+//   · 18/23 写的是裸名或半截路径（`index.ts:324`、`cli.ts:291`、`make-installer-bundle.sh:95`…）。
+//     而全仓有 **15 个 `src/index.ts`** —— 读者（和未来的我们）**根本不知道该点开哪个**，
+//     除非像第 85 轮这样把每个名字都 find 一遍；
+//   · 4 处行号真的漂了：`cli.ts:291`（真身 306）、`install.sh:340`（真身 341）、
+//     `src/index.ts:646`（真身 `channel-feishu/src/index.ts:654`）、`:218/639`（真身后半是 644）。
+//
+// ⭐ 形状还是第 84 轮那一条：**写下的那一刻是真的，之后没人再核，就只剩"曾经是真的"**。
+//    而引用跟断言的区别是：**引用可以被机器完全判定** —— 不用理解语义，
+//    只要问"这个路径从仓库根解得出来吗、行号在不在文件里"。
+//
+// 规则：手册正文（围栏代码块除外）里每个 `路径:行号`，都要
+//   ① 从**仓库根**解析得到一个**真文件**（所以裸名 `index.ts` 不合格 —— 它解不出来），
+//   ② 行号落在该文件的行数之内。
+// ⚠️ `exists(path, n)` 由调用方注入：真跑时用 `resolve(ROOT, path)` + `statSync` + 读行数，
+//    自检时注入假应答 —— 和规则 ④ `selfRepoUrlViolations(text, reallyExists)` 同一个套路。
+// ⚠️ 只认"围栏外、反引号里、带行号"的形状：夹具示例（`临时文件 p1.ts 第 1 行`）因此不会被误当引用。
+const CITE_RE = /`([\w./@-]+\.(?:ts|mjs|js|json|md|yaml|yml|sh)):(\d+)(?:[-/]\d+)?`/g;
+
+function citedLineViolations(text, exists) {
+  const hits = [];
+  let examined = 0;
+  let inFence = false; // ⚠️ 第 85 轮：一开始只写"这行以 ``` 开头就跳过"，
+  // 结果围栏**内部**的行照样被算 —— 是夹具当场抓住的（`examined` 该 0 却不是 0）。
+  for (const line of text.split('\n')) {
+    if (line.startsWith('```')) {
+      inFence = !inFence;
+      continue;
+    }
+    if (inFence) continue;
+    for (const m of line.matchAll(CITE_RE)) {
+      examined++;
+      const why = exists(m[1], Number(m[2]));
+      if (why) hits.push({ why: `\`${m[1]}:${m[2]}\` —— ${why}` });
+    }
+  }
+  return { hits, examined };
+}
+
+/** 引用得指得到那条的承诺（改规则就把它一起改） */
+const WHERE_TEST = [
+  { why: '真文件、行号在内', line: '`packages/cli/src/cli.ts:1`', ok: true, want: 0, examined: 1 },
+  { why: '文件不在仓库根下（裸名解不出来）', line: '`index.ts:1`', ok: false, want: 1, examined: 1 },
+  { why: '文件不存在', line: '`packages/nope/src/x.ts:1`', ok: false, want: 1, examined: 1 },
+  { why: '行号越界', line: '`README.md:99999`', ok: false, want: 1, examined: 1 },
+  { why: '围栏里的不算（那是示例代码）', line: '```\n`index.ts:1`\n```', ok: false, want: 0, examined: 0 },
+  { why: '没有行号的不归它管', line: '`packages/cli/src/cli.ts` 里那句', ok: false, want: 0, examined: 0 },
+  { why: '夹具那种说法（不带 :N）不算引用', line: '临时文件 `p1.ts` 第 1 行', ok: false, want: 0, examined: 0 },
+  { why: '带范围的行号只看头一个', line: '`packages/cli/src/cli.ts:1-5`', ok: true, want: 0, examined: 1 },
+];
+
 /**
  * 哪些 md 算"用户会读的文档"：仓库门面 + 上手指南 + 各包的 README（后者跟着包发出去，
  * 装完的人在 `node_modules/@butler/<包>/README.md` 读到它）+ 飞书手册的**验收那一节**。
@@ -914,7 +968,7 @@ const CONTRACT_TEST = [
 ];
 
 const RULE_FIXTURE_COUNT = () =>
-  SELF_TEST.length + URL_TEST.length + CMD_TEST.length + PROV_TEST.length + COUNT_TEST.length + TREE_TEST.length + ANCHOR_TEST.length + EXTERNAL_TEST.length + CONTRACT_TEST.length + WHO_TEST.length;
+  SELF_TEST.length + URL_TEST.length + CMD_TEST.length + PROV_TEST.length + COUNT_TEST.length + TREE_TEST.length + ANCHOR_TEST.length + EXTERNAL_TEST.length + CONTRACT_TEST.length + WHO_TEST.length + WHERE_TEST.length;
 
 function runSelfTest() {
   const bad = [
@@ -979,6 +1033,10 @@ function runSelfTest() {
       const r = contractGuessViolations(c.text);
       return { ...c, got: r.hits.length, examined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（定了论）' };
     }),
+    ...WHERE_TEST.map((c) => {
+      const r = citedLineViolations(c.line, () => (c.ok ? null : '（假的：这一条本来就该报）'));
+      return { ...c, got: r.hits.length, examined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（指得到）' };
+    }),
     ...WHO_TEST.map((c) => {
       const r = contractWhoViolations(c.text);
       return { ...c, got: r.hits.length, examined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（每一行都写了谁做的）' };
@@ -996,8 +1054,8 @@ function runSelfTest() {
     console.error(`    ${c.shown}`);
   }
   console.error('\n改法：这是 scripts/check-docs.mjs 里 shippedDocViolations / selfRepoUrlViolations /');
-  console.error('sourceTreeCommandViolations / provenanceViolations / staleCountViolations / pairedTreeViolations / unanchoredCountViolations / externalMeasuredViolations / contractGuessViolations / contractWhoViolations 的规则被改动了。');
-  console.error('要是故意放宽/收紧，请把 SELF_TEST / URL_TEST / CMD_TEST / PROV_TEST / COUNT_TEST / TREE_TEST / ANCHOR_TEST / EXTERNAL_TEST / CONTRACT_TEST / WHO_TEST 一起改，');
+  console.error('sourceTreeCommandViolations / provenanceViolations / staleCountViolations / pairedTreeViolations / unanchoredCountViolations / externalMeasuredViolations / contractGuessViolations / contractWhoViolations / citedLineViolations 的规则被改动了。');
+  console.error('要是故意放宽/收紧，请把 SELF_TEST / URL_TEST / CMD_TEST / PROV_TEST / COUNT_TEST / TREE_TEST / ANCHOR_TEST / EXTERNAL_TEST / CONTRACT_TEST / WHO_TEST / WHERE_TEST 一起改，');
   console.error('并在 docs/CHANNEL-FEISHU.md 里写清楚为什么。');
   process.exit(1);
 }
@@ -1282,6 +1340,43 @@ let contractExamined = 0;
   }
 }
 
+// ───────── ⑭ 手册里的 `路径:行号` 引用得真的指得到（第 85 轮） ─────────
+
+let citeBad = 0;
+let citeExamined = 0;
+{
+  const rel = 'docs/CHANNEL-FEISHU.md';
+  const abs = resolve(ROOT, rel);
+  if (existsSync(abs)) {
+    const exists = (path, n) => {
+      const f = resolve(ROOT, path);
+      if (!existsSync(f) || !statSync(f).isFile()) {
+        return '仓库根下没有这个文件（裸名解不出来 —— 全仓有 15 个 `src/index.ts`，得写全）';
+      }
+      const total = readFileSync(f, 'utf8').split('\n').length;
+      if (n > total) return `行号越界：${path} 只有 ${total} 行`;
+      return null;
+    };
+    const r = citedLineViolations(readFileSync(abs, 'utf8'), exists);
+    citeExamined += r.examined;
+    for (const hit of r.hits) {
+      problems.push(
+        `❌ 引用的代码位置指不到  ${rel}\n       → ${hit.why}\n` +
+          '       （引用和断言不一样：**引用可以被机器完全判定** —— 不用懂语义，' +
+          '只问"这个路径从仓库根解得出来吗、行号在不在文件里"。⭐ 路径写全、行号跟着改，' +
+          '见第 85 轮）',
+      );
+      citeBad++;
+    }
+    if (citeExamined < 10) {
+      problems.push(
+        `❌ 规则 ⑭ 只看了 ${citeExamined} 处引用，太少\n` +
+          '       → 第 85 轮配牙时是 18 处。检查 CITE_RE 是不是被改窄了。',
+      );
+    }
+  }
+}
+
 // ───────── ⑬ §五 契约表每一行都要写"我们实际怎么做的"（第 84 轮） ─────────
 
 let whoBad = 0;
@@ -1417,7 +1512,7 @@ if (problems.length) console.log(`${problems.join('\n')}\n`);
 console.log(
   `检查 ${files.length} 个 md、${checked} 个链接/图片、${pairs.length} 对双语 → ` +
   (problems.length
-    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}、本仓地址 ${selfUrlBad}、照抄命令 ${cmdBad}、出处 ${provBad}、用户面数字 ${staleBad}、包树 ${treeBad}、时间锚 ${anchorBad}、契约定论 ${contractBad}、契约谁做的 ${whoBad}、外部量测 ${externalBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
-    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着、本仓地址指得到、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、用户面文档里的数跟仓库对得上（看了 ${staleExamined} 条）、架构包树中英对齐（看了 ${treeExamined} 行）、精确数都带时间锚（看了 ${anchorExamined} 条）、量别人仓库的数都带日期（看了 ${externalExamined} 条）、§五 契约行都定了论（看了 ${contractExamined} 条）、都写了"实际怎么做的"（看了 ${whoExamined} 行）、双语结构对齐（规则自检 ${RULE_FIXTURE_COUNT()} 条通过）`),
+    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}、本仓地址 ${selfUrlBad}、照抄命令 ${cmdBad}、出处 ${provBad}、用户面数字 ${staleBad}、包树 ${treeBad}、时间锚 ${anchorBad}、契约定论 ${contractBad}、契约谁做的 ${whoBad}、引用指得到 ${citeBad}、外部量测 ${externalBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
+    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着、本仓地址指得到、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、用户面文档里的数跟仓库对得上（看了 ${staleExamined} 条）、架构包树中英对齐（看了 ${treeExamined} 行）、精确数都带时间锚（看了 ${anchorExamined} 条）、量别人仓库的数都带日期（看了 ${externalExamined} 条）、§五 契约行都定了论（看了 ${contractExamined} 条）、都写了"实际怎么做的"（看了 ${whoExamined} 行）、代码引用都指得到（看了 ${citeExamined} 处）、双语结构对齐（规则自检 ${RULE_FIXTURE_COUNT()} 条通过）`),
 );
 process.exit(problems.length ? 1 : 0);
