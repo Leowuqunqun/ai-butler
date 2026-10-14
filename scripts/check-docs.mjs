@@ -1145,6 +1145,31 @@ const RULE_NAMES = [
   'unanchoredCountViolations', 'externalMeasuredViolations', 'contractGuessViolations',
   'contractWhoViolations', 'citedLineViolations',
 ];
+// ───── ⭐ 第 90 轮：防沉默阈值集中成一张表，而且"记账"是被查的 ─────
+//   以前这些数散在九处：三个具名常量、四处内联字面量、两处 `=== 0`、一处**完全没有**。
+//   ⭐ 更坏的是注释里那些"实测值"会烂：⑭ 那里写着「第 85 轮配牙时是 18 处」，
+//   而第 89 轮的烟雾实测是 **21** 处 —— ⭐ 注释早就烂了，没有任何东西告诉我。
+//   ⭐ 所以：`m` 是**记账**（上次实测），`f` 是**阈值**（判断），两个都写上，并由主流程查它们。
+const FLOORS = {
+  shippedDocViolations: { m: 3, f: 2, why: '出包文档里的相对链接 —— 掉到 0 就说明规则 ① 空了' },
+  selfRepoUrlViolations: { m: 15, f: 10, why: '指向本仓的完整地址' },
+  sourceTreeCommandViolations: { m: 10, f: 5, why: '照着敲的命令（第 90 轮前只查 `=== 0`）' },
+  provenanceViolations: { m: 3, f: 1, why: '出处（第 90 轮前只查 `=== 0`）' },
+  unanchoredCountViolations: { m: 4, f: 2, why: '带时间锚的精确数（第 90 轮前**完全没有**防沉默）' },
+  staleCountViolations: { m: 5, f: 4, why: '会烂的精确数' },
+  pairedTreeViolations: { m: 42, f: 21, why: '两棵包树的行 —— 掉一半就吱声' },
+  citedLineViolations: { m: 21, f: 10, why: '代码引用' },
+  contractWhoViolations: { m: 11, f: 5, why: '§五 契约行' },
+  // ⭐ 下面两条是第 90 轮那把新守卫**第一次出手就抓出来的** ——
+  //   它们到那一刻为止**完全没有防沉默**。⭐ 现在 11/11 族全都有阈值和记账了。
+  externalMeasuredViolations: { m: 2, f: 1, why: '量别人仓库的数都带日期' },
+  contractGuessViolations: { m: 11, f: 5, why: '§五 契约行都定了论' },
+};
+const FLOOR_OF = (k) => {
+  if (!(k in FLOORS)) throw new Error(`FLOORS 里没有 ${k}`);
+  return FLOORS[k].f;
+};
+
 const RAN = new Map();
 function wrapRule(name, fn) {
   return (...args) => {
@@ -1258,7 +1283,7 @@ for (const file of files) {
 // ⭐ 第 88 轮实测：**3 条**（出包文档里剩下的相对链接）。
 // 阈值取 2 —— 留一条余地，但**不许这个形状整体消失**：
 // ⭐ 到了 0 就说明规则 ① 已经没东西可看了 —— 和第 86 轮修掉的 ④ 是同一个洞。
-const SHIP_FLOOR = 2;
+const SHIP_FLOOR = FLOOR_OF('shippedDocViolations');
 if (!problems.length && shipExamined < SHIP_FLOOR) {
   problems.push(
     `❌ 规则 ① 只看了 ${shipExamined} 条"出包文档里的相对链接"，太少\n` +
@@ -1275,7 +1300,7 @@ let selfUrlExamined = 0;
 // ⭐ 第 86 轮实测：**15 条**（分在 8 个包内 README 里；`dist/` 不算，它被 files 排除）。
 // 阈值取 10 —— 留出正常增删的余地，但**不许这个形状整体消失**：
 // 掉到 10 以下说明"指向本仓的完整地址"正在从文档里退场，那时 ④ 就成了一条空跑的规则。
-const SELF_URL_FLOOR = 10;
+const SELF_URL_FLOOR = FLOOR_OF('selfRepoUrlViolations');
 /** blob ⇒ 得是文件；tree ⇒ 得是目录 */
 const reallyExists = (kind, path) => {
   const abs = resolve(ROOT, path);
@@ -1329,7 +1354,7 @@ for (const file of files) {
   }
 }
 // 防沉默：这条规则要是因为写法一变就再也匹配不上，它看起来还是绿的。
-if (!problems.length && cmdExamined === 0) {
+if (!problems.length && cmdExamined < FLOOR_OF('sourceTreeCommandViolations')) {
   problems.push(
     '❌ 规则 ⑥ 一条"照着敲的命令"都没看到\n' +
       '       → 用户文档里一定有几条。检查 CMD_VERB / CMD_REPO_PATH，别让它空转。',
@@ -1361,7 +1386,7 @@ for (const file of files) {
   }
 }
 // 防沉默：理由同规则 ⑥。
-if (!problems.length && provExamined === 0) {
+if (!problems.length && provExamined < FLOOR_OF('provenanceViolations')) {
   problems.push(
     '❌ 规则 ⑦ 一条"出处声明"都没看到\n' +
       '       → 飞书手册里一定有几条（「官方原文：」和「▣实测」）。检查那两个正则，别让它空转。',
@@ -1396,7 +1421,7 @@ for (const file of files) {
 // ⚠️ 阈值**不是 0 而是 4**：两份根 README 各有 2 条（一个 release URL + 一行「N 张图」），
 //    再加上包 README 里的安装 URL。写成 `=== 0` 的话，范围被误缩到只剩一份 README 也照样绿 ——
 //    第 74 轮就是这么把 `README.en.md` 漏掉的（数字从 4 掉到 3 才被发现）。
-if (!problems.length && staleExamined < 4) {
+if (!problems.length && staleExamined < FLOOR_OF('staleCountViolations')) {
   problems.push(
     `❌ 规则 ⑧ 只看了 ${staleExamined} 条「数」，太少\n` +
       '       → 两份根 README 各有 2 条（一个 `releases/download/v…` + 一行 `docs/ … N 张图`），包 README 里还有安装 URL。' +
@@ -1428,7 +1453,7 @@ let treeExamined = 0;
 // ⭐ 第 86 轮实测：**42 行**。旧阈值是 10 —— ⭐ 要掉 32 行才响，等于没有预警：
 // 两棵包树掉到四分之一，它还是绿的。改成"实测值的一半"（向上取整 = 21），
 // ⭐ 掉一半就吱声。⚠️ 这个数**跟着实测走**：改了包树就顺手改这里。
-const TREE_FLOOR = 21;
+const TREE_FLOOR = FLOOR_OF('pairedTreeViolations');
 if (!problems.length && treeExamined < TREE_FLOOR) {
   problems.push(
     `❌ 规则 ⑨ 只看 ${treeExamined} 行"包树"\n       → 两棵加起来应该有二十来行。检查 treeOf 里那个围栏和行形状的正则。`,
@@ -1509,10 +1534,12 @@ let citeExamined = 0;
       );
       citeBad++;
     }
-    if (citeExamined < 10) {
+    if (citeExamined < FLOOR_OF('citedLineViolations')) {
       problems.push(
         `❌ 规则 ⑭ 只看了 ${citeExamined} 处引用，太少\n` +
-          '       → 第 85 轮配牙时是 18 处。检查 CITE_RE 是不是被改窄了。',
+          '       → 见上面 FLOORS 里的记账（⭐ 这里原来写死「18 处」，' +
+            '而第 89 轮烟雾实测是 21 —— ⭐ 一个烂掉没人管的注释，正是第 90 轮的由头）。' +
+            '检查 CITE_RE 是不是被改窄了。',
       );
     }
   }
@@ -1537,10 +1564,10 @@ let whoExamined = 0;
       );
       whoBad++;
     }
-    if (whoExamined < 5) {
+    if (whoExamined < FLOOR_OF('contractWhoViolations')) {
       problems.push(
         `❌ 规则 ⑬ 只看了 ${whoExamined} 行契约，太少\n` +
-          '       → 第 84 轮给 §五 配牙时是 11 行。'+ '检查 contractWhoViolations 里那两个边界词和行形状的正则。',
+          '       → 见上面 FLOORS 里的记账。检查 contractWhoViolations 里那两个边界词和行形状的正则。',
       );
     }
   }
@@ -1561,6 +1588,14 @@ for (const rel of ANCHOR_FILES) {
     );
     anchorBad++;
   }
+}
+// ⭐ 第 90 轮补：这一族（精确测试数的时间锚）到这一轮为止**完全没有防沉默** ——
+//   文件清单被改窄、或者正则匹配不上，它看起来还是全绿。
+if (!problems.length && anchorExamined < FLOOR_OF('unanchoredCountViolations')) {
+  problems.push(
+    `❌ 规则 ⑦′ 只看了 ${anchorExamined} 条"精确测试数"，太少\n` +
+      '       → 第 89 轮烟雾实测是 4 条。检查 ANCHOR_FILES 与 unanchoredCountViolations 里的正则。',
+  );
 }
 
 // ───────────────────────── 双语结构守卫 ─────────────────────────
@@ -1649,6 +1684,39 @@ for (const { label, cn, en } of pairs) {
   }
 }
 
+// ⭐ 第 90 轮：**记账过时了就报出来**。
+//   这不是"阈值自动跟随" —— ⭐ 阈值是个判断，没法自动。能自动的是**发现记账烂了**：
+//   实测一动，这句就提醒人"去看一眼那个阈值还合不合适"。
+{
+  const drifted = [];
+  for (const [k, v] of Object.entries(FLOORS)) {
+    const live = RAN.get(k);
+    if (live !== v.m) drifted.push(`${k.replace(/Violations$/, '')}：记账 ${v.m} → 实测 ${live ?? '没跑到'}`);
+  }
+  if (drifted.length && !SMOKE) {
+    problems.push(
+      `❌ 防沉默阈值那张表的记账过时了\n       → ${drifted.join('；')}\n` +
+        '       （⭐ 这是提醒，不是判决：⭐ 实测变了，就去看一眼 FLOORS 里那个阈值还合不合适。' +
+        '阈值是判断，没法自动跟随；能自动的是"发现记账烂了"。）',
+    );
+  }
+  const noFloor = RULE_NAMES.filter((n) => !(n in FLOORS));
+  if (noFloor.length) {
+    problems.push(
+      `❌ 这些判红族还没有防沉默阈值：${noFloor.join('、')}\n` +
+        '       → 一族规则"没东西可看"时它还是绿的。要么给 FLOORS 补一条，要么在手册里写明为什么不需要。',
+    );
+  }
+}
+
+// ⭐⭐ 第 90 轮：**在这里把 problems 冻住**。
+//   为什么：这群守卫的病一直是「判红了，但没人印」。第 86 轮是 `runSelfTest`
+//   判红不印 ❌，第 89 轮是 smoke 崩在判词之前，而这一轮 —— ⭐ 我写的漂移守卫
+//   **正好写在 `problems` 打印的后面**：退出码 1，一个 ❌ 都没有。
+//   ⭐ 三次都是同一个形状。所以不再靠「记得放在打印前面」：冻住它，
+//   ⭐ 任何晚于这里的 push 都会当场抛（ESM 是严格模式）。
+Object.freeze(problems);
+
 if (problems.length) console.log(`${problems.join('\n')}\n`);
 console.log(
   `检查 ${files.length} 个 md、${checked} 个链接/图片、${pairs.length} 对双语 → ` +
@@ -1660,7 +1728,12 @@ if (SMOKE) {
   const missing = RULE_NAMES.filter((n) => !RAN.has(n));
   // ⭐ 烟雾模式：**文档有问题不算红**（那是主流程的事），
   //   只报“这条流水线跑得动、判红族都到场了”。
-  const seen = RULE_NAMES.map((n) => `${n.replace(/Violations$/, '')}=${RAN.get(n) ?? '❌没到'}`);
+  const seen = RULE_NAMES.map((n) => {
+    const live = RAN.get(n);
+    const rec = FLOORS[n]?.m;
+    if (rec === undefined) return `${n.replace(/Violations$/, '')}=${live ?? '❌没到'}(⭐无阈值)`;
+    return `${n.replace(/Violations$/, '')}=${live ?? '❌没到'}${live === rec ? '' : `(记账 ${rec})`}`;
+  });
   console.log(
     `\n烟雾：主流程跑完了，${RAN.size}/${RULE_NAMES.length} 族判红规则到场。` +
       (missing.length ? ` \u274c 没到场：${missing.join('、')}` : ' ✅ 到场齐了'),

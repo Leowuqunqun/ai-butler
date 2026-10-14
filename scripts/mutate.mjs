@@ -978,6 +978,31 @@ const MUTATIONS = [
       '    const r = { hits: [], examined: 0 };']],
   },
 
+  {
+    name: '阈值表里的记账烂了没人管(把 ⑧ 的记账从 5 改成 9)',
+    claim: '第 90 轮的由头就是这个：⑭ 的注释里写着\u300c第 85 轮配牙时是 18 处\u300d，而实测是 21 —— 注释烂了没有任何东西告诉你。现在记账进表了，实测一动就必须有人看一眼那个阈值',
+    script: 'scripts/check-docs.mjs',
+    files: [['scripts/check-docs.mjs',
+      "  staleCountViolations: { m: 5, f: 4, why: '会烂的精确数' },",
+      "  staleCountViolations: { m: 9, f: 4, why: '会烂的精确数' },"]],
+  },
+  {
+    name: '有一族判红规则偷偷没有防沉默(把 ⑫ 从 FLOORS 里删掉)',
+    claim: '这族规则没东西可看时它还是绿的。第 90 轮那把新守卫第一次出手就抓到 externalMeasured / contractGuess 两族正是这样',
+    script: 'scripts/check-docs.mjs',
+    files: [['scripts/check-docs.mjs',
+      "  contractGuessViolations: { m: 11, f: 5, why: '§五 契约行都定了论' },",
+      "  // 这一条被删掉了（变异）"]],
+  },
+  {
+    name: '⑦′ 那族新补的防沉默是死的(把它的阈值抬到 9)',
+    claim: '第 90 轮之前这一族**完全没有**防沉默：ANCHOR_FILES 被改窄、或者正则匹配不上，它看起来还是全绿',
+    script: 'scripts/check-docs.mjs',
+    files: [['scripts/check-docs.mjs',
+      "  unanchoredCountViolations: { m: 4, f: 2, why: '带时间锚的精确数（第 90 轮前**完全没有**防沉默）' },",
+      "  unanchoredCountViolations: { m: 4, f: 9, why: '带时间锚的精确数（第 90 轮前**完全没有**防沉默）' },"]],
+  },
+
 ];
 
 
