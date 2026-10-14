@@ -706,7 +706,7 @@ function runInit(args: Args): number {
     console.log('\n这台是「被遥控的那台」。接下来：\n');
     console.log('  butler node');
     console.log('\n第一次会先让你贴一下模型 key（会自动开一个网页，粘一下就行），');
-    console.log('然后屏幕上打出一行「配对 …」—— 把它发到微信里，中枢就认得这台了。');
+    console.log('然后屏幕上打出一行「配对 …」—— 把它发到管家那边的对话里，中枢就认得这台了。');
   } else if (r.im === 'telegram') {
     console.log('\n这台是「收 Telegram 的那台」。接下来：\n');
     console.log('  1. 在 Telegram 里找 @BotFather 发 /newbot，建一个机器人');

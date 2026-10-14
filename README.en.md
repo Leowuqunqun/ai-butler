@@ -6,15 +6,20 @@
 
 [中文](README.md) | English
 
-**Talk like a human in WeChat. Remote-control your own computer.**
+**Talk like a human in your chat app. Remote-control your own computer.**
 
 It's not remote desktop (that means doing everything yourself), and it's not command-line
 forwarding (that means knowing the commands) — it's **replacing computer operation with AI
 semantics**: you say what you want, and it goes and finds it, changes it, gets it done.
 
+Three channels today — **WeChat** (scan a QR code, the easiest), **Feishu/Lark** (create a
+self-built app in your tenant), **Telegram** (make a bot with @BotFather) — **one at a time**.
+(Running two side by side isn't supported yet; the reasoning is in
+[CHANNEL-FEISHU.md](docs/CHANNEL-FEISHU.md) section 13.)
+
 ```
-You (WeChat on your phone): 「把桌面那堆图按日期整理一下」
-                             (tidy up that pile of images on my desktop, by date)
+You (WeChat / Feishu / Telegram on your phone): 「把桌面那堆图按日期整理一下」
+                                                (tidy up that pile of images on my desktop, by date)
 The butler (your computer):  「32 张图，按拍摄月份分成了 5 个文件夹。要看看清单吗？」
                              (32 images, sorted into 5 folders by shooting month. Want to see the list?)
 ```
@@ -28,17 +33,19 @@ The butler (your computer):  「32 张图，按拍摄月份分成了 5 个文件
 
 ## What this is
 
-**A butler that lives on your own computer, and you talk to it in WeChat.**
+**A butler that lives on your own computer, and you talk to it in your chat app.**
 
 It is not a WeChat bot framework, and it is not remote desktop: **there is no need for network
-tunneling between phone and computer** — the phone goes through WeChat, the computer long-polls
-Tencent's servers, and iLink itself is that ready-made public relay.
-(Only "hub → other nodes" goes over the LAN or Tailscale, and **we run no servers of our own**.)
+tunneling between phone and computer** — all three channels are the **computer dialing out**:
+WeChat long-polls Tencent's servers, Telegram long-polls the Bot API, Feishu/Lark holds a
+WebSocket long connection. Those servers are the ready-made public relay, and
+**we run no servers of our own** (only "hub → other nodes" goes over the LAN or Tailscale).
 
 Wiring up a new IM, swapping out the brain that does the work, or adding a link — each one has a
 **seam package that declares nothing but the contract**: `ctx.channel` / `ctx.agent` / `ctx.link`.
-The second channel (Telegram) and the second brain (any command line) are there to put those
-three seams to the test.
+The second channel (Telegram) and the third (Feishu/Lark) came in exactly this way: **not one line
+changed in the kernel** — each added one package, plus the channel enum, credential shape and
+onboarding wording on the CLI side.
 What it should become, and what it explicitly won't do → [VISION.md](docs/VISION.md).
 
 ---
@@ -54,13 +61,15 @@ curl -fsSL https://github.com/Leowuqunqun/ai-butler/releases/latest/download/ins
 Prefer not to touch a terminal? Download the bundle, unzip it, and **double-click `install.command`** → <https://github.com/Leowuqunqun/ai-butler/releases/latest>
 
 When it finishes, your browser opens a page and **only two steps are left**: paste a model key once,
-then scan one QR code with your phone.
+then hand the channel its credentials — WeChat wants **one QR scan**, Feishu and Telegram want
+**a pasted string** (`app_id` + `app_secret` / a bot token).
 (On macOS the first double-click gets blocked — right-click it → Open. We didn't buy Apple's
 signing certificate.)
 
 The full walkthrough (written for a completely non-technical reader, with a tick-off acceptance
 checklist and a "stuck? look here" table; Chinese only, on purpose) →
-[**From zero to driving your computer from WeChat: three steps**](docs/GETTING-STARTED.md)
+[**From zero, in three steps**](docs/GETTING-STARTED.md) — WeChat is the default path, with
+sections of its own for Feishu and Telegram.
 Command-line details live in [`packages/cli`](packages/cli) (900-odd offline tests across the repo; run `pnpm test` for the exact count).
 
 **Already running DSH and only want a WeChat channel inside it?** Then skip the whole stack above — the built bundle ships in the Release, and one command installs it into a profile:
@@ -82,15 +91,15 @@ above are still being designed or built:
 
 | Layer | What | Status |
 | --- | --- | --- |
-| ① Connection | One-line install (double-click `install.command`) + QR login + onboarding page | ✅ **Works** (no Node to install, no admin password) |
-| ① Connection | **Third IM: Feishu** (on top of the official `@larksuite/channel`; we only write the mapping) | ✅ **Works** (verified on a real tenant on 2026-10-14: create the app → long connection → receive one → reply one) |
+| ① Connection | One-line install (double-click `install.command`) + onboarding page | ✅ **Works** (no Node to install, no admin password) |
+| ① Connection | **Pick one of three channels**: WeChat (QR) / Feishu (a self-built app in your tenant, on top of the official `@larksuite/channel`) / Telegram (a bot token) | ✅ **All three work** — WeChat and Telegram have been running for a while; **Feishu was verified on a real tenant on 2026-10-14** (create app → long connection → receive one → reply one) |
 | ① Connection | Several IMs at once (WeChat + Feishu side by side) | ❌ **Not supported** — one context holds a single channel slot; the write-up is in [CHANNEL-FEISHU.md](docs/CHANNEL-FEISHU.md) section 13 (Chinese only) |
 | ② Conversation | Send/receive text, voice transcription, **send files / images / videos**, quote prefix | ✅ **Works** |
 | ② Conversation | **Receiving images / files** (CDN download + decrypt + saved locally, handed to the agent) | ✅ **Works** |
 | ③ Capability | The agent does the work (pluggable backends: DSH / any command line) | ✅ **Works** |
 | ③ Capability | Memory, proactive reminders | Memory ✅ usable (`记住` / writing `[[记住: …]]` in a reply records it automatically); proactive reminders 📐 not started |
-| ④ Devices | Multi-terminal (hub + nodes + alias routing + pairing devices from WeChat) | ✅ **works** (two machines; `@the-one-at-home` in WeChat reaches that one) |
-| ⑤ Trust | Approval, audit | Approval ✅ usable (it asks in WeChat; a time-limited standing authorisation is possible); audit 📐 not started |
+| ④ Devices | Multi-terminal (hub + nodes + alias routing + pairing devices from the conversation) | ✅ **works** (two machines; `@the-one-at-home` in the conversation reaches that one) |
+| ⑤ Trust | Approval, audit | Approval ✅ usable (it asks in the conversation — whichever channel is loaded; a time-limited standing authorisation is possible); audit 📐 not started |
 
 The evidence for every layer above (the M1/M2/M3 breakdowns, how the 900-odd cases are distributed,
 which ones are end-to-end, what the clean-room acceptance runs caught) → [**EVIDENCE.md**](docs/EVIDENCE.md)
@@ -184,8 +193,9 @@ The milestone breakdowns, and how each one was verified → [EVIDENCE.md](docs/E
 
 ## Three key design calls
 
-1. **Phone to computer needs no network tunneling.** The phone goes through WeChat, the computer
-   long-polls Tencent's servers — iLink itself is that ready-made public relay. That's also why
+1. **Phone to computer needs no network tunneling.** All three channels are the **computer dialing
+   out**: WeChat long-polls Tencent's servers, Telegram long-polls the Bot API, Feishu/Lark holds a
+   WebSocket long connection — those servers are the ready-made public relay. That's also why
    "controlling the home computer from outside" costs nothing.
    Only **hub → other nodes** needs tunneling, and that goes over `ctx.link` (LAN / Tailscale).
    **We run no servers of our own.**
