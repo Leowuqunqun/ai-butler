@@ -126,6 +126,12 @@ test('★★ 住着的房子也能换：init --im feishu 把微信那一行原�
     '原位换：位置不重排、别的行一个都不动',
   );
   assert.match(r.out, /收信通道换成了「feishu」/, '换了就要说 —— 不能悄悄换');
+  // ⚠️ 第 76 轮：init 之后那段"接下来怎么办"原来只说"去后台建个应用、抄下两个值"，
+  //    而 onboarding.mjs 里早有断言写明白了：光说"去后台建个应用"等于没说。
+  //    抄两个值只决定**连得上**，不决定**听不听得见** —— 锚点必须自己带。
+  assert.match(r.out, /im\.message\.receive_v1/, '建应用那条路要说清订阅哪个事件');
+  assert.match(r.out, /发一个新版本|发版/, '要说清"改完不发版不生效"这个最常见的坑');
+  assert.match(r.out, /权限点/, '要说清还要配权限点');
   assert.match(r.out, /wechat-agent-bridge\/plugin/, '还得说清原来那一行是什么');
 });
 

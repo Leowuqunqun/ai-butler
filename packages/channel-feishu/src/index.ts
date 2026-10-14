@@ -217,6 +217,11 @@ function missingCreds(home: string): Error {
     + `① ${scanHint(home)} —— 它会开一个二维码，扫码就能建应用并把凭据装好；`
     + '② 或去 open.feishu.cn 建一个「企业自建应用」，在「凭证与基础信息」里抄下 app_id / app_secret，'
     + '等 `butler run` 提示时粘贴（也可以直接写进上面那个文件）。'
+    // ⚠️ 第 76 轮：这句原来只说了"抄两个值"。可这两个值只决定**能不能连上**，
+    //    不决定**听不听得见** —— 三件事决定后者，而它们都不在「凭证」那页。
+    + '\n   ⚠️ 走这条路的话，光抄两个值不够 —— 还得配权限点、'
+    + '在「事件与回调」里选长连接并订阅 im.message.receive_v1、改完**发一次新版**；'
+    + '不然它会**连得上、却一条都收不到**。'
     // 家不在默认位置时，`scanHint` 给的命令**自己**带着 `--home=` —— 提醒他别删掉。
     // 默认位置则一个字都不加，免得把最常见的情况说复杂。
     + (isDefaultHome(home)
@@ -636,7 +641,10 @@ export class FeishuChannel extends ChannelService {
         // 出路必须是**真会发生**的那件事：会开二维码的是探针，不是 `butler run`。
         // 而且命令要按这个包实际装在哪儿给 —— 见 `scanHint`。
         fix: `先${scanHint(this.home)}（会把凭据装好）；`
-          + '也可以去 open.feishu.cn 建「企业自建应用」抄下 app_id / app_secret，等 `butler run` 提示时粘贴',
+          + '也可以去 open.feishu.cn 建「企业自建应用」抄下 app_id / app_secret，等 `butler run` 提示时粘贴。'
+          // ⚠️ 第 76 轮：同上 —— 抄两个值只解决"连得上"。
+          + '（走这条路还得配权限点、「事件与回调」选长连接并订阅 im.message.receive_v1、'
+          + '改完**发一次新版**，不然连得上却一条都收不到）',
       });
       out.push(this.dmCheck());
       out.push({ name: '飞书去重表', ok: true, detail: dedupAt });

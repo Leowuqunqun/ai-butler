@@ -86,7 +86,7 @@ packages/
 ├── channel-telegram/        # ✅ M3：第二个通道（纯 fetch 零依赖、51 个测试）。
 │                            #    它的价值不在功能，而在**证明换一个 IM 不用改核心层** ——
 │                            #    接进来只动了配置里那一行 name（`butler init --im telegram`）
-├── channel-feishu/          # ✅ 第三个通道：飞书（站在官方 @larksuite/channel 上；82 个测试；⚠️ 真机还没验收）
+├── channel-feishu/          # ✅ 第三个通道：飞书（站在官方 @larksuite/channel 上；83 个测试；⚠️ 真机还没验收）
 ├── agent-dsh/               # ✅ 从 M0 抽出：DSH headless（40 个测试，含 7 个端到端）
 ├── agent-exec/              # ✅ 从 M0 抽出：任意命令行（26 个测试；也是契约的第二个检验）
 ├── link-lan/                # ✅ 已建：同局域网直连（HTTP + SSE，零依赖，65 个测试）

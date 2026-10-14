@@ -343,6 +343,24 @@ test('allowlist / pair / disabled 如实描述，而且都**不**报 ✗', async
   }
 });
 
+test('★★ 飞书"没凭据"那两处出口：说清抄两个值只解决"连得上"', async () => {
+  // ⚠️ 第 76 轮。"去 open.feishu.cn 建个应用、抄下 app_id/app_secret"这句话在仓库里
+  //    有**四份副本**（init 的终端指引 / 引导页 hint / missingCreds / doctor 的 fix），
+  //    四份原来**都没说**那三件决定"听不听得见"的事。同一族的老毛病了（见第 355 行
+  //    那条"把这一族一次钉住"）—— 所以这里也把两处出口一起钉：不能只修一处。
+  const ch = makeFeishu({ appId: '', appSecret: '', home: freshHome() });
+  const checks = await ch.channel.check();
+  const login = checks.find((c) => c.name === '飞书登录态');
+  assert.ok(login, '没凭据时必须有这条自检');
+  assert.match(login.fix, /im\.message\.receive_v1/, 'doctor 那条 fix 要说清订阅哪个事件');
+  assert.match(login.fix, /新版|发版/, 'doctor 那条 fix 要说清"不发版不生效"');
+
+  const err = await ch.channel.start().then(() => null, (e) => e);
+  assert.ok(err, '没凭据时 start 必须失败');
+  assert.match(err.message, /im\.message\.receive_v1/, 'missingCreds 那条要说清订阅哪个事件');
+  assert.match(err.message, /新版|发版/, 'missingCreds 那条要说清"不发版不生效"');
+});
+
 test('★ 没凭据和有凭据**两条出口**都要报这一行（它跟凭据无关）', async () => {
   const empty = makeFeishu({ appId: '', appSecret: '', home: freshHome() }).channel;
   const full = makeFeishu({ home: freshHome() }).channel;

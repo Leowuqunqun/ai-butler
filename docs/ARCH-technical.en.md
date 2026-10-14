@@ -89,7 +89,7 @@ packages/
 ├── channel-telegram/        # ✅ M3: the second channel (pure `fetch`, zero deps, 51 tests).
 │                            #    Its value is not the feature — it's the **proof that swapping IM
 │                            #    needs no core changes**: only the `name` line in the config moved
-├── channel-feishu/          # ✅ the third channel: Feishu/Lark (standing on the official @larksuite/channel; 82 tests; ⚠️ not yet verified on a real tenant)
+├── channel-feishu/          # ✅ the third channel: Feishu/Lark (standing on the official @larksuite/channel; 83 tests; ⚠️ not yet verified on a real tenant)
 ├── agent-dsh/               # ✅ extracted from M0: DSH headless (40 tests, 7 of them end-to-end)
 ├── agent-exec/              # ✅ extracted from M0: any command line (26 tests; also the contract's second check)
 ├── link-lan/                # ✅ built: direct connection on the same LAN (HTTP + SSE, zero dependencies, 65 tests)

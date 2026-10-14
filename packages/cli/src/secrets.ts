@@ -70,7 +70,13 @@ const NEEDS: Record<string, ChannelSecretNeed[]> = {
       name: '飞书应用的 app_id',
       hint: (butlerDir) => `两种办法（挑一个）：① ${scanHint(butlerDir)}，`
         + '它不需要开发者后台、不需要公网 IP，扫完直接把两个值存进这台电脑；'
-        + '② 或去 open.feishu.cn 建一个「企业自建应用」，在「凭证与基础信息」里抄下 app_id',
+        + '② 或去 open.feishu.cn 建一个「企业自建应用」，在「凭证与基础信息」里抄下 app_id'
+        // ⚠️ 第 76 轮：同上。走这条路的人得自己配三件事，而"凭证"那页只有两个值。
+        + '（⚠️ 这条路还要自己配三件事，不然**连得上却一条都收不到**：'
+        + '① 「权限管理」里加 im:message:send_as_bot、im:message.p2p_msg:readonly、'
+        + 'im:message.group_at_msg:readonly；'
+        + '② 「事件与回调」选**长连接**并订阅 im.message.receive_v1；'
+        + '③ 改完**发一个新版本**才生效）',
     },
     {
       channel: 'feishu',

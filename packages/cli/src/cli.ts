@@ -720,11 +720,21 @@ function runInit(args: Args): number {
     console.log('       （不用开发者后台、不用公网 IP；扫完它把两个值直接存进这台电脑）');
     console.log('     · 或去 open.feishu.cn 建一个「企业自建应用」，');
     console.log('       在「凭证与基础信息」里抄下 app_id 和 app_secret');
+    // ⚠️ 第 76 轮：这条路原来只说了"抄下两个值"。可光有两个值，机器人会**连得上、
+    //    却一条都收不到** —— 三件事决定它到底听不听得见，而它们都不在"凭证"那页。
+    //    同一句提示在仓库里有四份副本（本处 + setup.ts 的引导页 + 飞书包里两处），
+    //    四份**都没说**。`test/onboarding.mjs` 里那句断言说得最直白：
+    //    「光说"去后台建个应用"等于没说」。
+    console.log('       ⚠️ 光有这两个值，它会**连得上、却一条都收不到**。还要配三件事：');
+    console.log('         ① 权限点（「权限管理」页）：发消息 im:message:send_as_bot、');
+    console.log('            收单聊 im:message.p2p_msg:readonly、群里 @ 它 im:message.group_at_msg:readonly');
+    console.log('         ② 「事件与回调」里选**长连接**，订阅「接收消息」im.message.receive_v1');
+    console.log('         ③ 改完**发一个新版本**并过审 —— 不发版，配置不生效');
     console.log('  2. butler run');
     console.log('\n第一次它会问你两件事，都不用改任何文件：');
     console.log('  1. 应用的 app_id 和 app_secret（扫码那条路存过的话，它会自动跳过）');
     console.log('  2. 模型 key（AI 要靠它思考）');
-    console.log('\n⚠️ 飞书这条通道还没做过真机验收 —— 真出问题，大概率在权限点上。');
+    console.log('\n⚠️ 飞书这条通道还没做过真机验收 —— 真连不上、或连上了却收不到，先照上面那三件事对一遍。');
   } else {
     console.log('\n这台是「收微信的那台」。接下来：\n');
     console.log('  butler run');
