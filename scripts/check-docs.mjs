@@ -213,6 +213,84 @@ function sourceTreeCommandViolations(text) {
 }
 
 /**
+ * ⑥ 出处要跟得上：飞书手册开篇就承诺「本清单里每条事实都能点回**原文**」，并给了一套标注
+ *    （`✓官方` / `⚙源码` / `△推断` / `?未核实` / `▣实测`）。
+ *
+ * 第 65 轮把这句话做成规则，是因为第十二节那张表里真出现过两种"说得比证据满"的写法：
+ *   · 「官方原文：…」**没带任何标注** —— 读者分不出这句是官方文档抄来的，还是我们自己猜的；
+ *   · 「原话是实测抓到的」—— 那是**我们自己跑出来的**，却连个轮次都不指，回去找不到那次运行。
+ *
+ * 两条规则，都按**块**判（表格行各自成一块、其余按空行分段 —— 一个表格里 A 行的 ✓ 不该救 B 行）：
+ *   R1 含「官方原文：」的块 ⇒ 块内要有标注；
+ *   R2 含 `▣实测` 的块 ⇒ 要写「第十一节第 K 轮」，**而且那个 K 真在**第十一节里有小节
+ *      （所以它同时挡住"轮次号写错"—— 指路指到一个不存在的地方，比不指更坏）。
+ *
+ * ⚠️ **射程写在这儿，不靠猜**：R1 只挡"一个标注都没有"，挡不住"这行另有一个不相干的 ✓"
+ *    （表格里 ✓/✗ 到处都是；实测：开头那张对照表里有一行就是靠裸 ✓ 表意的，它在上下文里毫无歧义）。
+ *    ⚠️ 这里**故意不写行号**：写行号就得跟着文档一起改，而我这轮给前言加了一行之后，
+ *    原先引的三处行号当场全过期了 —— 会烂的数字不写，就不用给它配检查器（第 64 轮那条教训）。
+ *    要更严就得让标注长得独一无二 —— 那属于改约定，不归这条规则管。R2 则是精确的。
+ * ⚠️ 第一版还写了个"定义标记那一行不算数"的豁免（开头那句「**▣实测**＝…」是在**解释**标记，
+ *    当然没有轮次可指 —— 这是它第一次跑出来的唯一一条，一个假警报）。**划定切片之后它就没用了**：
+ *    那句定义在前言里，本来就不在这一段视野内。死掉的豁免连同它的夹具一起删了 ——
+ *    留一个"有夹具假装覆盖着的死代码"，比没有更坏。
+ *
+ * ⚠️ **只看切片、且行号是相对的**：调用处传进来的是「给用户的那一段」（飞书手册 = 第十二节），
+ *    所以报错时**必须** `offset + 行号` —— 第 55 轮在规则 ⑥ 上踩过：从切片里数出来的行号直接报出去，
+ *    读者会去那一行找一个根本不在那儿的东西（比不报行号更坏）。`rounds` 从**整份**文档现算：
+ *    轮次小节都在第十一节，不在这个切片里。
+ *
+ * 返回 `{ hits, examined }`；`examined` 是"看了多少条出处声明"，接线处拿它防沉默 ——
+ * 一条都没匹配上的规则和没写没区别（第 49～51 轮那套）。
+ */
+const PROV_MARK = /✓官方|✓|⚙源码|⚙|△推断|△|\?未核实/;
+const MEASURED = /▣实测/;
+const ROUND_HEAD = /^### 第 (\d+) 轮/gm;
+/** 块里**任何一个**「第 K 轮」—— 一旦这个块提到了第十一节，就全都算指路（见下） */
+const ROUND_ANY = /第\s*(\d+)\s*轮/g;
+
+function provenanceViolations(text, rounds) {
+  const hits = [];
+  let examined = 0;
+  const blocks = [];
+  let cur = [];
+  for (const [i, line] of text.split('\n').entries()) {
+    if (line.startsWith('|')) {
+      if (cur.length) { blocks.push(cur); cur = []; }
+      blocks.push([[i, line]]);
+      continue;
+    }
+    if (line.trim() === '') { if (cur.length) { blocks.push(cur); cur = []; } continue; }
+    cur.push([i, line]);
+  }
+  if (cur.length) blocks.push(cur);
+
+  for (const block of blocks) {
+    const joined = block.map(([, l]) => l).join('\n');
+    const line = block[0][0] + 1;
+    if (joined.includes('官方原文：')) {
+      examined++;
+      if (!PROV_MARK.test(joined)) {
+        hits.push({ line, text: '「官方原文：」没带出处标注（✓官方 / ⚙源码 / △推断 / ?未核实）' });
+      }
+    }
+    if (MEASURED.test(joined)) {
+      examined++;
+      // ⚠️ 只认「第十一节第 K 轮」是不够的：真有人会写"见第十一节第 53 轮、第 99 轮"，
+      //    省略写法里那个 99 就会被**静默放过** —— 守卫上多出一个看不见的洞。
+      //    所以只要这个块提到了「第十一节」，块里**每一个**「第 K 轮」都当作指路、都要真存在。
+      const cites = joined.includes('第十一节')
+        ? [...joined.matchAll(ROUND_ANY)].map((m) => Number(m[1]))
+        : [];
+      const bad = cites.filter((k) => !rounds.has(k));
+      if (!cites.length) hits.push({ line, text: '`▣实测` 没写「第十一节第 K 轮」—— 回去找不到那次运行' });
+      else if (bad.length) hits.push({ line, text: `\`▣实测\` 指的轮次在第十一节里不存在：第 ${bad.join('、')} 轮` });
+    }
+  }
+  return { hits, examined };
+}
+
+/**
  * 哪些 md 算"用户会读的文档"：仓库门面 + 上手指南 + 各包的 README（后者跟着包发出去，
  * 装完的人在 `node_modules/@butler/<包>/README.md` 读到它）+ 飞书手册的**验收那一节**。
  *
@@ -358,6 +436,25 @@ const CMD_TEST = [
   },
 ];
 
+/** 出处那条的承诺：报几处、看了几条，以及**轮次号不存在**要报出来（指到空处比不指更坏） */
+const PROV_TEST = [
+  { why: '官方原文带标注', text: '官方原文：「x」✓官方', want: 0, examined: 1 },
+  { why: '官方原文一个标注都没有', text: '官方原文：**x**，顺序反了就一直失败', want: 1, examined: 1 },
+  {
+    why: '同一个表格里 A 行没标注、B 行有个 ✓ —— B 不该救 A（表格行各自成块）',
+    text: '| a | 官方原文：x |\n| b | ✓ |',
+    want: 1, examined: 1,
+  },
+  { why: '▣实测 指了真存在的轮次', text: '（▣实测，见第十一节第 53 轮）', rounds: [53], want: 0, examined: 1 },
+  { why: '▣实测 没指轮次', text: '（原话是实测抓到的）▣实测', rounds: [53], want: 1, examined: 1 },
+  {
+    why: '▣实测 指的轮次不存在 —— 指到空处比不指更坏',
+    text: '▣实测，见第十一节第 99 轮', rounds: [53], want: 1, examined: 1,
+  },
+  { why: '▣实测 指了好几个轮次，只要有一个不存在就报', text: '▣实测，见第十一节第 53 轮、第 99 轮', rounds: [53], want: 1, examined: 1 },
+  { why: '没声称出处：不看（这两条规则只管声称了出处的块）', text: '跑 butler doctor 就行。', want: 0, examined: 0 },
+];
+
 /** 自检用的假仓库：路径 → 是文件还是目录。谓词按它回答，跟真实现同一套语义 */
 const FAKE_REPO = { 'README.md': 'file', 'packages/cli': 'dir' };
 const fakeExists = (urlKind, path) => {
@@ -393,6 +490,18 @@ function runSelfTest() {
           (gotLine === c.wantLine ? '' : `（行号应该 ${c.wantLine}，实际 ${gotLine}）`),
       };
     }),
+    ...PROV_TEST.map((c) => {
+      const r = provenanceViolations(c.text, new Set(c.rounds ?? []));
+      return {
+        ...c,
+        got: r.hits.length,
+        shown: JSON.stringify(c.text).replace(/\\n/g, '⏎'),
+        whyWrong:
+          r.examined === c.examined
+            ? ''
+            : `（另外：像出处声明的块应该看 ${c.examined} 条，实际 ${r.examined} 条）`,
+      };
+    }),
   ].filter((c) => c.got !== c.want || c.whyWrong);
 
   if (!bad.length) return;
@@ -402,15 +511,15 @@ function runSelfTest() {
     console.error(`    ${c.shown}`);
   }
   console.error('\n改法：这是 scripts/check-docs.mjs 里 shippedDocViolations / selfRepoUrlViolations /');
-  console.error('sourceTreeCommandViolations 的规则被改动了。要是故意放宽/收紧，请把 SELF_TEST /');
-  console.error('URL_TEST / CMD_TEST 一起改，并在 docs/CHANNEL-FEISHU.md 里写清楚为什么。');
+  console.error('sourceTreeCommandViolations / provenanceViolations 的规则被改动了。要是故意放宽/收紧，');
+  console.error('请把 SELF_TEST / URL_TEST / CMD_TEST / PROV_TEST 一起改，并在 docs/CHANNEL-FEISHU.md 里写清楚为什么。');
   process.exit(1);
 }
 
 if (process.argv.includes('--self-test')) {
   runSelfTest();
   console.log(
-    `文档体检：规则自检 ${SELF_TEST.length + URL_TEST.length + CMD_TEST.length} 条 → ✅ 规则本身是好的`,
+    `文档体检：规则自检 ${SELF_TEST.length + URL_TEST.length + CMD_TEST.length + PROV_TEST.length} 条 → ✅ 规则本身是好的`,
   );
   process.exit(0);
 }
@@ -546,6 +655,38 @@ if (!problems.length && cmdExamined === 0) {
   );
 }
 
+// ───────────── ⑦ 出处要跟得上（第 65 轮：手册开头承诺过"每条事实都能点回原文"） ─────────────
+
+let provBad = 0;
+let provExamined = 0;
+// ⚠️ 只对**声明了那套标注约定**的文档生效 —— 别的 md 没承诺过"每条事实都能点回原文"，
+//    拿这把尺子去量它们是冤枉人。
+const PROV_DOC = 'docs/CHANNEL-FEISHU.md';
+for (const file of files) {
+  if (file !== PROV_DOC) continue;
+  const raw = readFileSync(resolve(ROOT, file), 'utf8');
+  const { text, offset } = userDocText(file, raw);
+  const rounds = new Set([...raw.matchAll(ROUND_HEAD)].map((m) => Number(m[1])));
+  const { hits, examined } = provenanceViolations(text, rounds);
+  provExamined += examined;
+  for (const hit of hits) {
+    problems.push(
+      `❌ 出处跟原话对不上  ${file}:${offset + hit.line}\n       → ${hit.text}\n` +
+        '       （这份手册开头写着"本清单里每条事实都能点回原文"并给了标注：✓官方 / ⚙源码 / ' +
+        '△推断 / ▣实测 / ?未核实。声称了出处却不标、或者用 ▣实测 却不写是哪一轮跑出来的，' +
+        '读者就没法判断这句话能不能信 —— 也没法自己回去复核）',
+    );
+    provBad++;
+  }
+}
+// 防沉默：理由同规则 ⑥。
+if (!problems.length && provExamined === 0) {
+  problems.push(
+    '❌ 规则 ⑦ 一条"出处声明"都没看到\n' +
+      '       → 飞书手册里一定有几条（「官方原文：」和「▣实测」）。检查那两个正则，别让它空转。',
+  );
+}
+
 // ───────────────────────── 双语结构守卫 ─────────────────────────
 //
 // 第 4 条检查，也是唯一一条跟"内容"有关的：**中文版和英文版的结构要对得上**。
@@ -636,7 +777,7 @@ if (problems.length) console.log(`${problems.join('\n')}\n`);
 console.log(
   `检查 ${files.length} 个 md、${checked} 个链接/图片、${pairs.length} 对双语 → ` +
   (problems.length
-    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}、本仓地址 ${selfUrlBad}、照抄命令 ${cmdBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
-    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着、本仓地址指得到、照抄的命令路径够得着（看了 ${cmdExamined} 条）、双语结构对齐（规则自检 ${SELF_TEST.length + URL_TEST.length + CMD_TEST.length} 条通过）`),
+    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}、本仓地址 ${selfUrlBad}、照抄命令 ${cmdBad}、出处 ${provBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
+    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着、本仓地址指得到、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、双语结构对齐（规则自检 ${SELF_TEST.length + URL_TEST.length + CMD_TEST.length + PROV_TEST.length} 条通过）`),
 );
 process.exit(problems.length ? 1 : 0);
