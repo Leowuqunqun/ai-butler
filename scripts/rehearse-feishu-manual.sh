@@ -191,17 +191,97 @@ if grep -q 'http://127.0.0.1' "${TMP}/run.log"; then
 fi
 ok "没有开出引导页链接"
 
+# ─────────────────────── 私聊准入（第 59/60 轮） ───────────────────────
+
+step "谁能在私聊里跟它说话（手册第十二节那段）"
+
+# 手册给用户的动作是"往 config.json 里那条通道的 config 下加两行"。这里就照做。
+# ⚠️ 补丁必须**幂等**，而且**要会补逗号** —— 这两条都是我写第一版时踩的：
+#    ① 直接往 appSecret 后面插，第二次调用插出重复键 ⇒ 先删旧行、再插；
+#    ② appSecret 是那个对象里**最后一个键**，它后面本来没有逗号 —— 插进来两行之后
+#       `"appSecret": ""` 和 `"dmMode"` 之间就缺一个逗号，整个 config.json 当场不是 JSON
+#       （doctor 只会说"不是合法的 JSON"，看不出是哪儿少的）。所以插入时给 appSecret 补逗号。
+#    这也正是**用户手改会踩的同一个坑**，手册里为此专门加了一句提醒。
+patch_dm() {   # $1 = dmMode 值；$2 = dmAllowlist（JSON 数组字面量）
+  grep -v '"dmMode":\|"dmAllowlist":' "${CONFIG}" > "${CONFIG}.new" || true
+  grep -q '"id": "channel"' "${CONFIG}.new" \
+    || { rm -f "${CONFIG}.new"; bad "删掉 dm 那两行之后 config 不像配置了，中止"; }
+  mv "${CONFIG}.new" "${CONFIG}"
+  awk -v mode="$1" -v list="$2" '
+    /"appSecret"/ && !done {
+      line = $0
+      sub(/,[[:space:]]*$/, "", line)          # 幂等：本来就带逗号先去掉
+      printf "%s,\n", line                     # 插在中间 ⇒ 这一行现在必须有逗号
+      printf "          \"dmMode\": \"%s\",\n          \"dmAllowlist\": %s\n", mode, list
+      done = 1
+      next
+    }
+    { print }
+    END { if (!done) exit 1 }
+  ' "${CONFIG}" > "${CONFIG}.new" \
+    || { rm -f "${CONFIG}.new"; bad "往 config.json 里插 dmMode 失败（找不到 appSecret 那一行）"; }
+  mv "${CONFIG}.new" "${CONFIG}"
+  # ⚠️ 自证一笔：这个补丁是我手搓的 JSON 编辑，第一版连着写坏两次（少了逗号、又多了尾逗号），
+  #    而报出来的却是"不是合法的 JSON" —— 看着像产品的问题，其实是补丁自己的 bug。
+  #    所以每打一次补丁就让它自己证明产出的还是合法 JSON；不合法就红在**这里**，别再往下赖。
+  node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "${CONFIG}" \
+    || bad "补丁之后 config.json 不是合法 JSON —— 这是演练脚本自己的 bug，不是产品的问题"
+}
+
+# ① 没写这两个字段 = 默认 open：手册说这等于"企业里谁都能私聊它" ⇒ 要如实说，但**不是错误**
+cli doctor > "${TMP}/doctor-dm-default.log" 2>&1 || true
+grep -q '飞书私聊准入' "${TMP}/doctor-dm-default.log" || bad "doctor 没报「飞书私聊准入」这一条"
+grep -q 'dmMode=open' "${TMP}/doctor-dm-default.log" || bad "默认没被如实说成 open"
+grep -q '谁都能私聊它' "${TMP}/doctor-dm-default.log" || bad "默认 open 没被说成人话"
+ok "默认：doctor 报 dmMode=open，并说清它的含义"
+
+# ② 手册教你填的是**发送者** id（ou_…）：应该报 ✓，不许误报成 ✗
+patch_dm 'allowlist' '["ou_someone_real"]'
+cli doctor > "${TMP}/doctor-dm-good.log" 2>&1 || true
+grep -q 'dmMode=allowlist' "${TMP}/doctor-dm-good.log" || bad "allowlist 没被报出来"
+grep -q '名单 1 条' "${TMP}/doctor-dm-good.log" || bad "没说清名单里有几条"
+if grep -q '✗  飞书私聊准入' "${TMP}/doctor-dm-good.log"; then
+  bad "合法的 allowlist 被报成了 ✗"
+fi
+ok "配对了：doctor 说 dmMode=allowlist（名单 1 条），没误报 ✗"
+
+# ③ 手册点名警示的那个坑：填成应用 id（cli_…）⇒ 必须报 ✗，并说清去哪儿抄真正的 id
+patch_dm 'allowlist' '["cli_wrong_thing"]'
+cli doctor > "${TMP}/doctor-dm-bad.log" 2>&1 || true
+grep -q '等于没放行' "${TMP}/doctor-dm-bad.log" || bad "cli_ 那条错配没被报出来"
+grep -q 'senderId' "${TMP}/doctor-dm-bad.log" || bad "没告诉用户去哪儿抄真正的 senderId"
+ok "填成应用 id：doctor 报出来了，并指了 senderId 那条路"
+
+# ④ 手册承诺「dmMode 写错（比如 allowList）会在**装载时**直接报错，不会悄悄按 open 放行」。
+#    这条最值得离线验一遍：官方对不认识的 dmMode 是照 open 处理的，"静默放行"是最坏的失败。
+patch_dm 'allowList' '[]'
+cli doctor > "${TMP}/doctor-dm-typo.log" 2>&1 || true
+
+# ⚠️ 这里原来写的是 `grep 'dmMode'` —— 那是个**假断言**：拼错之后自检会照常打出
+#    `dmMode=allowList`，这条 grep 就被那个"邻字符串"满足了（第 61 轮用突变控制抓到的：
+#    把 schema 换回 z.string() 它**照样绿**）。所以两头都要钉死：
+#    ① 要看到**枚举校验**那句错（这是"装载时就报错"的唯一证据）；
+#    ② 不许出现任何 `dmMode=` —— 出现了就说明它被"接受"了，也就是手册警告的那种静默放行。
+grep -q 'but got "allowList"' "${TMP}/doctor-dm-typo.log" \
+  || bad "拼错的 dmMode 没在装载时报错（手册承诺会报）"
+if grep -q 'dmMode=' "${TMP}/doctor-dm-typo.log"; then
+  bad "拼错的 dmMode 被接受了（自检照常打出 dmMode=…）—— 手册说这会在装载时就报错"
+fi
+ok "拼错的 dmMode：装载时真的报错了（枚举校验），没有悄悄按 open 走"
+
 # ─────────────────────── 反泄漏 ───────────────────────
 
 step "反着查一遍：假凭据不许出现在任何输出里"
 
 for f in "${TMP}/doctor-before.log" "${TMP}/init.log" "${TMP}/probe-dry.log" \
-         "${TMP}/doctor-after.log" "${TMP}/run.log"; do
+         "${TMP}/doctor-after.log" "${TMP}/run.log" \
+         "${TMP}/doctor-dm-default.log" "${TMP}/doctor-dm-good.log" \
+         "${TMP}/doctor-dm-bad.log" "${TMP}/doctor-dm-typo.log"; do
   if grep -q "${FAKE_SECRET}" "${f}"; then
     bad "$(basename "${f}") 里出现了 app_secret 的值"
   fi
 done
-ok "五份输出里都没有 app_secret 的值"
+ok "九份输出里都没有 app_secret 的值"
 
 # ─────────────────────── 真家没被动过 ───────────────────────
 
