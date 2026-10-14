@@ -1099,18 +1099,80 @@ function runSelfTest() {
   process.exit(1);
 }
 
-if (process.argv.includes('--self-test')) {
+// ⭐ 第 89 轮：`--self-test` **不再提前 exit**。
+//   理由是两次真碰过的事：第 86 轮和第 88 轮各有一次，
+//   自检报「✅ 规则自检 84 条」的**同时**主流程是坏的（一次 TypeError、一次 ReferenceError）。
+//   ⭐ 原因就是这个 `process.exit(0)`：自检在主循环**之前**就走了。
+//   ⭐ 现在它往下走一遍真语料（烟雾模式）：⭐ “规则本身对不对” 和 “这条流水线还跑不跑得动” 一次说完。
+const SELF_TEST_ONLY = process.argv.includes('--self-test');
+const SMOKE = SELF_TEST_ONLY || process.argv.includes('--smoke');
+if (SELF_TEST_ONLY) {
   runSelfTest();
   console.log(
     `文档体检：规则自检 ${RULE_FIXTURE_COUNT()} 条 → ✅ 规则本身是好的`,
   );
-  process.exit(0);
+  console.log('（继续往下跑一遍真语料：第 89 轮起，自检要连带证明主流程不崩）');
+} else {
+  runSelfTest(); // 先确认"这把尺子"是好的，再拿它量仓库
 }
-
-runSelfTest(); // 先确认"这把尺子"是好的，再拿它量仓库
 
 let broken = 0, ignored = 0, badAnchor = 0, checked = 0, oddFence = 0;
 const problems = [];
+
+// ⭐ 第 89 轮：**判红就印 ❌** —— 这是这族唯一的约定（第 86 轮给 `runSelfTest` 补过一次）。
+//   为什么需要：第 82 轮那条硬化——「非零退出码、但一句 `❌` 都没有 ⇒ 这看着像 witness 自己崩了」——
+//   刚才**反过来咬了烟雾自己**：主流程真崩了，而烟雾那句判词根本没来得及印。
+//   ⭐ 于是在**进程层**接住：崩了就明明白白写一句 `❌ 主流程崩了`。
+if (SMOKE) {
+  process.on('uncaughtException', (e) => {
+    console.error(`\n❌ 主流程崩了（烟雾模式）：${e && e.message ? e.message : e}`);
+    const first = String((e && e.stack) || '').split('\n')[1];
+    if (first) console.error(`       ${first.trim()}`);
+    console.error('       ⭐ 这就是第 86 / 88 轮那种病：规则函数好好的，坏在**调用点**。');
+    process.exit(1);
+  });
+}
+
+// ───── ⭐ 第 89 轮：判红族的契约与“到场帐本” ─────
+//   为什么要这个：第 86 / 88 轮那两次坏的都是**调用点**，不是规则本身 ——
+//   所以对着规则函数跑那 84 条夹具的自检**永远看不见**。
+//   ⭐ 把它们包一层：（1）回值必须是 `{ hits, examined }`（契约）；
+//   （2）记下“哪几族真的被调到了”——⭐ 防沉默同样用在流水线自己身上。
+//   ⭐ 改法刻意不碰那 11 个调用点：重新绑定同名的 `function` 声明，于是主流程和自检都走这层。
+const RULE_NAMES = [
+  'shippedDocViolations', 'selfRepoUrlViolations', 'provenanceViolations',
+  'staleCountViolations', 'pairedTreeViolations', 'sourceTreeCommandViolations',
+  'unanchoredCountViolations', 'externalMeasuredViolations', 'contractGuessViolations',
+  'contractWhoViolations', 'citedLineViolations',
+];
+const RAN = new Map();
+function wrapRule(name, fn) {
+  return (...args) => {
+    const r = fn(...args);
+    const ok =
+      r !== null && typeof r === 'object' && !Array.isArray(r) &&
+      Array.isArray(r.hits) && typeof r.examined === 'number' && Number.isFinite(r.examined);
+    if (!ok) {
+      throw new Error(
+        `判红族 ${name} 的返回值不符合契约 { hits: [], examined: number }：` +
+          `实际是 ${Array.isArray(r) ? '裸数组' : typeof r}`,
+      );
+    }
+    RAN.set(name, (RAN.get(name) ?? 0) + r.examined);
+    return r;
+  };
+}
+shippedDocViolations = wrapRule('shippedDocViolations', shippedDocViolations);
+selfRepoUrlViolations = wrapRule('selfRepoUrlViolations', selfRepoUrlViolations);
+provenanceViolations = wrapRule('provenanceViolations', provenanceViolations);
+staleCountViolations = wrapRule('staleCountViolations', staleCountViolations);
+pairedTreeViolations = wrapRule('pairedTreeViolations', pairedTreeViolations);
+sourceTreeCommandViolations = wrapRule('sourceTreeCommandViolations', sourceTreeCommandViolations);
+unanchoredCountViolations = wrapRule('unanchoredCountViolations', unanchoredCountViolations);
+externalMeasuredViolations = wrapRule('externalMeasuredViolations', externalMeasuredViolations);
+contractGuessViolations = wrapRule('contractGuessViolations', contractGuessViolations);
+contractWhoViolations = wrapRule('contractWhoViolations', contractWhoViolations);
+citedLineViolations = wrapRule('citedLineViolations', citedLineViolations);
 
 /** 代码块围栏的条数。多到 3 个空格缩进也算（markdown 允许） */
 const fenceCount = (text) => (text.match(/^ {0,3}```/gm) ?? []).length;
@@ -1594,4 +1656,16 @@ console.log(
     ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}（看了 ${shipExamined} 条）、本仓地址 ${selfUrlBad}（看了 ${selfUrlExamined} 条）、照抄命令 ${cmdBad}、出处 ${provBad}、用户面数字 ${staleBad}、包树 ${treeBad}、时间锚 ${anchorBad}、契约定论 ${contractBad}、契约谁做的 ${whoBad}、引用指得到 ${citeBad}、外部量测 ${externalBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
     : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着（看了 ${shipExamined} 条）、本仓地址指得到（看了 ${selfUrlExamined} 条）、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、用户面文档里的数跟仓库对得上（看了 ${staleExamined} 条）、架构包树中英对齐（看了 ${treeExamined} 行）、精确数都带时间锚（看了 ${anchorExamined} 条）、量别人仓库的数都带日期（看了 ${externalExamined} 条）、§五 契约行都定了论（看了 ${contractExamined} 条）、都写了"实际怎么做的"（看了 ${whoExamined} 行）、代码引用都指得到（看了 ${citeExamined} 处）、双语结构对齐（规则自检 ${RULE_FIXTURE_COUNT()} 条通过）`),
 );
+if (SMOKE) {
+  const missing = RULE_NAMES.filter((n) => !RAN.has(n));
+  // ⭐ 烟雾模式：**文档有问题不算红**（那是主流程的事），
+  //   只报“这条流水线跑得动、判红族都到场了”。
+  const seen = RULE_NAMES.map((n) => `${n.replace(/Violations$/, '')}=${RAN.get(n) ?? '❌没到'}`);
+  console.log(
+    `\n烟雾：主流程跑完了，${RAN.size}/${RULE_NAMES.length} 族判红规则到场。` +
+      (missing.length ? ` \u274c 没到场：${missing.join('、')}` : ' ✅ 到场齐了'),
+  );
+  console.log(`       ${seen.join('、')}`);
+  process.exit(missing.length ? 1 : 0);
+}
 process.exit(problems.length ? 1 : 0);

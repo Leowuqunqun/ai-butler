@@ -961,6 +961,23 @@ const MUTATIONS = [
       'const SHIP_FLOOR = 99;']],
   },
 
+  {
+    name: '主流程那 11 个调用点里有一处写错了(把 ⑥ 的解构改名)',
+    claim: '第 86 / 88 轮那两次坏的都是**调用点**，不是规则本身 —— 所以对着规则函数跑 84 条夹具的自检永远看不见它。第 89 轮起 --self-test 会继续往下跑真语料，这条牙咬的就是那个',
+    script: ['scripts/check-docs.mjs', '--self-test'],
+    files: [['scripts/check-docs.mjs',
+      'const { hits, examined } = sourceTreeCommandViolations(text);',
+      'const { hitss, examined } = sourceTreeCommandViolations(text);']],
+  },
+  {
+    name: '有一族判红规则压根没被调用(把 ⑬ 那行换成空结果)',
+    claim: '烟务模式除了"不崩"，还要"到场"—— ⭐ 防沉默同样用在流水线自己身上：一族规则被 if 挡掉了、或者调用被删了，它看起来还是全绿',
+    script: ['scripts/check-docs.mjs', '--self-test'],
+    files: [['scripts/check-docs.mjs',
+      "    const r = contractWhoViolations(readFileSync(abs, 'utf8'));",
+      '    const r = { hits: [], examined: 0 };']],
+  },
+
 ];
 
 
