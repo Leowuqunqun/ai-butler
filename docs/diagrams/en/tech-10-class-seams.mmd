@@ -1,0 +1,56 @@
+classDiagram
+    class ChannelService {
+        <<abstract>>
+        +string id
+        +start() Promise
+        +stop() Promise
+        +sendText(to, text, opts) Promise
+        +sendFile(to, path, opts) Promise
+        +setTyping(to, on) Promise
+        +onMessage(handler) void
+        +offMessage(handler) void
+    }
+    class AgentService {
+        <<abstract>>
+        +string id
+        +run(req) Promise~AgentResult~
+    }
+    class LinkService {
+        <<abstract>>
+        +string id
+        +discover() Promise~DeviceInfo[]~
+        +connect(deviceId) Promise~LinkSession~
+    }
+    class ApprovalService {
+        <<abstract>>
+        +string id
+        +list() Promise~ApprovalRequest[]~
+        +answer(id, decision, by) Promise~boolean~
+    }
+    class MemoryService {
+        <<abstract>>
+        +string id
+        +get(key) Promise
+        +set(key, value, meta) Promise
+        +list(filter) Promise~MemoryEntry[]~
+        +forget(key) Promise
+    }
+    note for ChannelService "id / start / stop / sendText / sendFile are abstract; setTyping / onMessage / offMessage have default implementations in the base class"
+    ChannelService <|-- WechatChannel
+    ChannelService <|-- TelegramChannel
+    ChannelService <|-- FeishuChannel
+    AgentService <|-- DshAgent
+    AgentService <|-- ExecAgent
+    LinkService <|-- LanLink
+    LinkService <|-- TailscaleLink
+    ApprovalService <|-- ImApproval
+    MemoryService <|-- FileMemory
+    class WechatChannel {<<shipped>>}
+    class TelegramChannel {<<shipped>>}
+    class FeishuChannel {<<shipped>>}
+    class DshAgent {<<shipped>>}
+    class ExecAgent {<<shipped>>}
+    class LanLink {<<shipped>>}
+    class TailscaleLink {<<shipped>>}
+    class ImApproval {<<shipped>>}
+    class FileMemory {<<shipped>>}

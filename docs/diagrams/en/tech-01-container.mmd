@@ -1,0 +1,31 @@
+flowchart TB
+    subgraph HOST["Single-machine mode: one cordis container (the M1 shape · started by butler)"]
+        direction TB
+        CH["ctx.channel<br/>channel-wechat / -telegram / -feishu"]
+        CORE["@butler/core — the hub role<br/>claim ownership · sessions · routing · queue · progress · reply · approval · self-check"]
+        NODE["node role · embedded in single-machine mode<br/>runs the agent · touches files (same process, not over ctx.link)"]
+        AG["ctx.agent<br/>agent-dsh (or agent-exec)"]
+        AP["ctx.approval<br/>approval-im"]
+        MEM["ctx.memory<br/>memory-file"]
+        ST[("state/<br/>login state · sessions · memory · approvals")]
+        CH --> CORE --> NODE --> AG
+        CORE --> AP
+        CORE --> MEM
+        NODE --> MEM
+        CORE --> ST
+        MEM --> ST
+    end
+    WX["Channel servers"]
+    LLM["Model service"]
+    WX <-->|"receive / send"| CH
+    AG -->|"inference"| LLM
+    classDef seam fill:#EDE0FF,stroke:#8B5CF6,stroke-width:2px,color:#3B1D6E
+    classDef core fill:#D6E8FF,stroke:#3D7DE8,stroke-width:2px,color:#0B2E6B
+    classDef impl fill:#D9F2E3,stroke:#34A853,stroke-width:2px,color:#0B3D1E
+    classDef store fill:#FFF6D6,stroke:#D9A400,stroke-width:2px,color:#5C4400
+    classDef ext fill:#F1F3F5,stroke:#ADB5BD,stroke-dasharray:5 4,color:#343A40
+    class CH,AG,AP,MEM impl
+    class CORE,NODE core
+    class ST store
+    class WX,LLM ext
+style HOST fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px

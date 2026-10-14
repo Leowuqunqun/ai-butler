@@ -3,10 +3,10 @@
 [中文](ARCH-product.md) | English
 
 > For the technical implementation see [`ARCH-technical.en.md`](ARCH-technical.en.md)｜for the shape and the goals see [`VISION.en.md`](VISION.en.md)
-> The diagram sources are in [`diagrams/`](diagrams/). The `.mmd` files are editable, the `.svg` files are rendered output.
+> The diagram sources are in [`diagrams/en/`](diagrams/en/) — the Chinese originals sit in [`diagrams/`](diagrams/). The `.mmd` files are editable, the `.svg` files are rendered output.
 
-**Note on the diagrams: their labels are still in Chinese.** The English docs link to the same
-diagram files. The sources are in the repo — English versions would be welcome.
+**Note on the diagrams: this document embeds the English set** (`diagrams/en/`) — the same pictures
+in the same order as [`ARCH-product.md`](ARCH-product.md), with English labels.
 
 ---
 
@@ -14,7 +14,7 @@ diagram files. The sources are in the repo — English versions would be welcome
 
 Start with the whole picture: **owner → channel servers (WeChat / Feishu / Telegram) → your computer (one cordis container)**, and where each of the five product layers lands.
 
-![Overall architecture](diagrams/arch-00-overview.svg)
+![Overall architecture](diagrams/en/arch-00-overview.svg)
 
 Each section below opens up one box; the package-to-part mapping is in [`ARCH-technical.en.md`](ARCH-technical.en.md).
 
@@ -32,7 +32,7 @@ You say what you want, it drives the computer for you — you don't have to tell
 
 ## 1. The product at a glance
 
-![Product at a glance](diagrams/product-01-context.svg)
+![Product at a glance](diagrams/en/product-01-context.svg)
 
 Three hard constraints fall straight out of that picture:
 
@@ -63,7 +63,7 @@ Three hard constraints fall straight out of that picture:
 
 ## 3. The five-layer capability model
 
-![Five-layer capability model](diagrams/product-02-layers.svg)
+![Five-layer capability model](diagrams/en/product-02-layers.svg)
 
 The product as the user perceives it is these five layers, outside in. **Any one layer breaks and the whole experience collapses**:
 
@@ -81,7 +81,7 @@ The product as the user perceives it is these five layers, outside in. **Any one
 
 ## 4. The user journey
 
-![First-run journey](diagrams/product-03-journey.svg)
+![First-run journey](diagrams/en/product-03-journey.svg)
 
 | Step | What the user does | What the product does | What must not appear |
 | --- | --- | --- | --- |
@@ -122,7 +122,7 @@ The product as the user perceives it is these five layers, outside in. **Any one
 
 ## 5. The four core mechanisms
 
-![Four core mechanisms](diagrams/product-04-mechanisms.svg)
+![Four core mechanisms](diagrams/en/product-04-mechanisms.svg)
 
 ### 1. Approval: conservative by default, looser the more you use it
 
@@ -186,7 +186,7 @@ The marker itself **never leaks into WeChat**: every occurrence anywhere is stri
 
 ## 6. Interaction
 
-![Interaction](diagrams/product-05-interaction.svg)
+![Interaction](diagrams/en/product-05-interaction.svg)
 
 **Core principle: pure conversation, zero menus.** Every skill is reached by talking.
 

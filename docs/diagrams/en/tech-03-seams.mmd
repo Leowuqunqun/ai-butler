@@ -1,0 +1,46 @@
+flowchart LR
+    subgraph SEAM["seam-* ｜ abstract interfaces only, no implementation"]
+        direction TB
+        SC["seam-channel<br/>ctx.channel"]
+        SA["seam-agent<br/>ctx.agent"]
+        SL["seam-link<br/>ctx.link"]
+        SP["seam-approval<br/>ctx.approval"]
+        SM["seam-memory<br/>ctx.memory"]
+    end
+    subgraph IMPL["Implementation packages ｜ extend the base class; the default export is the plugin (all of them shipped)"]
+        direction TB
+        CW["channel-wechat"]
+        CT["channel-telegram"]
+        CF["channel-feishu"]
+        AD["agent-dsh"]
+        AE["agent-exec"]
+        LL["link-lan"]
+        LT["link-tailscale"]
+        AI["approval-im"]
+        MF["memory-file"]
+    end
+    CORE["@butler/core<br/>cordis container · patch loading · event bus"]
+    CW --> SC
+    CT --> SC
+    CF --> SC
+    AD --> SA
+    AE --> SA
+    LL --> SL
+    LT --> SL
+    AI --> SP
+    MF --> SM
+    SC --> CORE
+    SA --> CORE
+    SL --> CORE
+    SP --> CORE
+    SM --> CORE
+    classDef seam fill:#EDE0FF,stroke:#8B5CF6,stroke-width:2px,color:#3B1D6E
+    classDef done fill:#D9F2E3,stroke:#34A853,stroke-width:2px,color:#0B3D1E
+    %% the dashed grey below is the style for a future candidate package (there are none right now)
+    classDef todo fill:#F1F3F5,stroke:#ADB5BD,stroke-dasharray:5 4,color:#343A40
+    classDef core fill:#D6E8FF,stroke:#3D7DE8,stroke-width:2px,color:#0B2E6B
+    class SC,SA,SL,SP,SM seam
+    class CW,CT,CF,AD,AE,LL,LT,AI,MF done
+    class CORE core
+style SEAM fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px
+style IMPL fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px

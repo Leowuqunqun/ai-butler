@@ -1,0 +1,13 @@
+stateDiagram-v2
+    [*] --> Pending: agent requests a sensitive action
+    Pending --> Approved: the owner replies 'confirm'
+    Pending --> Denied: the owner replies anything else
+    Pending --> Denied: timeout (5 minutes by default)
+    Approved --> Executed: it acts
+    Denied --> Told: says verbatim 'you said not to, so I didn't'
+    Executed --> [*]
+    Told --> [*]
+    note right of Pending
+        no ask, no action
+        never silently perform an irreversible action
+    end note

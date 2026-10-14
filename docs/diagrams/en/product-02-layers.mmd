@@ -1,0 +1,9 @@
+flowchart TB
+    L1["① Connection layer　it installs · it connects<br/>the first hurdle for non-technical users: fail here and the product doesn't exist"]
+    L2["② Conversation layer　talk like a person · send things · receive things<br/>the one place you can't afford to fail: fail here and everything after is wasted"]
+    L3["③ Capability layer　it actually gets things done<br/>decides whether it's useful"]
+    L4["④ Device layer　it manages more than one machine<br/>where the difference lies"]
+    L5["⑤ Trust layer　approval · memory · audit · privacy<br/>decides whether you dare use it long term"]
+    L1 --> L2 --> L3 --> L4 --> L5
+    classDef l fill:#D6E8FF,stroke:#3D7DE8,stroke-width:2px,color:#0B2E6B
+    class L1,L2,L3,L4,L5 l

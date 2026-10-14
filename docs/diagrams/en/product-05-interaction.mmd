@@ -1,0 +1,28 @@
+flowchart TB
+    subgraph IN["The owner sends in"]
+        direction LR
+        I1["Text"]
+        I2["Voice<br/>transcribed by WeChat"]
+        I3["Images"]
+        I4["Files"]
+        I5["A quoted message"]
+    end
+    CORE["The butler works out the intent"]
+    subgraph OUT["The butler answers"]
+        direction LR
+        O1["Text replies<br/>with a ↩ quote prefix"]
+        O2["Files / images"]
+        O3["Progress notes<br/>long tasks"]
+        O4["Approval questions<br/>before acting"]
+    end
+    IN --> CORE --> OUT
+    ESC["Escape hatch (not taught, but discoverable)<br/>/help　/devices　/memory　/forget　/stop"]
+    OUT -.-> ESC
+    classDef io fill:#D6E8FF,stroke:#3D7DE8,stroke-width:2px,color:#0B2E6B
+    classDef core fill:#EDE0FF,stroke:#8B5CF6,stroke-width:2px,color:#3B1D6E
+    classDef esc fill:#F1F3F5,stroke:#ADB5BD,stroke-dasharray:5 4,color:#343A40
+    class I1,I2,I3,I4,I5,O1,O2,O3,O4 io
+    class CORE core
+    class ESC esc
+style IN fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px
+style OUT fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px

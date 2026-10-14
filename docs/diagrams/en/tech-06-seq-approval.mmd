@@ -1,0 +1,22 @@
+sequenceDiagram
+    autonumber
+    participant A as agent
+    participant AP as approval-im
+    participant CH as channel
+    participant U as The owner
+
+    A->>AP: ask (about to delete 32 files, high risk)
+    AP->>CH: about to delete 32 files (all .tmp), confirm?
+    CH->>U: sent
+    Note over AP: starts a 5-minute timer
+    alt the owner replies 'confirm'
+        U->>CH: confirm
+        CH->>AP: matched a pending request
+        AP-->>A: true
+        A->>A: executes
+        A->>U: deleted, moved to the trash, recoverable for a week
+    else the owner replies anything else / timeout
+        AP-->>A: false
+        A->>U: you said not to, so I didn't
+    end
+    Note over AP: timeout = denial<br/>never wait forever (M0 really did hang once)

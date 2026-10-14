@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 把 docs/diagrams/*.mmd 渲染成 .svg 和 .png
+# 把 docs/diagrams/*.mmd（含 en/ 下的英文版）渲染成 .svg 和 .png
 #
 # 为什么不用 mmdc 直接出 PNG：mmdc 的 PNG 会带上 Puppeteer 视口的空白边
 # （旅程图那种宽扁图尤其明显）。所以 SVG 交给 mmdc，PNG 用 Chrome 按 SVG 的
@@ -27,30 +27,38 @@ command -v mmdc >/dev/null || { echo "缺 mmdc：npm i -g @mermaid-js/mermaid-cl
 [ -x "$CHROME" ] || { echo "找不到 Chrome，用 CHROME=/path/to/chrome 指定"; exit 1; }
 
 ok=0; fail=0
-for mmd in "$DIR"/*.mmd; do
-  base="$(basename "$mmd" .mmd)"
-  [ -n "$FILTER" ] && case "$base" in *"$FILTER"*) ;; *) continue ;; esac
+# 中文版在 docs/diagrams/，英文版在 docs/diagrams/en/。两套源码分开放，是因为
+# check:docs 会数 docs/diagrams 顶层有几张 .svg，并跟文档里写的「N 张图」对账。
+for SRC in "$DIR" "$DIR/en"; do
+  [ -d "$SRC" ] || continue
+  for mmd in "$SRC"/*.mmd; do
+    [ -e "$mmd" ] || continue
+    base="$(basename "$mmd" .mmd)"
+    label="$base"
+    [ "$SRC" != "$DIR" ] && label="en/$base"
+    [ -n "$FILTER" ] && case "$base" in *"$FILTER"*) ;; *) continue ;; esac
 
-  # ① SVG：交给 mermaid 官方渲染器
-  if ! mmdc -i "$mmd" -o "$DIR/$base.svg" -p "$PUPPETEER_CFG" -b white >/dev/null 2>&1; then
-    echo "  ❌ ${base}（mmdc 渲染失败，多半是 .mmd 语法问题）"; fail=$((fail+1)); continue
-  fi
+    # ① SVG：交给 mermaid 官方渲染器
+    if ! mmdc -i "$mmd" -o "$SRC/$base.svg" -p "$PUPPETEER_CFG" -b white >/dev/null 2>&1; then
+      echo "  ❌ ${label}（mmdc 渲染失败，多半是 .mmd 语法问题）"; fail=$((fail+1)); continue
+    fi
 
-  # ② PNG：从 SVG 的 viewBox 读真实尺寸，让 Chrome 精确截图
-  dims="$(node -e '
-    const s=require("fs").readFileSync(process.argv[1],"utf8");
-    const m=s.match(/viewBox="([-\d.]+) ([-\d.]+) ([\d.]+) ([\d.]+)"/);
-    if(!m) process.exit(1);
-    console.log(Math.ceil(+m[3])+" "+Math.ceil(+m[4]));
-  ' "$DIR/$base.svg")"
+    # ② PNG：从 SVG 的 viewBox 读真实尺寸，让 Chrome 精确截图
+    dims="$(node -e '
+      const s=require("fs").readFileSync(process.argv[1],"utf8");
+      const m=s.match(/viewBox="([-\d.]+) ([-\d.]+) ([\d.]+) ([\d.]+)"/);
+      if(!m) process.exit(1);
+      console.log(Math.ceil(+m[3])+" "+Math.ceil(+m[4]));
+    ' "$SRC/$base.svg")"
 
-  set -- $dims
-  "$CHROME" --headless --disable-gpu --no-sandbox --hide-scrollbars \
-    --default-background-color=FFFFFFFF --force-device-scale-factor=2 \
-    --screenshot="$DIR/$base.png" --window-size="$1,$2" \
-    "file://$DIR/$base.svg" >/dev/null 2>&1
+    set -- $dims
+    "$CHROME" --headless --disable-gpu --no-sandbox --hide-scrollbars \
+      --default-background-color=FFFFFFFF --force-device-scale-factor=2 \
+      --screenshot="$SRC/$base.png" --window-size="$1,$2" \
+      "file://$SRC/$base.svg" >/dev/null 2>&1
 
-  echo "  ✅ $base"; ok=$((ok+1))
+    echo "  ✅ $label"; ok=$((ok+1))
+  done
 done
 
 echo "----"

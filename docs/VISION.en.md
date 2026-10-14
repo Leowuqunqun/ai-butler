@@ -5,9 +5,10 @@
 > **Note on the diagrams:** this document does not embed any itself, but the
 > linked docs ([`ARCH-product.en.md`](ARCH-product.en.md) and
 > [`ARCH-technical.en.md`](ARCH-technical.en.md)) and the
-> [project home page](../README.en.md) use the SVGs in [`diagrams/`](diagrams/) —
-> **their labels are in Chinese.** The `.mmd` sources and the rendered `.svg`s are
-> both in the repo; English versions are welcome.
+> [project home page](../README.en.md) use the English set in [`diagrams/en/`](diagrams/en/).
+> The Chinese originals sit next to them in [`diagrams/`](diagrams/) — same pictures,
+> same order, only the labels differ. The `.mmd` sources are what you edit, and
+> `bash scripts/render-diagrams.sh` re-renders both sets.
 
 > This document defines the **product**, not this particular repo.
 > Today's `wechat-agent-bridge` is **the first component of the product's channel

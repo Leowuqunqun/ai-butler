@@ -1,0 +1,21 @@
+flowchart TB
+    B["① Built-in composition<br/>butler-base/cordis.patch.yml<br/>ships with the package"]
+    U["② User override<br/>~/.butler/cordis.patch.yml<br/>written by the onboarding page / in the conversation"]
+    R["The final row set<br/>addressed by id · whole-row override · last write wins"]
+    RT["cordis runtime<br/>activation is driven by 'is the service ready'; row order carries no meaning"]
+    S[("③ Runtime state<br/>~/.butler/state/")]
+    B -->|"one insert applied to an empty root"| R
+    U -->|"overrides the whole config of the default row"| R
+    R --> RT
+    S <-.->|"login state / sessions / memory"| RT
+    NOTE["The architecture aligns with dsh, but ordinary users should never see ① ②"]
+    NOTE -.-> B
+    NOTE -.-> U
+    classDef cfg fill:#D6E8FF,stroke:#3D7DE8,stroke-width:2px,color:#0B2E6B
+    classDef rt fill:#EDE0FF,stroke:#8B5CF6,stroke-width:2px,color:#3B1D6E
+    classDef store fill:#FFF6D6,stroke:#D9A400,stroke-width:2px,color:#5C4400
+    classDef warn fill:#FFE0E0,stroke:#E5484D,stroke-width:2px,color:#6B0F14
+    class B,U,R cfg
+    class RT rt
+    class S store
+    class NOTE warn

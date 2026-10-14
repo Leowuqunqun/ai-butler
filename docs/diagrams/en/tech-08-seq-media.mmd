@@ -1,0 +1,20 @@
+sequenceDiagram
+    autonumber
+    participant U as The owner
+    participant CH as channel-wechat
+    participant CDN as WeChat CDN
+    participant F as local cache
+    participant A as agent (multimodal)
+
+    U->>CH: sends an image
+    Note over CH: item_list[i].image_item.media<br/>encrypt_query_param + aes_key
+    CH->>CH: builds the download URL /download?encrypted_query_param=…
+    CH->>CH: parses aes_key
+    Note over CH: base64(raw 16 bytes) → images<br/>base64(hex 32 chars) → files/voice/video<br/>both encodings really do occur in live traffic
+    CH->>CDN: downloads the ciphertext
+    CDN-->>CH: ciphertext
+    CH->>CH: AES-128-ECB decrypt
+    CH->>F: writes a local file
+    CH->>A: files = [local path]
+    A-->>CH: this is an invoice, amount 1280. Want me to log it in the expenses sheet
+    CH-->>U: passes it on

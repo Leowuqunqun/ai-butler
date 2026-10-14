@@ -1,0 +1,29 @@
+sequenceDiagram
+    autonumber
+    participant U as The owner
+    participant WX as Channel servers
+    participant CH as channel adapter
+    participant H as core (hub role)
+    participant N as node (embedded in single-machine mode)
+    participant A as agent-dsh
+
+    U->>WX: 「把桌面那堆图按日期整理一下」<br/>(tidy that pile of images on my desktop, by date)
+    WX->>CH: receive (long-poll / long connection)
+    CH->>H: InboundMessage
+    H->>H: identify (if not the owner, drop silently, no reply)
+    H->>H: routing　target device = the hub itself
+    H->>H: session　(channel, user, device) → sessionId
+    H->>N: dispatch the task
+    N->>A: run(text, sessionId, cwd)
+    Note over A,N: the receive loop is never blocked<br/>work is strictly serial
+    A-->>N: onProgress
+    N-->>H: progress
+    H-->>CH: sendText
+    CH-->>WX: working on it…
+    WX-->>U: working on it…
+    A-->>N: text + files
+    N-->>H: result
+    H->>H: add the ↩ quote prefix → chunk by length
+    H->>CH: sendText / sendFile
+    CH->>WX: send
+    WX->>U: result + attachments

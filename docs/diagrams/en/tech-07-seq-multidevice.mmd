@@ -1,0 +1,21 @@
+sequenceDiagram
+    autonumber
+    participant U as The owner
+    participant H as core (hub role)
+    participant D as devices registry
+    participant L as ctx.link
+    participant N as node · the Mac at home
+
+    U->>H: 「家里那台电脑上有个叫报销的文件夹，找出来发我」<br/>(there's a folder called 报销 on the computer at home, find it and send it to me)
+    H->>D: resolve the alias 「家里那台」 (the one at home)
+    D-->>H: node-home
+    alt online
+        H->>L: connect(node-home)
+        L->>N: bring up the link
+        H->>N: agent.run
+        N-->>H: result + attachments
+        H-->>U: found it, sending it over
+    else offline
+        H-->>U: that computer is offline right now (last seen 3 hours ago)
+        Note over H: no brute-force retries, it just says so
+    end

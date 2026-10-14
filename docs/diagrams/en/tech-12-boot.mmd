@@ -1,0 +1,18 @@
+flowchart TB
+    A["read the built-in composition<br/>butler-base/cordis.patch.yml"] --> C
+    B["read the user override<br/>~/.butler/cordis.patch.yml"] --> C
+    C["merge into the final row set by id<br/>whole-row override, last write wins"] --> D
+    D["cordis loads the plugin packages row by row"] --> E{"are the dependencies<br/>this row injects ready yet?"}
+    E -->|"ready"| F["instantiate and register on ctx<br/>becomes ctx.channel / ctx.agent / …"]
+    E -->|"dependencies missing"| G["the row stays inactive<br/>(no error, it waits for the dependency)"]
+    G -.->|"dependency becomes ready later"| F
+    F --> H["core (hub role) starts working<br/>receive · route · get things done"]
+    H --> I["the onboarding page / CLI are usable"]
+    classDef cfg fill:#D6E8FF,stroke:#3D7DE8,stroke-width:2px,color:#0B2E6B
+    classDef rt fill:#EDE0FF,stroke:#8B5CF6,stroke-width:2px,color:#3B1D6E
+    classDef warn fill:#FFF6D6,stroke:#D9A400,stroke-width:2px,color:#5C4400
+    classDef ok fill:#D9F2E3,stroke:#34A853,stroke-width:2px,color:#0B3D1E
+    class A,B,C cfg
+    class D,E rt
+    class G warn
+    class F,H,I ok

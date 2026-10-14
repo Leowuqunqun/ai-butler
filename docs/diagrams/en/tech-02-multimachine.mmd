@@ -1,0 +1,31 @@
+flowchart TB
+    WX["Channel servers<br/>WeChat / Feishu / Telegram"]
+    subgraph HB["Hub · hub role (@butler/core)<br/>the always-on machine, the only holder of the login state"]
+        CH["Any one channel<br/>channel-wechat / -telegram / -feishu"]
+        RT["@butler/core<br/>router · alias → node"]
+        AP["approval-im<br/>approval coordination"]
+        CH --> RT
+        RT --> AP
+    end
+    LINK["ctx.link<br/>link-lan　|　link-tailscale<br/>(link-ssh / your own relay: left to advanced users)"]
+    subgraph NA["Node A · the Mac at home"]
+        A1["node role<br/>link-lan/node"] --> A2["agent-dsh"] --> A3["local files / commands"]
+    end
+    subgraph NB["Node B · the PC at work"]
+        B1["node role<br/>link-lan/node"] --> B2["agent-dsh"] --> B3["local files / commands"]
+    end
+    WX <-->|"receive / send"| CH
+    RT --> LINK
+    LINK --> NA
+    LINK --> NB
+    classDef core fill:#D6E8FF,stroke:#3D7DE8,stroke-width:2px,color:#0B2E6B
+    classDef seam fill:#EDE0FF,stroke:#8B5CF6,stroke-width:2px,color:#3B1D6E
+    classDef impl fill:#D9F2E3,stroke:#34A853,stroke-width:2px,color:#0B3D1E
+    classDef ext fill:#F1F3F5,stroke:#ADB5BD,stroke-dasharray:5 4,color:#343A40
+    class CH,RT,AP core
+    class LINK seam
+    class A1,A2,A3,B1,B2,B3 impl
+    class WX ext
+style HB fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px
+style NA fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px
+style NB fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px

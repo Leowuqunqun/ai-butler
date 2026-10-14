@@ -3,19 +3,19 @@
 [中文](ARCH-technical.md) | English
 
 > For the product layer see [`ARCH-product.en.md`](ARCH-product.en.md) ｜ for the shape and the goals see [`VISION.en.md`](VISION.en.md)
-> The diagram sources are in [`diagrams/`](diagrams/). The `.mmd` files are editable, the `.svg` files are rendered output.
+> The diagram sources are in [`diagrams/en/`](diagrams/en/) — the Chinese originals sit in [`diagrams/`](diagrams/). The `.mmd` files are editable, the `.svg` files are rendered output.
 
-**Note on the diagrams: their labels are still in Chinese.** This document links to the same diagram
-files as the Chinese version; the sources are in the repo, so English versions would be welcome.
+**Note on the diagrams: this document embeds the English set** (`diagrams/en/`) — the same diagrams
+in the same order as [`ARCH-technical.md`](ARCH-technical.md), with English labels.
 
 ---
 
 ## At a glance
 
-![Overall architecture](diagrams/arch-00-overview.svg)
+![Overall architecture](diagrams/en/arch-00-overview.svg)
 
 The whole thing in one picture: **owner → channel servers (WeChat / Feishu / Telegram) → one cordis container (② conversation → seam → core → ③ capability / ④ devices → `state/`) → model service / other machines**.
-The boxes inside the container are this repo's packages; each section below opens up one of them (source: [`arch-00-overview.mmd`](diagrams/arch-00-overview.mmd)).
+The boxes inside the container are this repo's packages; each section below opens up one of them (source: [`arch-00-overview.mmd`](diagrams/en/arch-00-overview.mmd)).
 
 ---
 
@@ -43,14 +43,14 @@ The boxes inside the container are this repo's packages; each section below open
 
 ### Single machine (the M1 shape — get this working first)
 
-![Single-machine container](diagrams/tech-01-container.svg)
+![Single-machine container](diagrams/en/tech-01-container.svg)
 
 In single-machine mode the **hub embeds a local node** (same process, no Link) —
 this is the M1 default shape, and the least fussy one.
 
 ### Multi-machine (M2)
 
-![Multi-machine deployment](diagrams/tech-02-multimachine.svg)
+![Multi-machine deployment](diagrams/en/tech-02-multimachine.svg)
 
 > **The phone → computer hop needs no tunneling at all**: the phone goes through WeChat, the computer
 > long-polls Tencent, and **iLink itself is that ready-made public relay.**
@@ -70,7 +70,7 @@ this is the M1 default shape, and the least fussy one.
 
 ## 3. Package structure and seams
 
-![Package structure and seams](diagrams/tech-03-seams.svg)
+![Package structure and seams](diagrams/en/tech-03-seams.svg)
 
 dsh's split is **"a seam interface package + independent implementation packages"** (`dsh-bash-local`'s
 self-description is literally "the local subprocess implementation of the bash executor seam"). Copied:
@@ -123,7 +123,7 @@ one package can **export several plugin entry points via subpaths** (that's exac
 
 ## 4. The seam contracts
 
-![seam class diagram](diagrams/tech-10-class-seams.svg)
+![seam class diagram](diagrams/en/tech-10-class-seams.svg)
 
 ### Interface signatures (this is the contract — pinned down first)
 
@@ -600,7 +600,7 @@ get from "copying dsh's source"**, so they're recorded separately:
 
 ## 6. Configuration and composition (**semantics** copied from dsh, **file syntax** simplified)
 
-![Config layering](diagrams/tech-04-patch-layers.svg)
+![Config layering](diagrams/en/tech-04-patch-layers.svg)
 
 > ✅ **Landed.** Implementation: `packages/cli/src/config.ts` (overlay semantics) and `boot.ts` (loading).
 
@@ -650,7 +650,7 @@ both do this; the error message names which field is missing and what it's for).
 
 ### How it composes into a runtime at startup
 
-![Boot composition](diagrams/tech-12-boot.svg)
+![Boot composition](diagrams/en/tech-12-boot.svg)
 
 **Three layers of configuration**:
 
@@ -670,21 +670,21 @@ both do this; the error message names which field is missing and what it's for).
 
 ### 1. A normal inbound turn
 
-![Inbound turn sequence](diagrams/tech-05-seq-inbound.svg)
+![Inbound turn sequence](diagrams/en/tech-05-seq-inbound.svg)
 
 The point: **the receive loop is never blocked by the agent**; work is strictly serial + queued; long tasks report progress periodically.
 
 ### 2. Approval
 
-![Approval sequence](diagrams/tech-06-seq-approval.svg)
+![Approval sequence](diagrams/en/tech-06-seq-approval.svg)
 
 ### 3. The approval state machine
 
-![Approval state machine](diagrams/tech-09-state-approval.svg)
+![Approval state machine](diagrams/en/tech-09-state-approval.svg)
 
 ### 4. Cross-device (✅ implemented, see `packages/core/src/route.ts`)
 
-![Cross-device sequence](diagrams/tech-07-seq-multidevice.svg)
+![Cross-device sequence](diagrams/en/tech-07-seq-multidevice.svg)
 
 The core decides the route at its **single seam** (the step that hands the words to an agent):
 **local by default, cross-device only when asked explicitly.**
@@ -751,7 +751,7 @@ breaks midway is deleted; an error beats sending a truncated file as if it were 
 
 ### 5. Receiving images / files (✅ implemented, see `packages/channel-wechat/src/media.mjs`)
 
-![Receiving media sequence](diagrams/tech-08-seq-media.svg)
+![Receiving media sequence](diagrams/en/tech-08-seq-media.svg)
 
 iLink's inbound media is **not a URL but an encrypted CDN credential**; it must be downloaded + decrypted:
 
@@ -885,7 +885,7 @@ problem, not a technical one.
 
 ## 8. Data model
 
-![Data model](diagrams/tech-11-er-state.svg)
+![Data model](diagrams/en/tech-11-er-state.svg)
 
 Everything lands in `~/.butler/state/` (**never in the repo**):
 

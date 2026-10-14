@@ -1,0 +1,54 @@
+%%{init: {"flowchart": {"wrappingWidth": 420}}}%%
+flowchart TB
+    OWNER["The owner · a chat app on their phone<br/>WeChat / Feishu / Telegram · the only user"]
+    WXSRV["Channel servers<br/>WeChat iLink / Feishu / Telegram Bot API<br/>message relay (we don't operate it)"]
+    LLM["Model service<br/>the owner's own key"]
+    OTHER["Another computer · node<br/>runs the agent only, signs in to no channel"]
+
+    subgraph BOX["Your computer · one cordis container (started by butler run)"]
+        direction TB
+        CH["② Conversation layer<br/>channel-wechat / -telegram / -feishu<br/>QR scan or pasted credentials · send/receive · voice · images/files"]
+        SEAMCH["seam-channel · ctx.channel"]
+        CORE["@butler/core<br/>claim ownership · queue · progress updates · self-check · reply"]
+        subgraph L3["③ Capability layer"]
+            direction LR
+            AG["agent backend · pluggable<br/>agent-dsh / agent-exec"]
+            MEM["memory-file · approval-im<br/>memory · asks before acting"]
+        end
+        subgraph L4["④ Device layer"]
+            direction LR
+            LNK["link-lan<br/>link-tailscale<br/>LAN · across networks"]
+        end
+        ST[("state/ · the ⑤ trust layer lands here<br/>owner · token · memory · approvals")]
+    end
+
+    INST["① Connection layer · one line to install<br/>install.command / install.sh<br/>butler init / run / doctor / autostart"]
+
+    OWNER <-->|"talks like a person · sends images · sends files"| WXSRV
+    WXSRV <-->|"receive (long-poll / long connection) / send proactively"| CH
+    CH --> SEAMCH --> CORE
+    CORE --> AG
+    CORE --> MEM
+    CORE --> LNK
+    AG -->|"inference"| LLM
+    LNK <-.->|"commands / results"| OTHER
+    MEM --> ST
+    CORE --> ST
+    INST -.->|"install / start / repair"| CORE
+
+    classDef person fill:#FFE7C2,stroke:#E8A33D,stroke-width:2px,color:#5A3A00
+    classDef core fill:#D6E8FF,stroke:#3D7DE8,stroke-width:2px,color:#0B2E6B
+    classDef seam fill:#EDE0FF,stroke:#8B5CF6,stroke-width:2px,color:#3B1D6E
+    classDef impl fill:#D9F2E3,stroke:#34A853,stroke-width:2px,color:#0B3D1E
+    classDef store fill:#FFF6D6,stroke:#D9A400,stroke-width:2px,color:#5C4400
+    classDef ext fill:#F1F3F5,stroke:#ADB5BD,stroke-dasharray:5 4,color:#343A40
+    class OWNER person
+    class CORE core
+    class SEAMCH seam
+    class INST,CH,AG,MEM,LNK impl
+    class ST store
+    class WXSRV,LLM,OTHER ext
+
+style L3 fill:#FFFFFF,stroke:#ADB5BD,stroke-width:1px
+style L4 fill:#FFFFFF,stroke:#ADB5BD,stroke-width:1px
+style BOX fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px

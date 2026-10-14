@@ -1,0 +1,39 @@
+erDiagram
+    OWNER ||--o{ SESSION : owns
+    DEVICE ||--o{ SESSION : hosts
+    SESSION ||--o{ APPROVAL : produces
+    SESSION ||--o{ AUDIT : records
+    OWNER {
+        string channel
+        string userId
+        datetime boundAt
+    }
+    DEVICE {
+        string id
+        string alias
+        string os
+        string linkType
+        datetime lastSeen
+    }
+    SESSION {
+        string channel
+        string fromId
+        string deviceId
+        string agentSessionId
+    }
+    MEMORY {
+        string key
+        string type
+        json value
+    }
+    APPROVAL {
+        string id
+        string action
+        string decision
+        datetime decidedAt
+    }
+    AUDIT {
+        datetime ts
+        string direction
+        string summary
+    }

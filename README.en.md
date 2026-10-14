@@ -17,10 +17,11 @@ The butler (your computer):  「32 张图，按拍摄月份分成了 5 个文件
                              (32 images, sorted into 5 folders by shooting month. Want to see the list?)
 ```
 
-![Overall architecture](docs/diagrams/arch-00-overview.svg)
+![Overall architecture](docs/diagrams/en/arch-00-overview.svg)
 
-> All diagrams under `docs/diagrams/` are labeled in Chinese. The sources (`.mmd` / `.svg`) are in the
-> repo, so English versions are welcome.
+> The diagrams come in two sets, same pictures and same colors: English labels under
+> `docs/diagrams/en/`, Chinese under `docs/diagrams/`. Edit the `.mmd` sources and run
+> `pnpm diagrams`, which re-renders both.
 
 ## How it works
 
@@ -114,7 +115,7 @@ scripts/               diagram rendering + docs / package-structure checks + mut
 | [ARCH-product.en.md](docs/ARCH-product.en.md) | The five-layer capability model, the user journey, the four core mechanisms, product boundaries |
 | [ARCH-technical.en.md](docs/ARCH-technical.en.md) | Topology, packages and seams, contracts, patch layering, sequence, degradation table |
 | [GLOSSARY.md](docs/GLOSSARY.md) | Chinese↔English term table, the rules translations follow, and a key to the Chinese source comments |
-| [docs/diagrams/](docs/diagrams/) | 18 architecture diagrams (sources and color conventions included), starting with the [overall architecture](docs/diagrams/arch-00-overview.svg) |
+| [docs/diagrams/en/](docs/diagrams/en/) | 18 architecture diagrams with English labels (sources and color conventions included), starting with the [overall architecture](docs/diagrams/en/arch-00-overview.svg) |
 | [CHANNEL-FEISHU.md](docs/CHANNEL-FEISHU.md) | The Feishu access model and permission scopes, the hard limits of long-connection mode, a line-by-line mapping onto `ctx.channel`, a cost estimate; section 13 records the "several IMs at once" conclusion (Chinese only) |
 | [EVIDENCE.en.md](docs/EVIDENCE.en.md) | The acceptance breakdown for every layer, the end-to-end cases, a real install in a clean environment, mutation testing |
 | [seam-channel/README.md](packages/seam-channel/README.md) | Read this to wire up a new IM: contract, examples, the foot-guns we hit |

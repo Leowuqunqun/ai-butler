@@ -11,14 +11,17 @@ bash scripts/render-diagrams.sh tech-03  # 只重渲某一张
 `.svg` 被 [`ARCH-product.md`](../ARCH-product.md) 和 [`ARCH-technical.md`](../ARCH-technical.md)  
 直接引用，GitHub 上能渲染。
 
-> **图里的标注是中文，目前只有这一套。** 四份英文文档（[`README.en.md`](../../README.en.md)、  
-> [`VISION.en.md`](../VISION.en.md)、[`ARCH-product.en.md`](../ARCH-product.en.md)、  
-> [`ARCH-technical.en.md`](../ARCH-technical.en.md)）引用的是同一批图，  
-> 并在文首如实说明了这件事。
+> **两套图：中文在 `docs/diagrams/`，英文在 `docs/diagrams/en/`。**
+> 中文文档引用前一目录；四份英文文档（[`README.en.md`](../../README.en.md)、
+> [`VISION.en.md`](../VISION.en.md)、[`ARCH-product.en.md`](../ARCH-product.en.md)、
+> [`ARCH-technical.en.md`](../ARCH-technical.en.md)）引用 `en/` 下的同名 `.svg`。
 >
-> **为什么不做英文版**：图是漂移最快的东西 —— 设计一改就得重画。  
-> 复制 18 张等于把维护面积翻倍，收益却不如下面这句大：  
-> **欢迎只补最常被看到的那一两张。** 改 `.mmd`、重渲、提 PR 就行。
+> **两套源码分目录放是有原因的**：`check:docs` 会数 `docs/diagrams` 顶层有几张 `.svg`，
+> 并跟文档里写的「18 张图」对账。英文版放进顶层，那个数会变成 36，两边都得跟着改口径。
+>
+> **英文版是译本，漂移的风险落在它身上。** 图是这套文档里改得最勤的东西，所以：
+> **改了中文 `.mmd`，请把 `en/` 下同名的那份也改掉**，再跑一次渲染脚本（两套一起重渲）。
+> 只改一边不会报错，只会让英文读者看到一张过期的图。
 
 ---
 

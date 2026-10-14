@@ -17,6 +17,7 @@ config.json
 
 # 架构图：文档引用 .svg；.png 只是聊天/预览用的产物，不入库
 docs/diagrams/*.png
+docs/diagrams/en/*.png
 
 # 测试夹具的编译产物
 packages/*/test/.build/

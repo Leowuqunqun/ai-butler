@@ -1,0 +1,28 @@
+flowchart LR
+    subgraph M1["Approval · conservative by default, looser as you go"]
+        A1["Destructive / outward-facing actions<br/>all ask by default"] --> A2["The owner says<br/>'no need to ask for this kind again'"] --> A3["Written to memory<br/>done directly next time"]
+        A4["Timeout = denial<br/>no ask, no action"] -.-> A1
+    end
+    subgraph M2["Memory · understands you better over time"]
+        B1["Preferences<br/>résumés always go in Documents/简历/"]
+        B2["Facts<br/>the working directory is ~/work"]
+        B3["Authorisations<br/>tidying the Downloads folder needs no asking"]
+    end
+    subgraph M3["Proactive · from answering to running the house"]
+        C1["Scheduled<br/>reads the day's calendar at 8am"]
+        C2["Event-driven<br/>disk full · backup failed"]
+        C3["Long task finished<br/>says so on its own"]
+    end
+    subgraph M4["Multi-device · no implicit guessing"]
+        D1["Aliases<br/>the one at home / the PC at work"]
+        D2["Default = the hub itself"]
+        D3["Offline is stated as offline"]
+    end
+    classDef box fill:#D9F2E3,stroke:#34A853,stroke-width:2px,color:#0B3D1E
+    classDef warn fill:#FFE0E0,stroke:#E5484D,stroke-width:2px,color:#6B0F14
+    class A1,A2,A3,B1,B2,B3,C1,C2,C3,D1,D2,D3 box
+    class A4 warn
+style M1 fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px
+style M2 fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px
+style M3 fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px
+style M4 fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px

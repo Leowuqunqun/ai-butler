@@ -1,0 +1,66 @@
+<!doctype html>
+<!-- 仓库的社交预览图（GitHub Settings → Social preview 那一张）。
+     GitHub 没有提供上传它的 API，只能手工在仓库设置里传渲染出来的 PNG。
+     改这个文件后重新出图（尺寸必须正好 1280×640）：
+
+       "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --disable-gpu \
+         --hide-scrollbars --force-device-scale-factor=1 --window-size=1280,640 \
+         --screenshot=docs/images/social-preview.png "file://$PWD/docs/images/social-preview.html"
+
+     配色沿用 docs/diagrams/README.md 里那套（人 / 核心 / 实现 / 外部）。 -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>AI 管家 · 社交预览图</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1280px; height: 640px; overflow: hidden; display: flex;
+    font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+    background: #F8F9FA; color: #0B2E6B;
+  }
+  .left { width: 672px; padding: 66px 0 58px 72px; display: flex; flex-direction: column; }
+  h1 { font-size: 74px; letter-spacing: 3px; }
+  h1 .en { font-size: 25px; color: #ADB5BD; margin-left: 18px; letter-spacing: 1px; font-weight: 400; }
+  .lead { font-size: 29px; line-height: 1.55; color: #343A40; margin-top: 28px; }
+  .chips { margin-top: 34px; display: flex; gap: 14px; }
+  .chip {
+    background: #D6E8FF; border: 2px solid #3D7DE8; border-radius: 999px;
+    padding: 10px 26px; font-size: 24px; color: #0B2E6B;
+  }
+  .foot { margin-top: auto; font-size: 19px; color: #868E96; white-space: nowrap; }
+  .right {
+    flex: 1; background: #FFFFFF; border-left: 1px solid #E9ECEF;
+    padding: 56px 56px 56px 52px; display: flex; flex-direction: column; justify-content: center; gap: 26px;
+  }
+  .who { font-size: 19px; color: #868E96; margin-bottom: 9px; }
+  .bubble { font-size: 24px; line-height: 1.45; padding: 17px 23px; border-radius: 18px; max-width: 460px; }
+  .me { background: #FFE7C2; border: 2px solid #E8A33D; color: #5A3A00; align-self: flex-end; border-bottom-right-radius: 6px; }
+  .it { background: #D9F2E3; border: 2px solid #34A853; color: #0B3D1E; align-self: flex-start; border-bottom-left-radius: 6px; }
+  .muted { font-size: 19px; color: #ADB5BD; margin-top: 4px; white-space: nowrap; }
+</style>
+</head>
+<body>
+  <div class="left">
+    <h1>AI 管家<span class="en">AI Butler</span></h1>
+    <div class="lead">在聊天软件里遥控你自己的电脑。<br>你说要什么，它自己去找、去改、去办。</div>
+    <div class="chips">
+      <span class="chip">微信</span>
+      <span class="chip">飞书</span>
+      <span class="chip">Telegram</span>
+    </div>
+    <div class="foot">github.com/Leowuqunqun/ai-butler　·　MIT　·　Node ≥ 20</div>
+  </div>
+  <div class="right">
+    <div>
+      <div class="who">你 · 手机上的聊天软件</div>
+      <div class="bubble me">把桌面那堆图按日期整理一下</div>
+    </div>
+    <div>
+      <div class="who">管家 · 你自己那台电脑</div>
+      <div class="bubble it">32 张图，按拍摄月份分成了 5 个文件夹。要看看清单吗？</div>
+    </div>
+    <div class="muted">不需要内网穿透　·　不需要公网服务器　·　key 用你自己的</div>
+  </div>
+</body>
+</html>

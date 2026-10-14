@@ -7,11 +7,11 @@ flowchart LR
         SP["seam-approval<br/>ctx.approval"]
         SM["seam-memory<br/>ctx.memory"]
     end
-    subgraph IMPL["实现包 ｜ 继承基类，default 导出即插件（虚线那张是候选，其余全部已落地）"]
+    subgraph IMPL["实现包 ｜ 继承基类，default 导出即插件（全部已落地，没有候选）"]
         direction TB
         CW["channel-wechat"]
         CT["channel-telegram"]
-        CF["channel-feishu（候选）"]
+        CF["channel-feishu"]
         AD["agent-dsh"]
         AE["agent-exec"]
         LL["link-lan"]
@@ -22,7 +22,7 @@ flowchart LR
     CORE["@butler/core<br/>cordis 容器 · patch 加载 · 事件总线"]
     CW --> SC
     CT --> SC
-    CF -.-> SC
+    CF --> SC
     AD --> SA
     AE --> SA
     LL --> SL
@@ -36,11 +36,11 @@ flowchart LR
     SM --> CORE
     classDef seam fill:#EDE0FF,stroke:#8B5CF6,stroke-width:2px,color:#3B1D6E
     classDef done fill:#D9F2E3,stroke:#34A853,stroke-width:2px,color:#0B3D1E
+    %% 下面这条虚线灰是留给将来候选包的样式（当前没有候选，所以没人用）
     classDef todo fill:#F1F3F5,stroke:#ADB5BD,stroke-dasharray:5 4,color:#343A40
     classDef core fill:#D6E8FF,stroke:#3D7DE8,stroke-width:2px,color:#0B2E6B
     class SC,SA,SL,SP,SM seam
-    class CW,CT,AD,AE,LL,LT,AI,MF done
-    class CF todo
+    class CW,CT,CF,AD,AE,LL,LT,AI,MF done
     class CORE core
 style SEAM fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px
 style IMPL fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px

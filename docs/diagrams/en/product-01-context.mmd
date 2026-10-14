@@ -1,0 +1,24 @@
+flowchart TB
+    Owner["The owner · a chat app on their phone<br/>WeChat / Feishu / Telegram · the account is the identity"]
+    subgraph TC["Channel servers (we don't operate them)"]
+        WX["WeChat iLink / Feishu / Telegram Bot API<br/>message relay"]
+    end
+    subgraph PC["Your computer (where the butler lives)"]
+        Butler["AI butler<br/>identify · understand · execute · report back"]
+    end
+    LLM["Model service<br/>the owner's own key"]
+    Dev["Other devices<br/>the Mac at home / the PC at work"]
+
+    Owner <-->|"talks like a person · sends images · sends files"| WX
+    WX <-->|"receive (long-poll / long connection) · send proactively"| Butler
+    Butler -->|"inference"| LLM
+    Butler <-.->|"cross-network commands · LAN / Tailscale"| Dev
+
+    classDef person fill:#FFE7C2,stroke:#E8A33D,stroke-width:2px,color:#5A3A00
+    classDef core fill:#D6E8FF,stroke:#3D7DE8,stroke-width:2px,color:#0B2E6B
+    classDef ext fill:#F1F3F5,stroke:#ADB5BD,stroke-dasharray:5 4,color:#343A40
+    class Owner person
+    class Butler,Dev core
+    class WX,LLM ext
+style TC fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px
+style PC fill:#F8F9FA,stroke:#ADB5BD,stroke-width:1px
