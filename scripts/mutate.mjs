@@ -768,6 +768,21 @@ const MUTATIONS = [
       '200–400 行 | **1157 行 / 5 个文件**（第 72 轮量的）—— 低估了约 3 倍',
       '200–400 行 | **1157 行 / 9 个文件**（第 72 轮量的）—— 低估了约 3 倍']],
   },
+  // ⭐ 第 80 轮：给规则 ⑫（`scripts/check-docs.mjs`）配牙。
+  // 第 79 轮把 §五 契约表里两行的 `△` 关掉了，但**没有任何东西拦得住有人把它写回去** ——
+  // 那轮是手工验的（改之前报 2、改之后 0）。这条就是那个"拦得住"：
+  // 把已经定论的那行**重新变成猜测**（往带 `⚙` 标记的行里塞一个 `△`），
+  // witness 是 `check-docs.mjs` 全体 —— 它非零退出（规则 ⑫ 报这一行）就算红了。
+  // ⚠️ 塞的是**带出处标记的那一行**：规则 ⑫ 只管"自报了出处、却报成了猜测"的行，
+  //    往没标记的行里塞 `△` 它**不会**报（那是规则的已知边界，见手册第 79 轮）。
+  {
+    name: '手册第五节的契约行又被写回成"我们的判断"（规则 ⑫ 的牙）',
+    claim: '§五 契约表里带出处标记的行不该含 △ —— 含了就说明这行还是猜测，没人核过',
+    script: 'scripts/check-docs.mjs',
+    files: [['docs/CHANNEL-FEISHU.md',
+      '`map.ts` 的 `encodeContext` 把 `{ chatId, messageId, threadId }` 编成 JSON 交给接缝',
+      '`map.ts` 的 `encodeContext` 把 `{ chatId, messageId, threadId }` 编成 JSON 交给接缝 △']],
+  },
 ];
 
 // ─────────────────────────── 参数 ───────────────────────────
@@ -803,7 +818,10 @@ const matchedOnly = picked.length; // --only 到底匹配上几处（在 --quick
 if (quick) picked = picked.filter((m) => !m.e2e);
 
 if (flag('--list')) {
-  for (const m of picked) console.log(`${m.e2e ? '[e2e]' : '[unit]'} ${m.name}\n       承诺：${m.claim}`);
+  for (const m of picked) {
+    const kind = m.e2e ? '[e2e]' : m.script ? '[script]' : '[unit]';
+    console.log(`${kind} ${m.name}\n       承诺：${m.claim}`);
+  }
   console.log(`\n共 ${picked.length} 处${quick ? '（--quick：跳过了 e2e 那些条）' : ''}`);
   process.exit(0);
 }
@@ -968,6 +986,14 @@ for (const m of picked) {
       // 第 63 轮起，飞书验收手册的离线演练（`scripts/rehearse-feishu-manual.sh`）也在这里当 witness。
       const script = typeof m.e2e === 'string' ? m.e2e : 'scripts/verify-clean-install.sh';
       const r = run('sh', [script]);
+      const bad = [...r.out.matchAll(/❌[^\n]*/g)].map((x) => x[0]);
+      verdict = r.code !== 0 ? 'red' : 'green';
+      note = bad[0] ?? (r.timedOut ? '超时' : `退出码 ${r.code}`);
+    } else if (m.script) {
+      recompile();
+      // ⭐ 第 80 轮：`node <脚本>` 当 witness —— 非零退出码算红，和 e2e 那条同一个判据。
+      // 用它的是 `scripts/check-docs.mjs`（12 族规则 + 69 条夹具，跑一遍 2 秒上下）。
+      const r = run('node', [m.script]);
       const bad = [...r.out.matchAll(/❌[^\n]*/g)].map((x) => x[0]);
       verdict = r.code !== 0 ? 'red' : 'green';
       note = bad[0] ?? (r.timedOut ? '超时' : `退出码 ${r.code}`);
