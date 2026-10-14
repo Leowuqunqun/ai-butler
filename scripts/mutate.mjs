@@ -948,8 +948,8 @@ const MUTATIONS = [
     claim: '④ 以前只报坏消息、不报"看了几条"，于是"指向本仓的完整地址"整体消失它也一声不吭 —— 第 84 轮 §五 那条「>100 MB 要 Range 分片」就是这个形状:规则还在，只是没东西可看了',
     script: 'scripts/check-docs.mjs',
     files: [['scripts/check-docs.mjs',
-      'const SELF_URL_FLOOR = 10;',
-      'const SELF_URL_FLOOR = 99;']],
+      "  selfRepoUrlViolations: { m: 15, f: 10, why: '指向本仓的完整地址' },",
+      "  selfRepoUrlViolations: { m: 15, f: 99, why: '指向本仓的完整地址' },"]],
   },
 
   {
@@ -957,8 +957,8 @@ const MUTATIONS = [
     claim: '规则 ① 原来只报坏消息、不报"看了几条"——和第 86 轮修掉的 ④ 是同一个洞。出包文档里一条相对链接都没有了，它一声不吭',
     script: 'scripts/check-docs.mjs',
     files: [['scripts/check-docs.mjs',
-      'const SHIP_FLOOR = 2;',
-      'const SHIP_FLOOR = 99;']],
+      "  shippedDocViolations: { m: 3, f: 2, why: '出包文档里的相对链接 —— 掉到 0 就说明规则 ① 空了' },",
+      "  shippedDocViolations: { m: 3, f: 99, why: '出包文档里的相对链接 —— 掉到 0 就说明规则 ① 空了' },"]],
   },
 
   {
