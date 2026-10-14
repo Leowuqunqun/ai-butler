@@ -681,6 +681,30 @@ const MUTATIONS = [
     e2e: 'scripts/rehearse-feishu-manual.sh',
     files: [[FEISHU, 'z.union(DM_MODES.map((mode) => z.const(mode)))', 'z.string()']],
   },
+  // 第 66 轮：手册第十二节「跑通的标志」列的那 5 句，现在由演练逐句盯着（两头都要对得上：
+  // 手册那节里有、探针源码里也有一条**打印它**的语句）。下面两条各打掉一个方向。
+  {
+    name: '手册承诺的探针输出：探针不再打印『收到一条消息：』',
+    claim: '手册说跑通的标志里有 `收到一条消息：`，那探针源码里就必须真有一条打印它的语句',
+    pkg: './packages/channel-feishu',
+    e2e: 'scripts/rehearse-feishu-manual.sh',
+    files: [['packages/channel-feishu/probe/smoke.mjs',
+      "console.log('收到一条消息：')",
+      "console.log('收到一条来信：')"]],
+  },
+  {
+    // ⚠️ 这一条是**故意**留成这个形状的：字符串还在文件里，只是退化成一句注释。
+    //    判据要是"grep 得到这个字符串"，它就**照样绿** —— 而探针根本不会再打印它。
+    //    第 66 轮真踩到过这一步：按行号找「长连接已建立。机器人身份：」，第一处命中的
+    //    正是 `smoke.mjs` 第 39 行那句注释（它在解释"这行字会被官方日志淹掉"）。
+    name: '手册承诺的探针输出：只剩注释、没有打印语句（"只 grep 字符串"会放过）',
+    claim: '判据必须是"这句话在一条 console.* 语句里"，不是"文件里出现过这句话" —— 注释里出现过不算',
+    pkg: './packages/channel-feishu',
+    e2e: 'scripts/rehearse-feishu-manual.sh',
+    files: [['packages/channel-feishu/probe/smoke.mjs',
+      'console.log(`长连接已建立。机器人身份：${me.name}（${me.openId}）`);',
+      '// 长连接已建立。机器人身份：……（这条打印被拿掉了，注释还在）']],
+  },
 ];
 
 // ─────────────────────────── 参数 ───────────────────────────
