@@ -176,13 +176,103 @@ function runSelfTest() {
   process.exit(1);
 }
 
+/** 探针规则的夹具（跟 SELF_TEST 一样：改规则就得改这里，改不了说明你改的是承诺） */
+const PROBE_TEST = [
+  { why: '只用官方包和自己的 ./save ⇒ 干净', code: "import { a } from '@larksuite/channel';\nimport { b } from './save.mjs';", want: 0 },
+  { why: '相对路径够到 src ⇒ 漏（绕开包名那条路）', code: "import { map } from '../src/index.ts';", want: 1 },
+  { why: '直接 import 本包 ⇒ 漏', code: "import x from '@butler/channel-feishu';", want: 1 },
+  { why: 'import 本包的子路径 ⇒ 漏', code: "import x from '@butler/channel-feishu/lib/x.js';", want: 1 },
+  { why: 'require 够到 lib ⇒ 漏', code: "const x = require('../lib/index.js');", want: 1 },
+  { why: 'export ... from 够到 src ⇒ 也算', code: "export { map } from '../src/index.ts';", want: 1 },
+  {
+    why: '⚠️ JSDoc 里写着包名、import 干净 ⇒ **不算漏**（判据不是"grep 包名"）',
+    code: "/** @module @butler/channel-feishu/probe */\nimport { a } from '@larksuite/channel';",
+    want: 0,
+  },
+  { why: '被注释掉的 import ⇒ 不算（注释不是代码）', code: "// import x from '../src/index.ts';\nimport { a } from '@larksuite/channel';", want: 0 },
+  { why: '同名的别的包不算（本包名是 @butler/channel-feishu）', code: "import x from '@butler/channel-feishu-extra';", want: 0 },
+];
+
+function runProbeSelfTest() {
+  const bad = PROBE_TEST.map((c) => ({
+    ...c,
+    got: probeLeakViolations(new Map([['probe/smoke.mjs', c.code]]), '@butler/channel-feishu').size,
+  })).filter((c) => c.got !== c.want);
+  if (!bad.length) return;
+  console.error('打包自检：**探针规则自己坏了**（不是仓库里有违规）。\n');
+  for (const c of bad) {
+    console.error(`  ${c.why}：应该 ${c.want} 处，实际 ${c.got} 处`);
+    console.error(`    ${c.code.split('\n').join(' / ')}`);
+  }
+  console.error('\n改法：这是 scripts/check-packages.mjs 里 rawSpecifiersOf / probeLeakViolations 的规则被改动了。');
+  console.error('要是故意放宽/收紧，请把 PROBE_TEST 一起改，并在 docs/CHANNEL-FEISHU.md 里写清楚为什么。');
+  process.exit(1);
+}
+
 if (process.argv.includes('--self-test')) {
   runSelfTest();
-  console.log(`打包自检：规则自检 ${SELF_TEST.length} 条 → ✅ 规则本身是好的`);
+  runProbeSelfTest();
+  console.log(`打包自检：规则自检 ${SELF_TEST.length + PROBE_TEST.length} 条 → ✅ 规则本身是好的`);
   process.exit(0);
 }
 
 runSelfTest(); // 先确认"这把尺子"是好的，再拿它量仓库
+runProbeSelfTest();
+
+/**
+ * 取**所有** import/export/require 的模块名 —— 连相对路径和 `node:` 一起取，
+ * 不做任何过滤。
+ *
+ * ⚠️ 为什么不复用 `runtimeImportsOf`：它回答的是另一个问题（"这个包该声明哪些依赖"），
+ *    所以它**故意丢掉**相对路径和内置模块。而下面那条探针规则问的是"**够到了哪个文件**"，
+ *    相对路径恰恰是主角。两个问题，两个函数；别为了少写十几行把它们揉在一起。
+ * 返回 `Map<"文件:行", 模块名>`。
+ */
+function rawSpecifiersOf(sources) {
+  const out = new Map();
+  for (const [file, text] of sources) {
+    const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
+    const note = (spec, node) => {
+      if (!spec) return;
+      const { line } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
+      out.set(`${file}:${line + 1}`, spec);
+    };
+    const visit = (node) => {
+      if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) note(node.moduleSpecifier.text, node);
+      else if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) note(node.moduleSpecifier.text, node);
+      else if (ts.isCallExpression(node)) {
+        const spec = node.arguments[0];
+        const dyn = node.expression.kind === ts.SyntaxKind.ImportKeyword;
+        const req = ts.isIdentifier(node.expression) && node.expression.text === 'require';
+        if ((dyn || req) && spec && ts.isStringLiteral(spec)) note(spec.text, node);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
+  }
+  return out;
+}
+
+/**
+ * 探针（`<包>/probe/**`）**一行我们自己的代码都不许 import** —— 它是手册里那把"干净的尺子"。
+ *
+ * 手册原话：「它是一把**干净的尺子**：它通了而管家不通，问题一定在我们这层」。
+ * 这句话成立的**唯一前提**就是探针没引我们的代码。哪天有人图省事把适配层的映射 import 进来，
+ * 这条推理会**静默失效** —— 探针和管家一起坏，而那正是它要排除的情况，**别的检查都看不出来**。
+ *
+ * ⚠️ 判据是 **import/require 语句里的模块名**，不是"文件里出现过这个包名"：
+ *    `probe/*.mjs` 的 JSDoc 里就写着 `@module @butler/channel-feishu/probe`（第 67 轮量到），
+ *    拿包名 grep 会当场误报 —— 而"会误报的守卫比没有守卫更糟"。
+ *    `../` 开头的相对路径也算：它绕过包名、直接够到文件系统，一样能破坏这条推理。
+ *    （`./save.mjs` 这种**留在 probe 目录里**的相对引用是正常的，探针本来就该能用它。）
+ */
+function probeLeakViolations(probeSources, pkgName) {
+  const out = new Map();
+  for (const [at, spec] of rawSpecifiersOf(probeSources)) {
+    if (spec === pkgName || spec.startsWith(`${pkgName}/`) || spec.startsWith('../')) out.set(at, spec);
+  }
+  return out;
+}
 
 function checkPackage(dir) {
   const pkgPath = join(root, 'packages', dir, 'package.json');
@@ -276,6 +366,38 @@ for (const dir of readdirSync(pkgRoot)) {
   if (statSync(join(pkgRoot, dir)).isDirectory()) checkPackage(dir);
 }
 
+// ── ④ 探针必须是"干净的尺子"：一行我们自己的代码都不许 import ──
+// 手册拿探针当判据：「它通了而管家不通，问题一定在我们这层」。前提就是它没引我们的代码。
+for (const dir of readdirSync(pkgRoot)) {
+  const pkgDir = join(pkgRoot, dir);
+  const probeDir = join(pkgDir, 'probe');
+  if (!statSync(pkgDir).isDirectory() || !existsSync(probeDir)) continue;
+  const pkg = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf8'));
+  const sources = new Map();
+  for (const rel of walk(probeDir, pkgDir)) {
+    if (!/\.m?js$/.test(rel)) continue;
+    sources.set(rel, readFileSync(join(pkgDir, rel), 'utf8'));
+  }
+  if (!sources.size) continue;
+
+  // ⚠️ 跟上面"依赖声明"那条同理：**取漏了**比"仓库里真有违规"危险得多，因为它是静默的。
+  const rawCount = rawSpecifiersOf(sources).size;
+  if (rawCount === 0) {
+    console.error(`打包自检：**在 ${pkg.name} 的探针里取 import 取漏了**（不是仓库里有违规）。`);
+    console.error('  探针源码里一条 import/require 都没取到，可它显然是要引东西的。');
+    console.error('  rawSpecifiersOf 被改坏了？看 scripts/check-packages.mjs。');
+    process.exit(1);
+  }
+
+  for (const [at, spec] of probeLeakViolations(sources, pkg.name)) {
+    problems.push(
+      `${pkg.name}（packages/${dir}）：探针 ${at} 里 import 了 ${spec}\n` +
+        '       （探针是手册里那把"干净的尺子"——它通了而管家不通，才能说明问题在我们这层。' +
+        '探针一旦引了我们的代码，这条推理就静默失效了：探针和管家一起坏，正好是它要排除的情况）',
+    );
+  }
+}
+
 if (problems.length) {
   console.error(`打包自检没过（查了 ${checked} 个包）：\n`);
   for (const p of problems) console.error(`  ✗ ${p}`);
@@ -284,4 +406,7 @@ if (problems.length) {
   process.exit(1);
 }
 
-console.log(`打包自检：${checked} 个包 → ✅ 入口都在、编译产物一个不漏、运行时依赖都声明了（规则自检 ${SELF_TEST.length} 条通过）`);
+console.log(
+  `打包自检：${checked} 个包 → ✅ 入口都在、编译产物一个不漏、运行时依赖都声明了、探针没引我们自己的代码` +
+    `（规则自检 ${SELF_TEST.length + PROBE_TEST.length} 条通过）`,
+);
