@@ -733,6 +733,23 @@ const MUTATIONS = [
       '  async setTyping(_to: string, _on: boolean, _opts?: SendOpts): Promise<void> {}',
       '  async setTyping(_to: string, _on: boolean, _opts?: SendOpts): Promise<void> {\n    void this.handlers.length;\n  }']],
   },
+  // 第 72 轮：手册第六节那张「估算 vs 现实」表是**数值承诺**（src 多少行 / 多少文件、
+  // 测试多少行）。它不是链接、不是命令，出处体检也不管散文里的数 —— 第 72 轮一看，
+  // 它早就过期了（写 901 行 / 6 个文件，实际 1157 / 5），而没有任何东西会提醒。
+  // `packages/channel-feishu/test/scale.mjs` 给能精确量的两样配了守卫：
+  // 行数在**两成半**容差内，文件数**精确**比对。两条各打一次。
+  {
+    name: '手册第六节的数值承诺过期：src 行数被写成了另一个数',
+    claim: '手册第六节说 src 有多少行，那个数得和仓库里的真数对得上（两成半容差内）',
+    tests: ['packages/channel-feishu/test/scale.mjs'],
+    files: [['docs/CHANNEL-FEISHU.md', '**1157 行 / 5 个文件**', '**200 行 / 5 个文件**']],
+  },
+  {
+    name: '手册第六节的数值承诺过期：src 的文件数不对（这条是精确比对）',
+    claim: '手册第六节说 src 有几个文件，文件数不会自己变，所以逐字要对',
+    tests: ['packages/channel-feishu/test/scale.mjs'],
+    files: [['docs/CHANNEL-FEISHU.md', '**1157 行 / 5 个文件**', '**1157 行 / 9 个文件**']],
+  },
 ];
 
 // ─────────────────────────── 参数 ───────────────────────────
