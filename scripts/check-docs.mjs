@@ -120,9 +120,14 @@ function shippedDocViolations(relFile, text, shipped) {
   const parts = relFile.split('/'); // packages/<name>/…
   const pkgRoot = `${parts[0]}/${parts[1]}`;
   const hits = [];
+  // ⭐ 第 88 轮：这一族原来**只报坏消息**，不报"看了几条" —— 和第 86 轮修掉的 ④ 是同一个洞。
+  //    `examined` 数的是"它真的给出了判决的链接"：完整地址与同文件锚点直接跳过、不算看过。
+  //    ⭐ 于是"出包文档里一条相对链接都没有了"这件事**终于说得出来**了。
+  let examined = 0;
   for (const m of text.matchAll(/!?\[[^\]]*\]\(([^)\s]+)\)/g)) {
     const raw = m[1];
     if (/^(https?:|mailto:|#)/.test(raw)) continue; // 完整地址/锚点：读者够得着
+    examined++;
     const path = raw.split('#')[0];
     if (!path) continue;
     const target = normalize(join(dirname(relFile), path)); // 相对仓库根
@@ -132,7 +137,7 @@ function shippedDocViolations(relFile, text, shipped) {
     }
     if (!shipped.has(target.slice(pkgRoot.length + 1))) hits.push(raw);
   }
-  return hits;
+  return { hits, examined };
 }
 
 /**
@@ -686,13 +691,13 @@ function contractGuessViolations(text) {
 }
 
 const SELF_TEST = [
-  { why: '指向别的包（npm 读者够不着）', file: 'packages/a/README.md', link: '../b/README.md', shipped: ['README.md'], want: 1 },
-  { why: '指向仓库根（更够不着）', file: 'packages/a/README.md', link: '../../docs/x.md', shipped: ['README.md'], want: 1 },
-  { why: '同包内、也出包', file: 'packages/a/README.md', link: 'docs/x.md', shipped: ['README.md', 'docs/x.md'], want: 0 },
-  { why: '同包内、没出包（test/ 里的）', file: 'packages/a/README.md', link: 'test/x.ts', shipped: ['README.md'], want: 1 },
-  { why: '完整地址永远算够得着', file: 'packages/a/README.md', link: 'https://github.com/o/r/blob/main/docs/x.md', shipped: ['README.md'], want: 0 },
-  { why: '同文件内的锚点不算跨文件', file: 'packages/a/README.md', link: '#小节', shipped: ['README.md'], want: 0 },
-  { why: '子目录里的 md 也按包根算', file: 'packages/a/docs/y.md', link: '../../b/z.md', shipped: ['docs/y.md'], want: 1 },
+  { why: '指向别的包（npm 读者够不着）', file: 'packages/a/README.md', link: '../b/README.md', shipped: ['README.md'], want: 1, examined: 1 },
+  { why: '指向仓库根（更够不着）', file: 'packages/a/README.md', link: '../../docs/x.md', shipped: ['README.md'], want: 1, examined: 1 },
+  { why: '同包内、也出包', file: 'packages/a/README.md', link: 'docs/x.md', shipped: ['README.md', 'docs/x.md'], want: 0, examined: 1 },
+  { why: '同包内、没出包（test/ 里的）', file: 'packages/a/README.md', link: 'test/x.ts', shipped: ['README.md'], want: 1, examined: 1 },
+  { why: '完整地址永远算够得着', file: 'packages/a/README.md', link: 'https://github.com/o/r/blob/main/docs/x.md', shipped: ['README.md'], want: 0, examined: 0 },
+  { why: '同文件内的锚点不算跨文件', file: 'packages/a/README.md', link: '#小节', shipped: ['README.md'], want: 0, examined: 0 },
+  { why: '子目录里的 md 也按包根算', file: 'packages/a/docs/y.md', link: '../../b/z.md', shipped: ['docs/y.md'], want: 1, examined: 1 },
 ];
 
 /** 本仓地址那条的承诺：blob 要指向文件、tree 要指向目录，都得真在 */
@@ -978,7 +983,8 @@ function runSelfTest() {
   const bad = [
     ...SELF_TEST.map((c) => ({
       ...c,
-      got: shippedDocViolations(c.file, `[t](${c.link})`, new Set(c.shipped)).length,
+      got: shippedDocViolations(c.file, `[t](${c.link})`, new Set(c.shipped)).hits.length,
+      gotExamined: shippedDocViolations(c.file, `[t](${c.link})`, new Set(c.shipped)).examined,
       shown: `${c.file} → ${c.link}`,
     })),
     ...URL_TEST.map((c) => ({
@@ -1167,6 +1173,7 @@ for (const file of files) {
 // ───────────── ④ 出包文档里指向没出包的东西（范围从 package.json 现算） ─────────────
 
 let shippedBad = 0;
+let shipExamined = 0; // ⭐ 第 88 轮：这一族原来只报坏消息，不报“看了几条”
 const shippedCache = new Map();
 for (const file of files) {
   const m = /^packages\/([^/]+)\//.exec(file);
@@ -1176,13 +1183,27 @@ for (const file of files) {
   const shipped = shippedCache.get(pkgRoot);
   if (!shipped.has(relative(pkgRoot, file))) continue; // 这份 md 自己就不出包（比如 test/ 里的）
   const text = readFileSync(resolve(ROOT, file), 'utf8');
-  for (const raw of shippedDocViolations(file, text, shipped)) {
+  const { hits: shipHits, examined: shipSeen } = shippedDocViolations(file, text, shipped);
+  shipExamined += shipSeen;
+  for (const raw of shipHits) {
     problems.push(
       `❌ 出包文档里指向了没出包的东西  ${file}\n       → ${raw}\n` +
         '       （npm 页面上的相对链接是按"包"解析的，跨包的相对路径到了那边就是死链；换完整地址）',
     );
     shippedBad++;
   }
+}
+// ⭐ 第 88 轮实测：**3 条**（出包文档里剩下的相对链接）。
+// 阈值取 2 —— 留一条余地，但**不许这个形状整体消失**：
+// ⭐ 到了 0 就说明规则 ① 已经没东西可看了 —— 和第 86 轮修掉的 ④ 是同一个洞。
+const SHIP_FLOOR = 2;
+if (!problems.length && shipExamined < SHIP_FLOOR) {
+  problems.push(
+    `❌ 规则 ① 只看了 ${shipExamined} 条"出包文档里的相对链接"，太少\n` +
+      '       → 第 88 轮实测是 3 条。旧版这一族**只报坏消息**，' +
+      '于是"出包文档里一条相对链接都没了"它一声不吱。' +
+      '检查 shippedSetOf 与这条 matchAll。',
+  );
 }
 
 // ───────────── ⑤ 指向本仓的完整地址，路径得真在（第 41 轮写下的规矩，第 50 轮做成检查） ─────────────
@@ -1570,7 +1591,7 @@ if (problems.length) console.log(`${problems.join('\n')}\n`);
 console.log(
   `检查 ${files.length} 个 md、${checked} 个链接/图片、${pairs.length} 对双语 → ` +
   (problems.length
-    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}、本仓地址 ${selfUrlBad}（看了 ${selfUrlExamined} 条）、照抄命令 ${cmdBad}、出处 ${provBad}、用户面数字 ${staleBad}、包树 ${treeBad}、时间锚 ${anchorBad}、契约定论 ${contractBad}、契约谁做的 ${whoBad}、引用指得到 ${citeBad}、外部量测 ${externalBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
-    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着、本仓地址指得到（看了 ${selfUrlExamined} 条）、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、用户面文档里的数跟仓库对得上（看了 ${staleExamined} 条）、架构包树中英对齐（看了 ${treeExamined} 行）、精确数都带时间锚（看了 ${anchorExamined} 条）、量别人仓库的数都带日期（看了 ${externalExamined} 条）、§五 契约行都定了论（看了 ${contractExamined} 条）、都写了"实际怎么做的"（看了 ${whoExamined} 行）、代码引用都指得到（看了 ${citeExamined} 处）、双语结构对齐（规则自检 ${RULE_FIXTURE_COUNT()} 条通过）`),
+    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}（看了 ${shipExamined} 条）、本仓地址 ${selfUrlBad}（看了 ${selfUrlExamined} 条）、照抄命令 ${cmdBad}、出处 ${provBad}、用户面数字 ${staleBad}、包树 ${treeBad}、时间锚 ${anchorBad}、契约定论 ${contractBad}、契约谁做的 ${whoBad}、引用指得到 ${citeBad}、外部量测 ${externalBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
+    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着（看了 ${shipExamined} 条）、本仓地址指得到（看了 ${selfUrlExamined} 条）、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、用户面文档里的数跟仓库对得上（看了 ${staleExamined} 条）、架构包树中英对齐（看了 ${treeExamined} 行）、精确数都带时间锚（看了 ${anchorExamined} 条）、量别人仓库的数都带日期（看了 ${externalExamined} 条）、§五 契约行都定了论（看了 ${contractExamined} 条）、都写了"实际怎么做的"（看了 ${whoExamined} 行）、代码引用都指得到（看了 ${citeExamined} 处）、双语结构对齐（规则自检 ${RULE_FIXTURE_COUNT()} 条通过）`),
 );
 process.exit(problems.length ? 1 : 0);

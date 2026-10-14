@@ -952,6 +952,15 @@ const MUTATIONS = [
       'const SELF_URL_FLOOR = 99;']],
   },
 
+  {
+    name: '① 出包文档的链接一条都没扫到(把 SHIP_FLOOR 抬到 99)',
+    claim: '规则 ① 原来只报坏消息、不报"看了几条"——和第 86 轮修掉的 ④ 是同一个洞。出包文档里一条相对链接都没有了，它一声不吭',
+    script: 'scripts/check-docs.mjs',
+    files: [['scripts/check-docs.mjs',
+      'const SHIP_FLOOR = 2;',
+      'const SHIP_FLOOR = 99;']],
+  },
+
 ];
 
 
