@@ -261,10 +261,14 @@ M-c 引导页 / `doctor` / 文档 / GETTING-STARTED。
 
 | 项目 | Star（2026-10-14 从 GitHub API 读的） | 形态 |
 | --- | --- | --- |
-| [lark-coding-agent-bridge](https://github.com/zarazhangrui/lark-coding-agent-bridge) | 2691 | TS，`@larksuite/channel` + **WebSocket 长连接**，流式卡片、per-chat 会话 |
+| [lark-coding-agent-bridge](https://github.com/zarazhangrui/lark-coding-agent-bridge) | 2692 | TS，`@larksuite/channel` + **WebSocket 长连接**，流式卡片、per-chat 会话 |
 | [botmux](https://github.com/deepcoldy/botmux) | 1638 | TS，官方 node-sdk，每个 DM / 群 / 话题一个 CLI 会话 |
-| [koishi](https://github.com/koishijs/koishi) | 6250 | 用 `@satorijs/adapter-lark` |
+| [koishi](https://github.com/koishijs/koishi) | 6250 | 用 `@satorijs/adapter-lark`（⚠️ 那是**另一个包**，不在 koishi 核心里 —— 第 81 轮查过：koishi 仓库自己 26 个依赖里没有它，而这个包真的存在，npm 上 3.12.6、repo 是 `satorijs/satori`） |
 | [dsh-lark](https://github.com/omdsh-dev/dsh-lark) | 56 | **DSH 飞书插件**，`@larksuite/channel` —— 与本项目形态最接近：它也是"扫码建应用 + 长连接 + 不需要公网" |
+
+⭐ 表里那几个数字，可以用 `pnpm check:external` 对着 GitHub 重读一遍（第 81 轮加的，见第十一节）。
+它是**手动**命令，**没挂进 CI** —— 理由在那一节里：网络依赖会让体检随机飘，而一个会误报的守卫比没有更糟。
+⚠️ 它只管**那几个数字**；「形态」那一列说了什么，机器管不了，只能人读（第 81 轮逐条读过一遍）。
 
 `dsh-lark` 值得单独看一眼：它的做法（**终端显示二维码 → 飞书扫码完成应用创建**）说明
 "让用户不碰开发者后台"是可行的 —— 如果成立，飞书这条通道的引导体验可以做到和微信扫码一样轻。
@@ -3729,6 +3733,111 @@ probe  repr: "    for (const m of picked) console ..."   ← 我写了 4 个
 - ⚠️ **没量**不带出处标记的那几行契约（`start`/`stop`、`sendText`、`sendFile`、`opts.quote`、
   `fromId`、`text`、`files`、`setTyping`），以及 `sendText` 的「≤150 KB」、
   `files` 的「>100 MB 要 Range 分片」两个数。
+
+### 第 81 轮：§八 的「形态」列 —— 四行里一行有数漂了，而日期锚本来就管不着它
+
+第 77 轮核了 §八 那张参考实现表的 Star 和体量，第 78、79 轮**都把它列进候选却没做**。
+这轮是第四次，做掉了。
+
+#### 逐条对照的结果：四行里三行半是准的
+
+| 行 | 手册说的「形态」 | 第 81 轮查到的 |
+| --- | --- | --- |
+| `lark-coding-agent-bridge` | TS，`@larksuite/channel` + WebSocket 长连接 | ✅ `package.json` 里就是 `@larksuite/channel` `^0.6.0`，语言 TypeScript |
+| `botmux` | TS，官方 node-sdk | ✅ `@larksuiteoapi/node-sdk` `^1.64.0` —— ⭐ "官方 node-sdk"指的是**这个包**，对得上 |
+| `koishi` | 用 `@satorijs/adapter-lark` | ⚠️ 这句**对，但容易被读错** —— 见下 |
+| `dsh-lark` | DSH 飞书插件，`@larksuite/channel` | ✅ `@larksuite/channel` `^0.4.1` |
+
+顺带把 `dsh-lark` 那一整段也核了（它也是"别人家的数"）：**65 个 `.ts` 文件、合计 1096 KB、
+`src/` 下 37 个、`tests/plugin.spec.ts` 197 KB、`src/bridge.ts` 134 KB** ——
+⭐ **五个数逐字命中**，连点名的 `cards.ts` / `provision.ts` / `sessions.ts` / `workspace.ts` /
+`model.ts` / `runtime.ts` 六块也都在（58 / 54 / 25 / 15 / 14 / 13 KB）。
+第 287 行那句「它是 **BSD-3-Clause**，与 MIT 兼容」也核了：GitHub API 报的就是 `BSD-3-Clause`。
+
+⚠️ **`koishi` 那行的毛病**：koishi 仓库自己 **26 个依赖里没有** `@satorijs/adapter-lark`
+（我一开始以为抓到一个错）。但转过去查那个包 —— **它真的存在**（npm 上 `3.12.6`，
+仓库是 `satorijs/satori`）。所以这句说的是**生态里接飞书要走它**，不是"koishi 核心自带它"。
+⭐ 一句真话，但**主语省略得让人会读错**，这轮补了半句说清它是另一个包。
+
+#### ⭐⭐ 真正的发现：日期锚只管"当时读过"，**不管数还是不是那个数**
+
+表头写着「Star（**2026-10-14** 从 GitHub API 读的）」—— 而今天**就是** 2026-10-14。
+`check-docs.mjs` 的规则 ⑪ 管的正是"量别人家的数要带日期"，✅ 它一直在岗。
+
+可这轮重读发现：⭐ **`lark-coding-agent-bridge` 已经是 2692，手册写着 2691。**
+日期是今天，数却不新 —— 因为**那个数在表头那天之后又涨了 1**，而**没有任何东西**看着它。
+
+> ⭐ 日期锚保证的是"**当时读过**"，不是"**数还对**"。这两件事都得有人管，**但管法不一样**：
+> 日期锚是**离线**能查的（规则 ⑪ 就干这个）；数的对错**必须联网**。
+
+#### 所以：**没有**给 Star 数配自动守卫，而是给了**一条命令 + 一份规程**
+
+先摆事实：`scripts/check-docs.mjs` 现在是**纯离线**的 —— 全文件 `fetch(` 出现 **0 次**。
+要让它去核 Star，就得往仓库的体检里塞进**第一个网络依赖**：
+
+- CI 会受 GitHub API 的**可用性**摆布；
+- 未认证限流**按 IP 算、60 次/小时**，共享 runner 上说不准（写脚本时实测：不带 token 跑 4 个仓库没问题，
+  但"现在没问题"不等于"每次都没问题"）；
+- 于是一道**会随机变红**的闸门就装好了。
+
+⚠️ 这仓库第 70 轮起的老规矩：**一个会误报的守卫，比没有守卫更糟。** 所以这轮**不装那道闸门**。
+
+装的是这个：`scripts/check-external.mjs` + `pnpm check:external`（第 81 轮新的第 12 个 root script）。
+
+- 它从手册 §八 那张表里**读出来**项目、链接和写着的那几个数（解析器是纯函数）；
+- 打 GitHub API 比对，**不一致就退出码 1**；
+- 有 `GITHUB_TOKEN` / `GH_TOKEN` 就用（限流放宽到 5000/小时），没有也能跑；
+- 带 `--self-test`（7 条夹具，**离线**，不联网那半截不进自检）；
+- ⭐ **刻意不挂 CI**：它是"**能手动跑的一条命令**"，不是闸门。
+
+⭐ 这一轮的两个控制：
+
+| 动什么 | 期望 | 结果 |
+| --- | --- | --- |
+| 手册写 **2691**（旧数） | 退出码 1 | ✅ 1，且指名道姓报 `2691 → 2692` |
+| 手册改成 **2692**（新数） | 退出码 0 | ✅ 0，四行全 ✓ |
+| 还原 | 逐字节一致 | ✅ |
+
+#### ⚠️ 我在这轮又踩了第 77 轮修过的那个坑
+
+解析器第一版写的是：
+
+```js
+const start = text.indexOf('\n## 八、');   // ← 要求这一行前面有换行
+```
+
+⭐ 于是"文本正好以 `## 八、` 开头"时它返回 **-1**，整个表解析成**空**。
+**第 77 轮给规则 ⑪ 修过一模一样的坑**（`'\n## 十一、'` → `/^## 十一、/m`），
+我在一个**新文件**里又写了一遍 —— 而且**是自检夹具当场拦下的**（3 条红）。
+
+> ⭐ 夹具喂的正是"以这一节开头"那种文本；真人手写时容易漏掉那种情况。
+> **同一个坑换个文件再踩一次，是夹具把它变成了"改一下"而不是"上线后才发现"。**
+
+⚠️ 另外还栽了一个**测量**上的坑：第一次测退出码用了 `node … | sed`，于是 `$?` 拿到的是
+**`sed` 的**退出码 —— 报了个 `退出码=0`，差点让我以为"漂了也不报错"。
+⭐ 读退出码别过管道；这一条和"`&&` 链藏失败"是同一族。
+
+#### 没做的 / 没验的
+
+- ⚠️ ⚠️ **「形态」那一列仍然只是人工读过的，没有守卫。** `check:external` 只管**数字** ——
+  它**读不动**「TS，官方 node-sdk，每个 DM / 群 / 话题一个 CLI 会话」这种话里的对错。
+  这轮是我一行行对着 `package.json` 和仓库树读的。⭐ 下次谁改了这一列，**不会有东西喊**。
+  （能守的那一半——"量别人的数要带日期"——规则 ⑪ 一直守着。）
+- ⚠️ **`check:external` 不在 CI 里**，这是**有意**的（见上）。代价是：**它不会自己跑**，
+  得有人想起它。⭐ 一条"要人想起"的命令，价值全靠**写在表边上**（这轮把提示放进了 §八 表格正下方）。
+- ⚠️ **`botmux` 的「每个 DM / 群 / 话题一个 CLI 会话」没核到**：`package.json` 里能确认它用官方
+  node-sdk，但"一个会话一个 CLI 会话"是**设计断言**，得读它的 README/源码才知道。这轮只核了依赖。
+- ⚠️ **`lark-coding-agent-bridge` 的「WebSocket 长连接、流式卡片、per-chat 会话」里，只有
+  `@larksuite/channel` 那半句核了** —— 后半句同样是设计断言。
+- ⚠️ **没量**不带出处标记的那几行契约（`start`/`stop`、`sendText`、`sendFile`、`opts.quote`、
+  `fromId`、`text`、`files`、`setTyping`），以及 `sendText` 的「≤150 KB」、
+  `files` 的「>100 MB 要 Range 分片」。⭐ 两轮都记着它了。
+- ⚠️ **`check-external.mjs` 没进变异清单，这是有意选的**：它第 80 轮刚拿到 `script:` 这种
+  witness，本来可以挂上去。**没挂的两个理由**：① `mutate` 的 `script:` 是 `node <脚本>`、
+  **不带参数**，而它的离线自检在 `--self-test` 那个分支里，挂上去等于每次真去联网；
+  ② 就算能挂，变异体检就会**依赖网络** —— 和上一条拒绝它的理由**一模一样**。
+  ⭐ 同一个病，不能从后门放进来。要挂的话得先让 `script:` 支持参数，并且把 witness
+  换成"只跑 `--self-test`"的那半截 —— **这是下一轮的活**。
 
 ## 十二、真机验收手册（给"第一枪"用）
 

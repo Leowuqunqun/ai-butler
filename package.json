@@ -16,6 +16,7 @@
     "check:packages": "node scripts/check-packages.mjs",
     "check:scripts": "node scripts/check-scripts.mjs",
     "check:user-facing": "node scripts/check-user-facing.mjs",
+    "check:external": "node scripts/check-external.mjs",
     "rehearse:feishu": "sh scripts/rehearse-feishu-manual.sh",
     "mutate": "node scripts/mutate.mjs",
     "diagrams": "bash scripts/render-diagrams.sh"
