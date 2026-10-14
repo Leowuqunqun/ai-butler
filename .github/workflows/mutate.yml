@@ -1,0 +1,61 @@
+name: 变异体检
+
+# 本仓有一套"变异体检"：`pnpm mutate` 会把每个**变异点**改坏，看**测试有没有喊疼**。
+# 它的输出只有一句话是重点 ——「砸了 N 处：N 处见血，0 处没被任何测试盯住」。
+#
+# 为什么不放进 `ci.yml`：它一次要跑**几十条**变异，每条都要重编译 / 重跑一遍测试或演练，
+# 比 CI 那套（构建 + 四把尺子 + 用例 + 演练）慢一个量级。放在每次 push 上，等待时间会把
+# 人逼到"反正总是绿的、不看了"。所以它按**周**跑：够及时发现"某条断言不知不觉变成了摆设"，
+# 又不占用每次提交的反馈回路。
+#
+# ⚠️ 但它**不是可选装饰**：`pnpm mutate` 在没有变异点"逃脱"时才退 0（见 scripts/mutate.mjs
+#    的退出码约定：0 全部见血 / 1 有绿掉的 / 2 --only 没匹配上 / 3 原仓变异点被改动过）。
+#    所以这个 job 红了就是**真的有断言失灵**，跑一次本地 `pnpm mutate` 能看到是哪一条。
+
+on:
+  schedule:
+    # ⚠️ 故意不写整点：GitHub 自己的文档就说整点是高峰、可能被推迟甚至丢。
+    #    每周日 03:17 UTC（北京时间 11:17）—— 开源仓的定时任务不花额度，但也没必要凑热闹。
+    - cron: '17 3 * * 0'
+  # 手动触发（合并进来的当天想先看一眼，不必等到周日）
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# 上一轮还没跑完就不要再叠一轮（每周一次几乎不会撞上，但手动触发有可能）
+concurrency:
+  group: mutate
+  cancel-in-progress: false
+
+jobs:
+  mutate:
+    runs-on: ubuntu-latest
+    # 本地 macOS 上跑完约半小时。给足余量；真卡住了就让这一步**红着超时**，
+    # 而不是挂在那儿占着 runner、还让人以为"还在跑"。
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      # 跟 ci.yml 同一个道理：本仓 package.json 里有 packageManager 字段，
+      # 这里**故意不写** version，让它装锁文件对应的那个确切版本。
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 只跑一个版本：这里验的是"断言咬不咬得住"，那是**行为**性质，
+          # 跟 Node 小版本基本无关（跨版本那条轴 ci.yml 已经在跑了）。
+          # 选 24 是为了跟本地那份证据同版本，好对账。
+          node-version: 24
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      # ⚠️ 必须构建：变异点分成两类，走 e2e 的那几条要有 lib/ 才能跑得起来
+      #    （演练脚本第一句就是 [ -f "${CLI}" ] || bad "找不到 CLI"）。
+      - name: 构建（TypeScript 包 → lib/）
+        run: pnpm build
+
+      - name: 变异体检（逐条改坏 / 看测试喊不喊疼；0 处"没被任何测试盯住"才算过）
+        run: pnpm mutate
