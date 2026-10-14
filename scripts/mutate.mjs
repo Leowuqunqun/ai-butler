@@ -847,11 +847,14 @@ const MUTATIONS = [
   },
   {
     name: '④ 指向本仓的完整地址在仓库里找不到（把路径改成一个不存在的文件）',
-    claim: '手册里指向本仓 blob/tree 的完整地址，那个路径必须真在仓库里 —— 写错一个字符读者点开就是 404，本地什么都不响',
+    claim: '指向本仓 blob/tree 的完整地址，那个路径必须真在仓库里 —— 写错一个字符读者点开就是 404，本地什么都不响',
     script: 'scripts/check-docs.mjs',
-    files: [['README.md',
-      '→ [**从零到「用微信遥控这台电脑」：三步**](docs/GETTING-STARTED.md)',
-      '→ [**从零到「用微信遥控这台电脑」：三步**](https://github.com/Leowuqunqun/ai-butler/blob/main/docs/NOPE-83.md)']],
+    // ⭐ 第 91 轮补（八）：锚点原来钉在根 README 那行「→ [**从零到…**](…)」上，而第 91 轮补（六）重写 README
+    //   时那行没有了 —— 于是这条变异**锚点对不上、安静地不再变异**（mutate 报：期望 1 处、实际 0 处）。
+    //   本仓的完整地址现在都在包 README 里（实测 15 处），改成钉其中一条。
+    files: [['packages/seam-approval/README.md',
+      '实现见 [`@butler/approval-im`](https://github.com/Leowuqunqun/ai-butler/blob/main/packages/approval-im/README.md)（默认，问进对话里）。',
+      '实现见 [`@butler/approval-im`](https://github.com/Leowuqunqun/ai-butler/blob/main/packages/NOPE-83/README.md)（默认，问进对话里）。']],
   },
   {
     name: '⑤ 安装指令指向了旧版本（用户面文档里的数跟仓库对不上）',
@@ -874,8 +877,10 @@ const MUTATIONS = [
     claim: '会烂的精确数（"19 个离线测试"）必须带上"这是当时的" —— 不然它就成了一个会过期的承诺',
     script: 'scripts/check-docs.mjs',
     files: [['README.md',
-      '| **M0** | 通道层跑通：扫码、收发、附件、引用、可插拔后端 | 当时 19 个离线测试 | ✅ 已完成 |',
-      '| **M0** | 通道层跑通：扫码、收发、附件、引用、可插拔后端 | 19 个离线测试 | ✅ 已完成 |']],
+      // ⭐ 第 91 轮补（八）：行首的 `**M0**` 和那个 `✅` 在重写 README 时去掉了，锚点跟着改 ——
+      //   不改的话这条变异会静默失效。断言的仍然是同一件事：把「当时」拿掉。
+      '| M0 | 通道层跑通：扫码、收发、附件、引用、可插拔后端 | 当时 19 个离线测试 | 已完成 |',
+      '| M0 | 通道层跑通：扫码、收发、附件、引用、可插拔后端 | 19 个离线测试 | 已完成 |']],
   },
   {
     name: '⑧ 量别人仓库的数没带日期（§八 表头那个日期被抹掉）',
@@ -890,8 +895,9 @@ const MUTATIONS = [
     claim: '文档里的相对链接必须指向真存在的东西 —— 本地什么都不响，读者点开才知道',
     script: 'scripts/check-docs.mjs',
     files: [['README.md',
-      '命令行细节在 [`packages/cli`](packages/cli)',
-      '命令行细节在 [`packages/cli`](packages/cli-NOPE-83)']],
+      // ⭐ 第 91 轮补（八）：同一行现在没有反引号了（重写 README 时去掉的），锚点跟着改。
+      '命令行细节在 [packages/cli](packages/cli)。全仓九百多个离线测试，可以现跑现数：`pnpm test`。',
+      '命令行细节在 [packages/cli](packages/cli-NOPE-83)。全仓九百多个离线测试，可以现跑现数：`pnpm test`。']],
   },
   {
     name: '⑪ 中文版开头没有指向英文版的链接（双语互链的那行被拿掉）',
