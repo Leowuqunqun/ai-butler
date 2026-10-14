@@ -326,3 +326,47 @@ test('★ 真实组合：config.json 里 dmMode 拼错 ⇒ 装载**如实报错*
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('★ 真实组合：改 config.json 里的 dmMode **要重启才生效**（手册第十二节承诺的那句）', async () => {
+  // 手册第十二节写着「改完要重启管家才生效」。这句能离线验，所以验一遍 —— 两头都要：
+  //   ① 已经起来的那个实例**不会**自己变（配置是装载时读的，没有热重载）；
+  //   ② 重新装载就变了 —— 那才是"重启"在这个项目里的含义。
+  // 为什么要钉：它是**对用户的承诺**。哪天有人加上热重载，这里会红，手册那句话也就该改了。
+  const dir = mkdtempSync(join(tmpdir(), 'real-dm-restart-'));
+  const file = join(dir, 'config.json');
+  const write = (extra) => writeFileSync(file, JSON.stringify({
+    plugins: [
+      {
+        id: 'channel-feishu',
+        name: '@butler/channel-feishu',
+        config: { home: dir, appId: '', appSecret: '', ...extra },
+      },
+      { id: 'core', name: '@butler/core', config: { workspace: dir, stateFile: join(dir, 'state.json') } },
+    ],
+  }));
+
+  write({});
+  const first = await boot({ configPath: file });
+  let restarted;
+  try {
+    assert.equal(first.ctx.channel.config.dmMode, 'open', '前提：起的时候读的是默认值');
+
+    write({ dmMode: 'allowlist', dmAllowlist: ['ou_x'] });
+    // 给"万一是热重载"留一点时间。真有热重载的话，下面这条断言就会红 —— 那正是它该做的事。
+    await new Promise((r) => setTimeout(r, 300));
+    assert.equal(
+      first.ctx.channel.config.dmMode,
+      'open',
+      '改完文件之后，**已经在跑的那个实例不该自己变** —— 手册说这类改动要重启才生效',
+    );
+
+    // ② 重新装载 = 用户眼里的"重启管家"，这次必须读到新值
+    restarted = await boot({ configPath: file });
+    assert.equal(restarted.ctx.channel.config.dmMode, 'allowlist', '重启之后必须生效，否则手册那半句也错了');
+    assert.deepEqual(restarted.ctx.channel.config.dmAllowlist, ['ou_x']);
+  } finally {
+    await first.dispose();
+    await restarted?.dispose();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
