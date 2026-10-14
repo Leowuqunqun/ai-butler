@@ -530,6 +530,51 @@ function externalMeasuredViolations(text) {
   return { hits, examined };
 }
 
+// ── 规则 ⑫：§五 的契约表里，不该再留计划期的 `△`（第 79 轮） ──
+//
+// 为什么是这条：§五 那张表是**动工前**写的"逐条对到飞书"，所以它带出处标记 ——
+// 这没问题。问题是**代码落地之后没人回头关掉那些 `△`**：
+//   · `opts.contextToken` 写着 `chat_id`（回复时带上 `message_id`）`△`；
+//   · `InboundMessage.quote` 写着"**要么**多调一次取原话，**要么**只说明在回某条"`△`。
+// 第 79 轮对着 `packages/channel-feishu` 读了一遍：两条**都能定论了** ——
+// 第一条猜对了（`map.ts` 的 `encodeContext` 编的就是 `{chatId, messageId, threadId}`），
+// 第二条代码**选了第一个分支**（`fetchQuote` 真去 `fetchMessage` 取原话）。
+// ⭐ 而**同一张表里的 `check()` 行早就回头关掉了**（标着 `⚙ 实际怎么做的`）——
+//    范式就在同一张表里，旁边两行没跟着改。这是第 76/77/78 轮那一族的又一次：
+//    **一处改对了，旁边的没跟上**。
+//
+// 规则：`docs/CHANNEL-FEISHU.md` 的 **§五 契约表**里，带出处标记的表格行不许是 `△推断`。
+// `△` 的含义是"这是我们的判断"（手册开头定义的）—— 契约行到了代码落地之后还留着它，
+// 就等于**把已经能查证的事继续标成猜测**（读者会以为没人核过）。
+// ⚠️ 只管 §五 那张表（`## 五、` 到 `**三个真问题**` 之间）：
+//    · 手册别处的 `△` 是**合法的**（第 60 行"手机号能免费建团队"、第 308/309 行
+//      "长连接有没有套餐门槛"—— 那些到代码落地也查不了，留着才对）；
+//    · 记录里（§十一 起）也会引述 `△`，那儿不归这条管（和规则 ⑪ 同一个道理）。
+// 范围假设：`**三个真问题**` 这个短语在手册里**第一次**出现就在 §五 表后面。
+const CONTRACT_REGION_START = '## 五、';
+const CONTRACT_REGION_END = '**三个真问题**';
+const CONTRACT_MARK = /✓官方|⚙|△|\?未核实/;
+
+function contractGuessViolations(text) {
+  const hits = [];
+  let examined = 0;
+  const a = text.indexOf(CONTRACT_REGION_START);
+  if (a < 0) return { hits, examined }; // 没有这一节就没什么可看的
+  const b = text.indexOf(CONTRACT_REGION_END, a);
+  const region = b < 0 ? text.slice(a) : text.slice(a, b);
+  for (const line of region.split('\n')) {
+    const t = line.trim();
+    if (!t.startsWith('|')) continue;
+    if (!CONTRACT_MARK.test(t)) continue;
+    examined++;
+    if (!t.includes('△')) continue;
+    hits.push({
+      why: `§五 契约行还挂着计划期的 △（代码落地后该定论了）：${t.slice(0, 70)}`,
+    });
+  }
+  return { hits, examined };
+}
+
 const SELF_TEST = [
   { why: '指向别的包（npm 读者够不着）', file: 'packages/a/README.md', link: '../b/README.md', shipped: ['README.md'], want: 1 },
   { why: '指向仓库根（更够不着）', file: 'packages/a/README.md', link: '../../docs/x.md', shipped: ['README.md'], want: 1 },
@@ -771,8 +816,53 @@ const EXTERNAL_TEST = [
   },
 ];
 
+// ── 规则 ⑫ 的夹具
+const CONTRACT_TEST = [
+  {
+    why: '契约行带"我们的判断" → 报（第 79 轮改之前就是这样）',
+    text: '## 五、映射到 `ctx.channel`\n\n| 契约 | 飞书这边怎么做 |\n| --- | --- |\n'
+      + '| `opts.contextToken` | `chat_id`（回复时带上 `message_id`）\u25b3 |\n\n**三个真问题**：',
+    want: 1, examined: 1,
+  },
+  {
+    why: '契约行改成"实际怎么做的"（带来源标记）→ 不报，但仍在看',
+    text: '## 五、映射到 `ctx.channel`\n\n| 契约 | 飞书这边怎么做 |\n| --- | --- |\n'
+      + '| `opts.contextToken` | `chat_id`。\u2699 **实际怎么做的**：`encodeContext` 编 `{chatId, messageId}` |\n\n**三个真问题**：',
+    want: 0, examined: 1,
+  },
+  {
+    why: '⭐ 行里只是**引述**那个字符（在讲它）也照样报 —— 判据是字符本身，不是语义（第 79 轮我栽在这儿）',
+    text: '## 五、映射到 `ctx.channel`\n\n| 契约 | 飞书这边怎么做 |\n| --- | --- |\n'
+      + '| `opts.contextToken` | 当初标的\u25b3 **猜对了**，第 79 轮钉死 |\n\n**三个真问题**：',
+    want: 1, examined: 1,
+  },
+  {
+    why: '契约行不带任何来源标记 → 不看它（这条规则只管"自报了出处、却报成了猜测"的）',
+    text: '## 五、映射到 `ctx.channel`\n\n| 契约 | 飞书这边怎么做 |\n| --- | --- |\n'
+      + '| `setTyping` | 飞书没有"正在输入" → 基类默认 no-op |\n\n**三个真问题**：',
+    want: 0, examined: 0,
+  },
+  {
+    why: '表**外面**的散文带那个字符 → 不算（规则只看表格行）',
+    text: '## 五、映射到 `ctx.channel`\n\n协议是 WebSocket + protobuf 帧 \u25b3/\u2699 —— 自己从零实现不划算。\n\n**三个真问题**：',
+    want: 0, examined: 0,
+  },
+  {
+    why: '⭐ 表**后面**（`**三个真问题**` 之后）的表格行不归这条管 —— 范围就是那张契约表',
+    text: '## 五、映射到 `ctx.channel`\n\n| 契约 | 飞书这边怎么做 |\n| --- | --- |\n\n**三个真问题**：\n\n'
+      + '| 别的表 | 猜的 \u25b3 |',
+    want: 0, examined: 0,
+  },
+  {
+    why: '⭐ 手册别处那些"到代码落地也查不了"的判断（第 60 行那种）在 §五 之外，合法',
+    text: '## 四、能不能做\n\n用手机号免费建一个团队，你就是超管 \u25b3推断：\n\n## 五、映射到 `ctx.channel`\n\n'
+      + '| 契约 | 飞书这边怎么做 |\n| --- | --- |\n| `check()` | \u2699 **实际怎么做的**：一次 `getAppInfo()` |\n\n**三个真问题**：',
+    want: 0, examined: 1,
+  },
+];
+
 const RULE_FIXTURE_COUNT = () =>
-  SELF_TEST.length + URL_TEST.length + CMD_TEST.length + PROV_TEST.length + COUNT_TEST.length + TREE_TEST.length + ANCHOR_TEST.length + EXTERNAL_TEST.length;
+  SELF_TEST.length + URL_TEST.length + CMD_TEST.length + PROV_TEST.length + COUNT_TEST.length + TREE_TEST.length + ANCHOR_TEST.length + EXTERNAL_TEST.length + CONTRACT_TEST.length;
 
 function runSelfTest() {
   const bad = [
@@ -833,6 +923,10 @@ function runSelfTest() {
       const r = externalMeasuredViolations(c.text);
       return { ...c, got: r.hits.length, examined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（有日期）' };
     }),
+    ...CONTRACT_TEST.map((c) => {
+      const r = contractGuessViolations(c.text);
+      return { ...c, got: r.hits.length, examined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（定了论）' };
+    }),
     ...TREE_TEST.map((c) => {
       const r = pairedTreeViolations(c.zh, c.en);
       return { ...c, got: r.hits.length, shown: (r.hits[0] && r.hits[0].why) ?? '（两棵树一致）' };
@@ -846,8 +940,8 @@ function runSelfTest() {
     console.error(`    ${c.shown}`);
   }
   console.error('\n改法：这是 scripts/check-docs.mjs 里 shippedDocViolations / selfRepoUrlViolations /');
-  console.error('sourceTreeCommandViolations / provenanceViolations / staleCountViolations / pairedTreeViolations / unanchoredCountViolations / externalMeasuredViolations 的规则被改动了。');
-  console.error('要是故意放宽/收紧，请把 SELF_TEST / URL_TEST / CMD_TEST / PROV_TEST / COUNT_TEST / TREE_TEST / ANCHOR_TEST / EXTERNAL_TEST 一起改，');
+  console.error('sourceTreeCommandViolations / provenanceViolations / staleCountViolations / pairedTreeViolations / unanchoredCountViolations / externalMeasuredViolations / contractGuessViolations 的规则被改动了。');
+  console.error('要是故意放宽/收紧，请把 SELF_TEST / URL_TEST / CMD_TEST / PROV_TEST / COUNT_TEST / TREE_TEST / ANCHOR_TEST / EXTERNAL_TEST / CONTRACT_TEST 一起改，');
   console.error('并在 docs/CHANNEL-FEISHU.md 里写清楚为什么。');
   process.exit(1);
 }
@@ -1110,6 +1204,28 @@ let externalExamined = 0;
 
 // ───────── ⑩ 精确的"当时多少测试"必须带时间锚（第 75 轮） ─────────
 
+// ───────── ⑫ §五 契约表不该再留计划期的 △（第 79 轮） ─────────
+
+let contractBad = 0;
+let contractExamined = 0;
+{
+  const rel = 'docs/CHANNEL-FEISHU.md';
+  const abs = resolve(ROOT, rel);
+  if (existsSync(abs)) {
+    const r = contractGuessViolations(readFileSync(abs, 'utf8'));
+    contractExamined += r.examined;
+    for (const hit of r.hits) {
+      problems.push(
+        `❌ §五 契约行还是"我们的判断"  ${rel}\n       → ${hit.why}\n` +
+          '       （`△` 的意思是"这是我们的判断"；契约行到了代码落地之后还留着它，' +
+          '读者会以为没人核过。⭐ 同一张表里的 `check()` 行早就改成 `⚙ 实际怎么做的` 了 —— ' +
+          '照那个范式把这一行也定论，见第 79 轮）',
+      );
+      contractBad++;
+    }
+  }
+}
+
 let anchorBad = 0;
 let anchorExamined = 0;
 for (const rel of ANCHOR_FILES) {
@@ -1217,7 +1333,7 @@ if (problems.length) console.log(`${problems.join('\n')}\n`);
 console.log(
   `检查 ${files.length} 个 md、${checked} 个链接/图片、${pairs.length} 对双语 → ` +
   (problems.length
-    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}、本仓地址 ${selfUrlBad}、照抄命令 ${cmdBad}、出处 ${provBad}、用户面数字 ${staleBad}、包树 ${treeBad}、时间锚 ${anchorBad}、外部量测 ${externalBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
-    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着、本仓地址指得到、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、用户面文档里的数跟仓库对得上（看了 ${staleExamined} 条）、架构包树中英对齐（看了 ${treeExamined} 行）、精确数都带时间锚（看了 ${anchorExamined} 条）、量别人仓库的数都带日期（看了 ${externalExamined} 条）、双语结构对齐（规则自检 ${RULE_FIXTURE_COUNT()} 条通过）`),
+    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}、本仓地址 ${selfUrlBad}、照抄命令 ${cmdBad}、出处 ${provBad}、用户面数字 ${staleBad}、包树 ${treeBad}、时间锚 ${anchorBad}、契约定论 ${contractBad}、外部量测 ${externalBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
+    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着、本仓地址指得到、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、用户面文档里的数跟仓库对得上（看了 ${staleExamined} 条）、架构包树中英对齐（看了 ${treeExamined} 行）、精确数都带时间锚（看了 ${anchorExamined} 条）、量别人仓库的数都带日期（看了 ${externalExamined} 条）、§五 契约行都定了论（看了 ${contractExamined} 条）、双语结构对齐（规则自检 ${RULE_FIXTURE_COUNT()} 条通过）`),
 );
 process.exit(problems.length ? 1 : 0);
