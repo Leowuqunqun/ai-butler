@@ -567,3 +567,31 @@ test('★ 审批目录写不进去：报 ✗，并说清后果是"一律不许"'
   assert.equal(dir?.ok, false, '路上挡着一个文件的时候 mkdir 会失败，不能算能写');
   assert.match(dir.fix, /一律按"不许"处理/, '要把后果说明白：安全，但敏感操作全干不了');
 });
+
+test('★ 真通道 + doctor：自检里那条「谁能私聊它」要真的打进报告（第 60 轮）', async () => {
+  // 这是**用户可见**那一端的断言。适配层里"check() 有没有这一条"是一回事，
+  // 它有没有真的被打进 `butler doctor` 的报告里是另一回事 —— 只有这条能证明后者。
+  // 用**真通道**、真内核（不是桩）：桩不会走 `check()` 那条真实路径。
+  const dir = mkdtempSync(join(tmpdir(), 'doc-dm-'));
+  const t = tmpConfig([
+    {
+      id: 'channel',
+      name: '@butler/channel-feishu',
+      // 空凭据 = 常态（离线）。这里要看的是私聊准入那条，它跟凭据无关
+      config: { home: dir, appId: '', appSecret: '', dmMode: 'allowlist', dmAllowlist: ['cli_wrong'] },
+    },
+    { id: 'agent', name: './plugins/agent-stub.mjs' },
+    { id: 'core', name: '@butler/core', config: { workspace: dir, stateFile: join(dir, 'state.json') } },
+  ]);
+  try {
+    const r = await run(t.file);
+    const c = r.checks.find((x) => x.name === '飞书私聊准入');
+    assert.ok(c, `doctor 的报告里该有这一条：\n${formatDoctor(r)}`);
+    assert.equal(c.ok, false, '名单里填了 cli_ 等于谁也没放行 —— 要如实报 ✗');
+    assert.match(c.fix, /senderId/, '出路要能照着做');
+    assert.match(formatDoctor(r), /飞书私聊准入/, '打印出来的报告里也要有这一行');
+  } finally {
+    t.cleanup();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

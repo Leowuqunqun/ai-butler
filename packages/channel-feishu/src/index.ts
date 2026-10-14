@@ -592,6 +592,38 @@ export class FeishuChannel extends ChannelService {
    * 但判词必须小心：这个接口要 application 那类权限，**被拒不等于凭据错**。
    * 所以这里只报事实（code + message），把两种可能都摆出来，不替用户下结论。
    */
+  /**
+   * 「谁能私聊它」那一条（第 60 轮）。抽成方法是因为 `check()` 有两条出口（没凭据 / 有凭据），
+   * 两边都得报 —— 它跟凭据有没有填**无关**。
+   *
+   * ⚠️ 分寸：只有**确凿配错**（名单里出现 `cli_…`）才报 ✗。`open` 是默认、`disabled` 可能是
+   * 故意关掉的 —— 把那些报成 ✗ 只会训练用户忽略自检。所以其余情况如实描述，不吓人。
+   */
+  private dmCheck(): HealthCheck {
+    const cliIds = this.config.dmAllowlist.filter((id) => id.startsWith('cli_'));
+    const what: Record<DmMode, string> = {
+      open: '谁都能私聊它（企业里同公司的人都行）',
+      allowlist: '只有名单里的人能私聊它',
+      pair: '只有配对过的能私聊它',
+      disabled: '谁也不能私聊它（回到群聊）',
+    };
+    const detail = `dmMode=${this.config.dmMode} —— ${what[this.config.dmMode]}`
+      + (this.config.dmMode === 'allowlist' ? `（名单 ${this.config.dmAllowlist.length} 条）` : '');
+    if (cliIds.length === 0) return { name: '飞书私聊准入', ok: true, detail };
+    return {
+      name: '飞书私聊准入',
+      ok: false,
+      detail: `${detail}；但名单里有 ${cliIds.length} 条是应用 id（cli_…），那不是发送者，等于没放行`,
+      // 出路要能照着做：发送者的 id 不是"去后台抄"能拿到的，得让本人发一条、从探针那段 JSON 里抄。
+      //
+      // ⚠️ 第 60 轮：这句原来只说"先给探针发一条"，**没给命令** —— 那正是第 35/53 轮修过四次的
+      //    同一族洞（家不在默认位置时，用户不知道命令该带哪个 `--home=`）。改用 `scanHint` 之后
+      //    它自带 `--home=`，也就被 `plugin.mjs` 那条"每一处探针出路都要带 --home="的断言收进去了。
+      fix: '把 cli_… 换成发送者的 open_id（ou_…）：让那个人先给探针发一条消息，'
+        + `从它打出来的那段 JSON 里抄 senderId —— ${scanHint(this.home)}`,
+    };
+  }
+
   override async check(): Promise<HealthCheck[]> {
     const out: HealthCheck[] = [];
     const dedupAt = join(this.home, 'state', 'feishu-seen.json');
@@ -606,10 +638,10 @@ export class FeishuChannel extends ChannelService {
         fix: `先${scanHint(this.home)}（会把凭据装好）；`
           + '也可以去 open.feishu.cn 建「企业自建应用」抄下 app_id / app_secret，等 `butler run` 提示时粘贴',
       });
+      out.push(this.dmCheck());
       out.push({ name: '飞书去重表', ok: true, detail: dedupAt });
       return out;
     }
-
     try {
       const info = await withTimeout(this.lark.getAppInfo(), this.config.checkTimeoutMs);
       out.push({
@@ -642,6 +674,7 @@ export class FeishuChannel extends ChannelService {
       });
     }
 
+    out.push(this.dmCheck());
     out.push({ name: '飞书去重表', ok: true, detail: dedupAt });
     return out;
   }

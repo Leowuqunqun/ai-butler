@@ -296,6 +296,62 @@ test('★ 自检被拒时给两种可能，而且**绝不吐出那个一次性�
   assert.ok(!all.includes('consoleUrl'), '连字段名都不带出来');
 });
 
+// ─────────────── 第 60 轮：自检要说出"谁能私聊它" ───────────────
+
+test('★ 自检里那条「谁能私聊它」：默认 open 如实说，但**不吓人**', async () => {
+  // 默认 open 在企业里意味着"同公司谁都能私聊驱动机器人" —— 这是事实，要说出来；
+  // 但它是**默认值**，不是错误：报成 ✗ 只会训练用户忽略自检（这是第 60 轮的分寸）。
+  const { channel } = makeFeishu({ appId: '', appSecret: '', home: freshHome() });
+  const line = (await channel.check()).find((c) => c.name === '飞书私聊准入');
+  assert.ok(line, '自检里应当有这一行');
+  assert.equal(line.ok, true, 'open 是默认，不是错误');
+  assert.match(line.detail, /dmMode=open/);
+  assert.match(line.detail, /谁都能私聊它/, '要如实说出它的实际含义');
+});
+
+test('★ 名单里填了应用 id（cli_…）⇒ 自检报 ✗，而且出路能照着做', async () => {
+  const { channel } = makeFeishu({
+    appId: '',
+    appSecret: '',
+    home: freshHome(),
+    dmMode: 'allowlist',
+    dmAllowlist: ['ou_real', 'cli_wrong'],
+  });
+  const line = (await channel.check()).find((c) => c.name === '飞书私聊准入');
+  assert.ok(line, '自检里应当有这一行');
+  assert.equal(line.ok, false, '填了 cli_ 等于谁也没放行 —— 这是确凿的配错');
+  assert.match(line.detail, /1 条/, '说清有几条不对');
+  assert.match(line.fix, /senderId/, '出路要指向"从探针那段 JSON 里抄 senderId"');
+  assert.match(line.fix, /ou_/, '要说清要的是 ou_ 开头的那种 id');
+});
+
+test('allowlist / pair / disabled 如实描述，而且都**不**报 ✗', async () => {
+  const cases = [
+    ['allowlist', ['ou_a', 'ou_b'], /只有名单里的/, /名单 2 条/],
+    ['pair', [], /只有配对过的/, null],
+    ['disabled', [], /谁也不能私聊它/, null],
+  ];
+  for (const [mode, list, re, extra] of cases) {
+    const { channel } = makeFeishu({
+      appId: '', appSecret: '', home: freshHome(), dmMode: mode, dmAllowlist: list,
+    });
+    const line = (await channel.check()).find((c) => c.name === '飞书私聊准入');
+    assert.ok(line, `${mode} 时也要有这一行`);
+    assert.equal(line.ok, true, `${mode} 是合法配置，不该报 ✗`);
+    assert.match(line.detail, re);
+    if (extra) assert.match(line.detail, extra);
+  }
+});
+
+test('★ 没凭据和有凭据**两条出口**都要报这一行（它跟凭据无关）', async () => {
+  const empty = makeFeishu({ appId: '', appSecret: '', home: freshHome() }).channel;
+  const full = makeFeishu({ home: freshHome() }).channel;
+  for (const [what, ch] of [['没凭据', empty], ['有凭据', full]]) {
+    const names = (await ch.check()).map((c) => c.name);
+    assert.ok(names.includes('飞书私聊准入'), `${what}那条出口漏了：${JSON.stringify(names)}`);
+  }
+});
+
 test('★★ 给探针出路的那几句，家不在默认位置时**每一处**都要带 --home=', async () => {
   // 第 53 轮补的。这一族已经踩过四次：
   //   · 第 35 轮修了 `check()`（没凭据那条）和 `start()`（没凭据那条）两处漏传管家目录；
@@ -303,8 +359,13 @@ test('★★ 给探针出路的那几句，家不在默认位置时**每一处**
   //   · 第 53 轮拿假凭据真跑 `butler doctor`，家故意不在默认位置 —— 复现出**第四处**：
   //     `check()` 里"拿应用信息没成功"那条 fix 只摆两种可能，**压根没给"重扫一次"的命令**。
   // 与其再补一条针对单句的断言（下次还会有第五处），不如把**这一族**一次钉住：
-  // 把插件在四种状态下会吐给用户的每一段话都拿出来，凡是给了 `smoke.mjs` 命令的，
+  // 把插件在五种状态下会吐给用户的每一段话都拿出来，凡是给了 `smoke.mjs` 命令的，
   // 就必须带 `--home=`。
+  //
+  // ⚠️ 第 60 轮：加了「谁能私聊它」那条自检之后，这条守卫**差点**变成假绿 ——
+  //    它原来只在 dmAllowlist 为空时收集，而那条 fix 只在 `cli_` 配错时才出现 ⇒
+  //    把它写死成不带 --home= 的命令，这里**照样绿**（实测过）。所以补了下面那个 ④：
+  //    "守卫的范围是假设的"本身就是一个沉默的洞。
   const home = '/tmp/别处的管家目录';   // 故意不是默认家
   const texts = [];
 
@@ -322,6 +383,10 @@ test('★★ 给探针出路的那几句，家不在默认位置时**每一处**
   fake.connectError = 'boom';
   texts.push(String((await channel.start().then(() => null, (e) => e))?.message ?? ''));
 
+  // ④ dmAllowlist 里填了应用 id —— 第 60 轮那条 fix 只在这个状态下才出现
+  const dm = makeFeishu({ appId: '', appSecret: '', home, dmMode: 'allowlist', dmAllowlist: ['cli_wrong'] });
+  for (const c of await dm.channel.check()) texts.push(c.detail ?? '', c.fix ?? '');
+
   const withHint = texts.filter((t) => t.includes('smoke.mjs'));
   for (const t of withHint) {
     assert.ok(
@@ -330,10 +395,10 @@ test('★★ 给探针出路的那几句，家不在默认位置时**每一处**
     );
   }
   // ⚠️ 防沉默：上面那个循环一条都不查也算"过"。这一族**必须**有好几处探针出路，
-  //    数量对不上就说明这段话没被收集到（比如字段改名了）。
+  //    数量对不上就说明这段话没被收集到（比如字段改名了，或者新加的状态没进这个数组）。
   assert.ok(
-    withHint.length >= 4,
-    `该有 4 处以上探针出路（没凭据×2、探活被拒、连不上），实际只收到 ${withHint.length} 处 —— 检查收集逻辑`,
+    withHint.length >= 5,
+    `该有 5 处以上探针出路（没凭据×2、探活被拒、连不上、dmAllowlist 配错），实际只收到 ${withHint.length} 处 —— 检查收集逻辑`,
   );
 });
 
