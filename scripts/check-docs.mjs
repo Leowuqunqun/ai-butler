@@ -491,6 +491,45 @@ function unanchoredCountViolations(text) {
   return { hits, examined };
 }
 
+// ───────── ⑪ 量别人仓库的数必须带日期（第 77 轮） ─────────
+//
+// 第 75 轮的规则 ⑩ 管的是"会烂的精确数要带时间锚"，范围是 `README*.md` / `docs/VISION*.md`。
+// 第 77 轮读手册 §八 时发现另一类：**量别人仓库的数**。
+//
+//   · Star 表四个数：2689 / 1629 / 6251 / 56 —— 实测 2691 / 1638 / 6250 / 56（koishi 少了一个）；
+//   · 一句"实测它 42 个源文件、590 KB TypeScript"—— 实测是 65 个 `.ts` / 1096 KB，
+//     而且它说的 `src/bridge.ts` 137 KB 实际是 134 KB，**最大的一块还是测试**（197 KB）。
+//
+// ⚠️ 奇怪的是手册**自己**有防这个的机制：开头把 `▣实测` 定义成"我们自己在这台机器上真跑一遍"，
+//    第 65 轮的 R2 又要求含 `▣实测` 的块写出「第十一节第 K 轮」。可那句写的是**裸「实测」**
+//    —— 而且它量的**不是这台机器**，是别人的 GitHub 仓库 ⇒ ⭐ **机制在，标记没穿**，就漏了。
+//
+// 规则：`docs/CHANNEL-FEISHU.md` 里含 `Star` 表格单元格或 `GitHub API` 的行，必须带一个日期（YYYY-MM-DD）。
+// ⚠️ 只在手册上，因为只有它引用外部仓库的热度/体量；`KB` 不作为锚 —— 手册别处也有 `KB`
+//    （`sendText` 那行就有一个），拿它当锚会把那行一起卷进来（一个会误报的守卫比没有守卫更糟）。
+// ⚠️ 锚写成 `|` 包住的 `Star` 单元格，**不是** `Star（` —— 第 77 轮第一版就栽在这儿：
+//    我以为表头会是 `Star（日期）`，可真出问题的那行是光秃秃的 `| 项目 | Star | 形态 |`，
+//    照 `Star（` 去匹配**根本抓不到它**。⭐ 夹具当场把这条抓出来了（"应该 1 处，实际 0 处"）——
+//    ⭐ "守卫的范围是假设的"本身就是沉默的洞（第 60 轮那句话）。
+const EXTERNAL_ANCHORS = /\|\s*Star\b|GitHub API/;
+
+// ⚠️ 只看 **§十一 之前**。§十一 起是动工记录，而记录的职责之一就是**引述破掉的东西**
+//    —— 第 77 轮这条规则刚写出来时，当场逮住了**讲它自己的那一节**的 4 行
+//    （陈述规则那句、引用的坏表头 `| 项目 | Star | 形态 |`、控制表里两行）。
+//    ⭐ 这不是漏洞，是范围问题：和第 74 轮把 `EVIDENCE*.md` 排除、第 75 轮把 ARCH 树排除同一条道理
+//    —— **记录里的数不是承诺**。§十一 之前才是"写给下一枪看的现状"。
+function externalMeasuredViolations(text) {
+  const hits = [];
+  let examined = 0;
+  for (const line of text.split(/^## 十一、/m)[0].split('\n')) {
+    if (!EXTERNAL_ANCHORS.test(line)) continue;
+    examined++;
+    if (/\d{4}-\d{2}-\d{2}/.test(line)) continue;
+    hits.push({ why: `量了别人仓库的数，却没说是哪天量的：${line.trim().slice(0, 70)}` });
+  }
+  return { hits, examined };
+}
+
 const SELF_TEST = [
   { why: '指向别的包（npm 读者够不着）', file: 'packages/a/README.md', link: '../b/README.md', shipped: ['README.md'], want: 1 },
   { why: '指向仓库根（更够不着）', file: 'packages/a/README.md', link: '../../docs/x.md', shipped: ['README.md'], want: 1 },
@@ -713,8 +752,27 @@ const ANCHOR_TEST = [
   },
 ];
 
+// ── 规则 ⑪ 的夹具
+const EXTERNAL_TEST = [
+  { why: 'Star 表头带日期 → 不报', text: '| 项目 | Star（2026-10-14 从 GitHub API 读的） | 形态 |', want: 0, examined: 1 },
+  { why: 'Star 表头没日期 → 报（第 77 轮改之前就是这样）', text: '| 项目 | Star | 形态 |', want: 1, examined: 1 },
+  { why: 'GitHub API 那句带日期 → 不报', text: '截至 2026-10-14 用 GitHub API 读到它 65 个文件、合计 1096 KB', want: 0, examined: 1 },
+  { why: '换个说法、带 GitHub API 但没日期 → 报', text: '从 GitHub API 看到的体量是 1096 KB', want: 1, examined: 1 },
+  { why: '两边都不沾（那句裸实测）→ 不看它，所以不报', text: '实测它 42 个源文件、590 KB TypeScript', want: 0, examined: 0 },
+  {
+    why: '⭐ §十一 起是记录：那里引述坏表头不算数（第 77 轮规则逮住了讲它自己的那一节）',
+    text: '## 十一、动工记录\n规则：含 `| 项目 | Star | 形态 |` 的行要带日期\n（记录里的引述）',
+    want: 0, examined: 0,
+  },
+  {
+    why: '⭐ 但同样一行若在 §十一 **之前**，就得算数（范围就是"§十一 之前"）',
+    text: '| 项目 | Star | 形态 |\n\n## 十一、动工记录\n（记录在下面）',
+    want: 1, examined: 1,
+  },
+];
+
 const RULE_FIXTURE_COUNT = () =>
-  SELF_TEST.length + URL_TEST.length + CMD_TEST.length + PROV_TEST.length + COUNT_TEST.length + TREE_TEST.length + ANCHOR_TEST.length;
+  SELF_TEST.length + URL_TEST.length + CMD_TEST.length + PROV_TEST.length + COUNT_TEST.length + TREE_TEST.length + ANCHOR_TEST.length + EXTERNAL_TEST.length;
 
 function runSelfTest() {
   const bad = [
@@ -771,6 +829,10 @@ function runSelfTest() {
       const r = unanchoredCountViolations(c.text);
       return { ...c, got: r.hits.length, examined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（都有锚）' };
     }),
+    ...EXTERNAL_TEST.map((c) => {
+      const r = externalMeasuredViolations(c.text);
+      return { ...c, got: r.hits.length, examined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（有日期）' };
+    }),
     ...TREE_TEST.map((c) => {
       const r = pairedTreeViolations(c.zh, c.en);
       return { ...c, got: r.hits.length, shown: (r.hits[0] && r.hits[0].why) ?? '（两棵树一致）' };
@@ -784,8 +846,8 @@ function runSelfTest() {
     console.error(`    ${c.shown}`);
   }
   console.error('\n改法：这是 scripts/check-docs.mjs 里 shippedDocViolations / selfRepoUrlViolations /');
-  console.error('sourceTreeCommandViolations / provenanceViolations / staleCountViolations / pairedTreeViolations / unanchoredCountViolations 的规则被改动了。');
-  console.error('要是故意放宽/收紧，请把 SELF_TEST / URL_TEST / CMD_TEST / PROV_TEST / COUNT_TEST / TREE_TEST / ANCHOR_TEST 一起改，');
+  console.error('sourceTreeCommandViolations / provenanceViolations / staleCountViolations / pairedTreeViolations / unanchoredCountViolations / externalMeasuredViolations 的规则被改动了。');
+  console.error('要是故意放宽/收紧，请把 SELF_TEST / URL_TEST / CMD_TEST / PROV_TEST / COUNT_TEST / TREE_TEST / ANCHOR_TEST / EXTERNAL_TEST 一起改，');
   console.error('并在 docs/CHANNEL-FEISHU.md 里写清楚为什么。');
   process.exit(1);
 }
@@ -1024,6 +1086,28 @@ if (!problems.length && treeExamined < 10) {
   );
 }
 
+// ───────── ⑪ 量别人仓库的数必须带日期（第 77 轮） ─────────
+
+let externalBad = 0;
+let externalExamined = 0;
+{
+  const rel = 'docs/CHANNEL-FEISHU.md';
+  const abs = resolve(ROOT, rel);
+  if (existsSync(abs)) {
+    const r = externalMeasuredViolations(readFileSync(abs, 'utf8'));
+    externalExamined += r.examined;
+    for (const hit of r.hits) {
+      problems.push(
+        `❌ 量别人仓库的数没带日期  ${rel}\n       → ${hit.why}\n` +
+          '       （别处的仓库随时会长，"多少 Star / 多大"这类数离开日期就没有意义；' +
+          '⭐ 手册开头把 `▣实测` 定义成"在这台机器上真跑一遍"，可量别人的仓库不属此列 —— ' +
+          '它该带的是**日期**，见第 77 轮）',
+      );
+      externalBad++;
+    }
+  }
+}
+
 // ───────── ⑩ 精确的"当时多少测试"必须带时间锚（第 75 轮） ─────────
 
 let anchorBad = 0;
@@ -1133,7 +1217,7 @@ if (problems.length) console.log(`${problems.join('\n')}\n`);
 console.log(
   `检查 ${files.length} 个 md、${checked} 个链接/图片、${pairs.length} 对双语 → ` +
   (problems.length
-    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}、本仓地址 ${selfUrlBad}、照抄命令 ${cmdBad}、出处 ${provBad}、用户面数字 ${staleBad}、包树 ${treeBad}、时间锚 ${anchorBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
-    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着、本仓地址指得到、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、用户面文档里的数跟仓库对得上（看了 ${staleExamined} 条）、架构包树中英对齐（看了 ${treeExamined} 行）、精确数都带时间锚（看了 ${anchorExamined} 条）、双语结构对齐（规则自检 ${RULE_FIXTURE_COUNT()} 条通过）`),
+    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}、本仓地址 ${selfUrlBad}、照抄命令 ${cmdBad}、出处 ${provBad}、用户面数字 ${staleBad}、包树 ${treeBad}、时间锚 ${anchorBad}、外部量测 ${externalBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
+    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着、本仓地址指得到、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、用户面文档里的数跟仓库对得上（看了 ${staleExamined} 条）、架构包树中英对齐（看了 ${treeExamined} 行）、精确数都带时间锚（看了 ${anchorExamined} 条）、量别人仓库的数都带日期（看了 ${externalExamined} 条）、双语结构对齐（规则自检 ${RULE_FIXTURE_COUNT()} 条通过）`),
 );
 process.exit(problems.length ? 1 : 0);
