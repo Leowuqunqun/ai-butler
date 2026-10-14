@@ -810,6 +810,114 @@ const MUTATIONS = [
       '  const start = text.search(/^## 八、/m);',
       "  const start = text.indexOf('\\n## 八、');"]],
   },
+  // ── 第 83 轮：给 check-docs.mjs 那 12 族规则**逐族配牙** ──────────────────────
+  //
+  // 第 80 轮只给规则 ⑫ 配了一条（`script:`），第 82 轮把 `script:` 铺成能带参数。
+  // 这轮把**其余各族的每一条**都配上 —— 理由和第 76/77/78/79/81 轮那族一样：
+  // **一处配对了，旁边没跟上，就等于没配**（规则自检 69 条夹具管"规则本身对不对"，
+  // 变异点管"这条规则还在不在盯着东西" —— 两件事，缺一条腿都算没穿）。
+  //
+  // ⚠️ 每条都**亲手跑过**：把变异施上去、跑 `node scripts/check-docs.mjs`、
+  //    读回执里那句 `❌`、再还原。回执里指名道姓是哪一族，才算数（见手册第 83 轮）。
+  // ⚠️ **不许改 `check-docs.mjs` 的规则体** —— 它自带指纹，改了一行就会报
+  //    「…的规则被改动了」（第 83 轮撞过一次）。所以这些点砸的都是**文档数据**。
+  {
+    name: '① 出包文档指向了没出包的东西（包里 README 的链接跑到包外）',
+    claim: '各包 README 是会跟着包发出去的，里面的相对链接必须还在这个包里 —— 跑到包外，装完的人点开就是断的',
+    script: 'scripts/check-docs.mjs',
+    files: [['packages/channel-wechat/README.md',
+      '[`docs/protocol.md` 第 5 节](docs/protocol.md)',
+      '[`docs/protocol.md` 第 5 节](../seam-channel/src/index.ts)']],
+  },
+  {
+    name: '② 让读者照抄的命令只在源码树里成立（把那句标记拿掉）',
+    claim: '写着源码树路径的命令，同一个代码块里必须自己说清"只在源码树成立" —— 装完的人没有 packages/',
+    script: 'scripts/check-docs.mjs',
+    files: [['docs/CHANNEL-FEISHU.md',
+      '# 源码树里这么跑（`install.sh` 装的机器上没有 packages/ —— 那种机器看下面那段）',
+      '# 本机这么跑（`install.sh` 装的机器上没有 packages/ —— 那种机器看下面那段）']],
+  },
+  {
+    name: '③ 出处声明没带标注（§十二 那句「官方原文：」的 ✓官方 被抹掉）',
+    claim: '写了「官方原文：」就得带出处标注 —— 不带，读者没法知道这句是引的还是猜的',
+    script: 'scripts/check-docs.mjs',
+    files: [['docs/CHANNEL-FEISHU.md',
+      '**保存时长连接客户端必须已经在线** ✓官方（见第四节',
+      '**保存时长连接客户端必须已经在线**（见第四节']],
+  },
+  {
+    name: '④ 指向本仓的完整地址在仓库里找不到（把路径改成一个不存在的文件）',
+    claim: '手册里指向本仓 blob/tree 的完整地址，那个路径必须真在仓库里 —— 写错一个字符读者点开就是 404，本地什么都不响',
+    script: 'scripts/check-docs.mjs',
+    files: [['README.md',
+      '→ [**从零到「用微信遥控这台电脑」：三步**](docs/GETTING-STARTED.md)',
+      '→ [**从零到「用微信遥控这台电脑」：三步**](https://github.com/Leowuqunqun/ai-butler/blob/main/docs/NOPE-83.md)']],
+  },
+  {
+    name: '⑤ 安装指令指向了旧版本（用户面文档里的数跟仓库对不上）',
+    claim: 'README 里 releases/download/vX.Y.Z/ 那个 tag 必须是当前版本 —— 否则照着这行装的人拿到的是旧包',
+    script: 'scripts/check-docs.mjs',
+    files: [['README.md',
+      'releases/download/v0.2.1/butler-dsh-plugin-0.2.1.tar.gz',
+      'releases/download/v0.2.0/butler-dsh-plugin-0.2.0.tar.gz']],
+  },
+  {
+    name: '⑥ 架构文档两棵包树对不上（中文那棵的测试数被改动）',
+    claim: '中英两版的包树必须说同一件事 —— 英文读者不该看到几个月前、还少了一个包的架构',
+    script: 'scripts/check-docs.mjs',
+    files: [['docs/ARCH-technical.md',
+      '├── seam-channel/            # ✅ 已建：ctx.channel 接口（TypeScript，12 个测试）',
+      '├── seam-channel/            # ✅ 已建：ctx.channel 接口（TypeScript，13 个测试）']],
+  },
+  {
+    name: '⑦ 精确的测试数没带时间锚（「当时」被拿掉）',
+    claim: '会烂的精确数（"19 个离线测试"）必须带上"这是当时的" —— 不然它就成了一个会过期的承诺',
+    script: 'scripts/check-docs.mjs',
+    files: [['README.md',
+      '| **M0** | 通道层跑通：扫码、收发、附件、引用、可插拔后端 | 当时 19 个离线测试 | ✅ 已完成 |',
+      '| **M0** | 通道层跑通：扫码、收发、附件、引用、可插拔后端 | 19 个离线测试 | ✅ 已完成 |']],
+  },
+  {
+    name: '⑧ 量别人仓库的数没带日期（§八 表头那个日期被抹掉）',
+    claim: '引用外部仓库的热度/体量必须写"哪天量的" —— 日期锚只管"当时读过"，但没有日期连"当时"都无从谈起',
+    script: 'scripts/check-docs.mjs',
+    files: [['docs/CHANNEL-FEISHU.md',
+      '| 项目 | Star（2026-10-14 从 GitHub API 读的） | 形态 |',
+      '| 项目 | Star | 形态 |']],
+  },
+  {
+    name: '⑩ 断链（README 里的相对链接指向一个不存在的目录）',
+    claim: '文档里的相对链接必须指向真存在的东西 —— 本地什么都不响，读者点开才知道',
+    script: 'scripts/check-docs.mjs',
+    files: [['README.md',
+      '命令行细节在 [`packages/cli`](packages/cli)',
+      '命令行细节在 [`packages/cli`](packages/cli-NOPE-83)']],
+  },
+  {
+    name: '⑪ 中文版开头没有指向英文版的链接（双语互链的那行被拿掉）',
+    claim: '每一对双语文档，开头三行内必须有互链 —— 否则英文读者永远找不到另一版',
+    script: 'scripts/check-docs.mjs',
+    files: [['docs/EVIDENCE.md',
+      '[English](EVIDENCE.en.md) | 中文',
+      '中文']],
+  },
+  {
+    name: '⑫ 规则 ⑧ 的防沉默（把 README 里那两行「docs/ … N 张图」改成散文）',
+    claim: '防沉默：规则 ⑧ 的阈值是"至少看 4 条数"。少到 3 条时必须报红 —— 规则看着在跑、其实快没东西可看，是最难发现的坏法',
+    script: 'scripts/check-docs.mjs',
+    // ⚠️ 为什么砸这个而不是"把某族清零"：第 83 轮试过 —— 规则 ⑥ 的匹配面横跨**围栏内外的行内代码**
+    //    （check-docs.mjs 第 204 行那个 `matchAll`），拿文档数据把它清零不现实；
+    //    而改规则体又会被 check-docs.mjs 自己的指纹拦住（"…的规则被改动了"）。
+    //    规则 ⑧ 不一样：它只认 README 里两形状，全仓**总共 5 条** —— 抹掉 2 条就掉到 3，低于阈值 4。
+    files: [
+      ['README.md',
+        'docs/                  产品与技术架构、18 张图',
+        'docs/                  产品与技术架构（图见 docs/diagrams/）'],
+      ['README.en.md',
+        'docs/                  product and technical architecture, 18 diagrams',
+        'docs/                  product and technical architecture (diagrams under docs/diagrams/)'],
+    ],
+  },
 ];
 
 // ─────────────────────────── 参数 ───────────────────────────
@@ -988,7 +1096,13 @@ for (const m of picked) {
     for (const [f, from, to] of m.files) {
       const p = join(copy, f);
       const s = readFileSync(p, 'utf8');
-      snap.set(f, s);
+      // ⚠️ 第 83 轮修的真 bug：同一个文件被**编辑两次**时，第二次 readFileSync 拿到的是
+      //    **已经变异的**文本 —— 原来的 `snap.set(f, s)` 会把它覆盖上去，
+      //    于是 `finally` 里的还原把"变异态"写回副本（副本随后就删了，所以一直没炸）。
+      //    ⭐ 发现方式：我在外面手写验证脚手架时，正序还原快照，把工作树写脏了；
+      //      回头一读 `mutate.mjs`，发现同一个形状 —— 只是它的副本用完就删，把病藏住了。
+      //    现在 `snap` 里留的是**第一次**读到的原文。
+      if (!snap.has(f)) snap.set(f, s);
       const hits = s.split(from).length - 1;
       if (hits !== 1) throw new Error(`锚点对不上（${f}：期望 1 处，实际 ${hits} 处）`);
       writeFileSync(p, s.replace(from, to));
