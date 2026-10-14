@@ -5,7 +5,7 @@
  *   pnpm mutate                 # 全部：故意把代码改坏，看有没有测试喊疼
  *   pnpm mutate --list          # 只列出要砸哪些地方（不跑）
  *   pnpm mutate --only quote    # 只砸名字里含 quote 的那几处
- *   pnpm mutate --quick         # 跳过两条要走 clean-room e2e 的（那两条各要一两分钟）
+ *   pnpm mutate --quick         # 跳过要走 e2e 脚本的那几条（clean-room 那两条各要一两分钟）
  *   pnpm mutate --keep          # 留着那份副本，跑完告诉你路径（排查用）
  *
  * 为什么需要它：**"测试全绿"不等于"每条主张真有测试盯着"**。
@@ -35,12 +35,14 @@ const ROOT = resolve(fileURLToPath(import.meta.url), '..', '..');
 const CORE = 'packages/core/src/index.ts';
 const TG = 'packages/channel-telegram/src/index.ts';
 const CLI = 'packages/cli/src';
+const FEISHU = 'packages/channel-feishu/src/index.ts';
 
 /**
  * 每一条 = 一个**承诺**，以及"怎么把它改坏"。
  *
  * `claim` 是要复述给人听的那句承诺；`files` 是变异；`pkg` 是重编哪个包；
- * `tests` 是应该喊疼的用例；`e2e: true` 表示这条只有 clean-room 端到端抓得到。
+ * `tests` 是应该喊疼的用例；`e2e: true` 表示只有 clean-room 端到端抓得到（那条脚本是历史唯一一条）；
+ * `e2e: 'scripts/xxx.sh'` 指定**别的**脚本当 witness（第 63 轮起，飞书手册的离线演练走这条）。
  */
 const MUTATIONS = [
   {
@@ -74,8 +76,8 @@ const MUTATIONS = [
     claim: '`--again` 是"再问一次"，跳过就还用原来那把（不然换 key 能把管家弄哑）',
     pkg: './packages/cli',
     files: [[`${CLI}/onboarding.ts`,
-      "    const filled = injectChannelSecrets(rows, file);\n    if (outcome === 'saved') {",
-      "    const filled = outcome === 'saved' ? injectChannelSecrets(rows, file) : [];\n    if (outcome === 'saved') {"]],
+      "    const filled = injectChannelSecrets(rows, file);\n    if (filled.length > 0 && outcomes.includes('saved')) {",
+      "    const filled = outcomes.includes('saved') ? injectChannelSecrets(rows, file) : [];\n    if (filled.length > 0 && outcomes.includes('saved')) {"]],
     tests: ['packages/cli/test/onboarding.mjs'],
   },
   {
@@ -622,6 +624,45 @@ const MUTATIONS = [
       ""]],
     tests: ['packages/core/test/welcome.mjs'],
   },
+
+  // ── 第 63 轮：把**飞书验收手册的离线演练**也变成 witness ──
+  // 下面四条的 `e2e` 写的是脚本路径（见 runner 里对 e2e 的说明）。每条各打掉演练里的一条断言，
+  // 所以"演练 20 项 ✅"从此有东西盯着 —— 不再依赖"我还记得手工做一次突变控制"。
+  // ⚠️ 这四条也顺手补上了 e2e 分支原来**不重编**的洞（变异点在 `.ts` 上时，副本里的 lib/
+  //    还是原代码，裁决就成了关于"什么都没发生"的）。
+  {
+    name: '飞书私聊准入：doctor 不再报告这一条',
+    claim: 'doctor 会说出「谁能私聊它」（默认 open 等于企业里同公司的人都能私聊它，得当众说清）',
+    pkg: './packages/channel-feishu',
+    e2e: 'scripts/rehearse-feishu-manual.sh',
+    // ⚠️ 锚点必须是**默认那条路**会走到的那个 `name`。第一版改的是下面 `ok: false` 那处的名字，
+    //    而默认（open）走的是 `ok: true` 这条 return —— 字符串还在别处，doctor 照样打出来，
+    //    于是这条突变**没牙**（`mutate` 当场用「★ 还是绿的」把它抓了出来）。
+    files: [[FEISHU,
+      "    if (cliIds.length === 0) return { name: '飞书私聊准入', ok: true, detail };",
+      "    if (cliIds.length === 0) return { name: '私聊准入', ok: true, detail };"]],
+  },
+  {
+    name: '飞书私聊准入：报 allowlist 时不再说名单里有几条',
+    claim: '报 dmMode=allowlist 时说清名单里有几条（不说的话，"我配了白名单"和"配了个空名单"看起来一样）',
+    pkg: './packages/channel-feishu',
+    e2e: 'scripts/rehearse-feishu-manual.sh',
+    files: [[FEISHU, '`（名单 ${this.config.dmAllowlist.length} 条）`', "''"]],
+  },
+  {
+    name: '飞书私聊准入：填成应用 id（cli_…）也不再吭声',
+    claim: 'dmAllowlist 里出现应用 id（cli_…）时必须报 ✗ —— 那不是发送者，等于谁也没放行，而表面上"我配了白名单"',
+    pkg: './packages/channel-feishu',
+    e2e: 'scripts/rehearse-feishu-manual.sh',
+    files: [[FEISHU, 'if (cliIds.length === 0)', 'if (true)']],
+  },
+  {
+    name: '飞书私聊准入：dmMode 写错在装载时不再报错',
+    claim: 'dmMode 写错（比如 allowList）在**装载时**直接报错，不会悄悄按 open 放行 —— 静默放行是最坏的失败',
+    pkg: './packages/channel-feishu',
+    e2e: 'scripts/rehearse-feishu-manual.sh',
+    files: [[FEISHU, 'z.union(DM_MODES.map((mode) => z.const(mode)))', 'z.string()']],
+  },
 ];
 
 // ─────────────────────────── 参数 ───────────────────────────
@@ -639,7 +680,7 @@ if (flag('-h') || flag('--help')) {
   pnpm mutate              全部：故意把代码改坏，看有没有测试喊疼
   pnpm mutate --list       只列出要砸哪些地方（不跑）
   pnpm mutate --only quote 只砸名字/承诺里含 quote 的那几处
-  pnpm mutate --quick      跳过两条要走 clean-room e2e 的（各要一两分钟）
+  pnpm mutate --quick      跳过要走 e2e 脚本的那几条（clean-room 那两条各要一两分钟）
   pnpm mutate --keep       留着那份副本，跑完告诉你路径（排查用）
 
 退出码：0 = 每一处都被测试抓到；1 = 有"没被盯住"的（那就是洞）；
@@ -653,16 +694,27 @@ const keep = flag('--keep');
 
 let picked = MUTATIONS;
 if (only) picked = picked.filter((m) => m.name.includes(only) || (m.claim ?? '').includes(only));
+const matchedOnly = picked.length; // --only 到底匹配上几处（在 --quick 过掉之前）
 if (quick) picked = picked.filter((m) => !m.e2e);
 
 if (flag('--list')) {
   for (const m of picked) console.log(`${m.e2e ? '[e2e]' : '[unit]'} ${m.name}\n       承诺：${m.claim}`);
-  console.log(`\n共 ${picked.length} 处${quick ? '（--quick：跳过了 e2e 那两条）' : ''}`);
+  console.log(`\n共 ${picked.length} 处${quick ? '（--quick：跳过了 e2e 那些条）' : ''}`);
   process.exit(0);
 }
 
 if (!picked.length) {
-  console.error(`--only ${only} 没匹配上任何一处。用 --list 看看有哪些。`);
+  // ⚠️ 这里的报错必须**说实话**。原来不管什么原因都写「--only … 没匹配上任何一处」——
+  //    于是 `pnpm mutate --only 飞书私聊准入 --quick` 会说 --only 没匹配上，而其实是**匹配上了**，
+  //    只是那几条都是 e2e、又被 --quick 滤掉了（第 63 轮我照着那句话去查 Unicode 规范化，
+  //    查错了地方、白花三轮）。把人引到错地方的错误信息，比没有错误信息更坏。
+  if (only && matchedOnly > 0) {
+    console.error(`--only ${only} 匹配上了 ${matchedOnly} 处，但它们**全是 e2e**，被 --quick 滤掉了。去掉 --quick 再试。`);
+  } else if (only) {
+    console.error(`--only ${only} 没匹配上任何一处。用 --list 看看有哪些。`);
+  } else {
+    console.error('--quick 之后一处都不剩了（清单里只有 e2e 条目？）。');
+  }
   process.exit(2);
 }
 
@@ -790,19 +842,32 @@ for (const m of picked) {
       writeFileSync(p, s.replace(from, to));
     }
 
-    if (m.e2e) {
-      const r = run('sh', ['scripts/verify-clean-install.sh']);
-      const bad = [...r.out.matchAll(/❌[^\n]*/g)].map((x) => x[0]);
-      verdict = r.code !== 0 ? 'red' : 'green';
-      note = bad[0] ?? (r.timedOut ? '超时' : `退出码 ${r.code}`);
-    } else {
-      // 重编那一个包，并确认产物**真的变了** —— 否则"没红"可能只是没编译到
+    // 重编变异点所属的包，并确认产物**真的变了** —— 否则"没红"可能只是没编译到。
+    // ⭐ 第 63 轮：原来只有 `node --test` 那条路会重编，`e2e` 那条**不重编**。对 `install.sh`
+    //    这类 shell 目标是无害的（本来就不用编译），但变异点一旦落在 `.ts` 上，副本里的
+    //    `lib/` 还是**原代码** —— 于是"红了 / 还是绿的"这个裁决是关于"什么都没发生"的。
+    //    （`finally` 里那句会把产物再编回去。）
+    const recompile = () => {
+      if (!m.pkg) return;
       const libOf = (f) => join(copy, f.replace('/src/', '/lib/').replace(/\.ts$/, '.js'));
       const before = m.files.filter(([f]) => f.endsWith('.ts')).map(([f]) => [f, readFileSync(libOf(f), 'utf8')]);
       run('pnpm', ['--filter', m.pkg, 'run', 'build']);
       for (const [f, was] of before) {
         if (readFileSync(libOf(f), 'utf8') === was) throw new Error(`编译产物没变（${f}）—— 这次不算数`);
       }
+    };
+
+    if (m.e2e) {
+      recompile();
+      // `e2e: true` = 历史上唯一那条 clean-room 脚本；写成**字符串**可以指定别的脚本。
+      // 第 63 轮起，飞书验收手册的离线演练（`scripts/rehearse-feishu-manual.sh`）也在这里当 witness。
+      const script = typeof m.e2e === 'string' ? m.e2e : 'scripts/verify-clean-install.sh';
+      const r = run('sh', [script]);
+      const bad = [...r.out.matchAll(/❌[^\n]*/g)].map((x) => x[0]);
+      verdict = r.code !== 0 ? 'red' : 'green';
+      note = bad[0] ?? (r.timedOut ? '超时' : `退出码 ${r.code}`);
+    } else {
+      recompile();
       const r = run('node', ['--test', ...m.tests]);
       const n = Number(/ℹ fail (\d+)/.exec(r.out)?.[1] ?? -1);
       verdict = (r.code !== 0 || n > 0) ? 'red' : 'green';
