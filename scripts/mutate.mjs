@@ -43,6 +43,17 @@ const FEISHU = 'packages/channel-feishu/src/index.ts';
  * `claim` 是要复述给人听的那句承诺；`files` 是变异；`pkg` 是重编哪个包；
  * `tests` 是应该喊疼的用例；`e2e: true` 表示只有 clean-room 端到端抓得到（那条脚本是历史唯一一条）；
  * `e2e: 'scripts/xxx.sh'` 指定**别的**脚本当 witness（第 63 轮起，飞书手册的离线演练走这条）。
+ *
+ * ⭐ `script: 'scripts/xxx.mjs'`（第 80 轮加的**第三种** witness）：跑 `node <脚本>`，
+ *    **非零退出码就算红**。为什么要有它：`scripts/check-docs.mjs` 既不是 `node --test`
+ *    的用例、也不是 `sh` 脚本，于是它那 12 族规则、69 条夹具在变异清单里**一条腿都没有**。
+ * ⭐ 第 82 轮起 `script` 还可以是**数组**：`['scripts/xxx.mjs', '--self-test']`
+ *    ⇒ `node <脚本> <参数…>`。好让"自带离线自检的脚本"只咬**离线那半截** ——
+ *    `check-external.mjs` 不带参数会真去联网，那条**故意不挂**（见手册第 81 轮）。
+ *
+ * ⚠️ 补记（第 82 轮）：上面这一段是**第 80 轮就该写的**。那轮补丁的这一步打印了 `ok`，
+ *    但脚本在后面一步 `SystemExit`，而 `write_text` 在**最后** —— 于是"ok"只是**打印**、
+ *    并没有落盘，契约块里少了整整一种 witness 却没人发现。⭐ 这次改成**每步都写盘**。
  */
 const MUTATIONS = [
   {
@@ -783,6 +794,22 @@ const MUTATIONS = [
       '`map.ts` 的 `encodeContext` 把 `{ chatId, messageId, threadId }` 编成 JSON 交给接缝',
       '`map.ts` 的 `encodeContext` 把 `{ chatId, messageId, threadId }` 编成 JSON 交给接缝 △']],
   },
+  // ⭐ 第 82 轮：给 `scripts/check-external.mjs` 的**离线自检**配牙。
+  // 第 81 轮写那个解析器时真栽过一次：用 `indexOf('\n## 八、')` 要求那一行前面有换行，
+  // 于是"文本正好以 `## 八、` 开头"时返回 -1、整表解析成空 —— 而第 77 轮给规则 ⑪
+  // 修过**一模一样**的坑（`'\n## 十一、'` → `/^## 十一、/m`）。
+  // 那次是自检夹具当场拦下的（3 条红）。这条变异点就是把那个错**放回去**，
+  // 看夹具**现在**还拦不拦得住 —— ⭐ 一个"当时抓到了"的夹具，得证明它**一直**抓得到。
+  // ⚠️ witness 走 `--self-test` 分支：**完全离线**，不会把网络引进变异体检。
+  //    （不带参数的 `pnpm check:external` 会真去联网，那条**故意不挂** —— 见手册第 81 轮。）
+  {
+    name: '第八节的节界锚又被写成"要求前面有换行"（check-external 的离线自检）',
+    claim: '解析器得认得出"文本正好以 `## 八、` 开头"那种情况 —— 第 81 轮真栽过这个坑',
+    script: ['scripts/check-external.mjs', '--self-test'],
+    files: [['scripts/check-external.mjs',
+      '  const start = text.search(/^## 八、/m);',
+      "  const start = text.indexOf('\\n## 八、');"]],
+  },
 ];
 
 // ─────────────────────────── 参数 ───────────────────────────
@@ -823,6 +850,7 @@ if (flag('--list')) {
     console.log(`${kind} ${m.name}\n       承诺：${m.claim}`);
   }
   console.log(`\n共 ${picked.length} 处${quick ? '（--quick：跳过了 e2e 那些条）' : ''}`);
+  console.log('（[script] 那几条跑的是 `node <脚本> [参数…]`，非零退出码算红；它们都是离线的）');
   process.exit(0);
 }
 
@@ -949,6 +977,7 @@ function run(cmd, args, timeout = 15 * 60 * 1000) {
 }
 
 const results = [];
+let noVerdictCount = 0;   // ⭐ 第 82 轮：有几处是"非零退出、但没有一句 ❌"（红了但红错了的嫌疑）
 
 for (const m of picked) {
   const snap = new Map();
@@ -988,15 +1017,38 @@ for (const m of picked) {
       const r = run('sh', [script]);
       const bad = [...r.out.matchAll(/❌[^\n]*/g)].map((x) => x[0]);
       verdict = r.code !== 0 ? 'red' : 'green';
-      note = bad[0] ?? (r.timedOut ? '超时' : `退出码 ${r.code}`);
+      // ⚠️ 第 82 轮加的：`bad[0]` 缺席时**不能只说一句"退出码 N"就完事**。
+      //    那正是"红了，但红错了"的样子 —— 第 82 轮真撞上一次：变异体被写成了语法错误，
+      //    witness 崩了（退出码 1、stderr 里是 SyntaxError），回执却只说"退出码 1"，
+      //    看上去和"夹具抓到了"一模一样。⭐ 这个坑本身就在 `mutate` 里，格外讽刺。
+      //    所以：没有 `❌` 的非零退出，一律**显式报出来**。
+      const noVerdict = r.code !== 0 && bad.length === 0;
+      if (noVerdict) noVerdictCount += 1;
+      note = bad[0] ?? (r.timedOut ? '超时' : noVerdict
+        ? `⚠️ 退出码 ${r.code}，但一句 ❌ 都没有 —— 这看着像 witness 自己崩了，不是判了红`
+        : `退出码 ${r.code}`);
     } else if (m.script) {
       recompile();
       // ⭐ 第 80 轮：`node <脚本>` 当 witness —— 非零退出码算红，和 e2e 那条同一个判据。
       // 用它的是 `scripts/check-docs.mjs`（12 族规则 + 69 条夹具，跑一遍 2 秒上下）。
-      const r = run('node', [m.script]);
+      // ⭐ 第 82 轮：`script` 可以是**数组** ⇒ `node <脚本> <参数…>`。
+      // 加它的理由很具体：`check-external.mjs` 的**离线自检**在 `--self-test` 那个分支里，
+      // 而 witness 原来只会跑 `node <脚本>`（不带参数）—— 于是想给它配牙就只剩"真去联网"一条路，
+      // 而那正是第 81 轮拒绝把它挂进来的理由。⭐ 支持参数之后，牙可以只咬**离线那半截**。
+      const argv = Array.isArray(m.script) ? m.script : [m.script];
+      const r = run('node', argv);
       const bad = [...r.out.matchAll(/❌[^\n]*/g)].map((x) => x[0]);
       verdict = r.code !== 0 ? 'red' : 'green';
-      note = bad[0] ?? (r.timedOut ? '超时' : `退出码 ${r.code}`);
+      // ⚠️ 第 82 轮加的：`bad[0]` 缺席时**不能只说一句"退出码 N"就完事**。
+      //    那正是"红了，但红错了"的样子 —— 第 82 轮真撞上一次：变异体被写成了语法错误，
+      //    witness 崩了（退出码 1、stderr 里是 SyntaxError），回执却只说"退出码 1"，
+      //    看上去和"夹具抓到了"一模一样。⭐ 这个坑本身就在 `mutate` 里，格外讽刺。
+      //    所以：没有 `❌` 的非零退出，一律**显式报出来**。
+      const noVerdict = r.code !== 0 && bad.length === 0;
+      if (noVerdict) noVerdictCount += 1;
+      note = bad[0] ?? (r.timedOut ? '超时' : noVerdict
+        ? `⚠️ 退出码 ${r.code}，但一句 ❌ 都没有 —— 这看着像 witness 自己崩了，不是判了红`
+        : `退出码 ${r.code}`);
     } else {
       recompile();
       const r = run('node', ['--test', ...m.tests]);
@@ -1038,6 +1090,14 @@ const skipped = results.filter((r) => r.verdict === 'skip');
 console.log(`\n${'─'.repeat(64)}`);
 console.log(`砸了 ${results.length} 处：${red} 处见血，${green.length} 处**没被任何测试盯住**`
   + (skipped.length ? `，${skipped.length} 处不算数` : ''));
+// ⭐ 第 82 轮：红了也可能红错了 —— 把那种嫌疑单独拎出来说清。
+// 典型样子：变异体被写成了语法错误，witness 还没开口就崩了，退出码照样非零。
+// 那时回执里**一句 ❌ 都没有**，和"夹具真抓到了"长得一模一样。
+if (noVerdictCount) {
+  console.log(`\n⚠️ 有 ${noVerdictCount} 处是"非零退出、但一句 ❌ 都没有" —— 这是**红了但红错了**的嫌疑：`);
+  console.log('   witness 可能根本没跑起来（语法错 / 找不到文件 / 权限），而不是它判了红。');
+  console.log('   ⭐ 逐条看那些 ⚠️ 的回执，别把"崩了"当成"抓到了"。');
+}
 console.log(`保险 2 ✅ 原仓变异点自始至终没变（${fatalBase.slice(0, 12)}…）`);
 if (keep) console.log(`副本留着：${copy}`);
 
