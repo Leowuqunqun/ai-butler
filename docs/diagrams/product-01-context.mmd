@@ -1,7 +1,7 @@
 flowchart TB
-    Owner["主人 · 手机微信<br/>唯一用户，账号即身份"]
-    subgraph TC["腾讯"]
-        WX["微信服务器<br/>消息中转"]
+    Owner["主人 · 手机上的聊天软件<br/>微信 / 飞书 / Telegram · 账号即身份"]
+    subgraph TC["通道服务器（我们自己不运营）"]
+        WX["微信 iLink / 飞书 / Telegram Bot API<br/>消息中转"]
     end
     subgraph PC["你的电脑（管家住处）"]
         Butler["AI 管家<br/>认人 · 理解 · 执行 · 回报"]
@@ -10,7 +10,7 @@ flowchart TB
     Dev["其他设备<br/>家里 Mac / 公司 PC"]
 
     Owner <-->|"说人话 · 发图 · 发文件"| WX
-    WX <-->|"长轮询收信 · 主动发送"| Butler
+    WX <-->|"收信（长轮询 / 长连接）· 主动发送"| Butler
     Butler -->|"推理"| LLM
     Butler <-.->|"跨网指令 · 局域网 / Tailscale"| Dev
 

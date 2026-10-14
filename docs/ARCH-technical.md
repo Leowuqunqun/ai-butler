@@ -11,7 +11,7 @@
 
 ![整体架构](diagrams/arch-00-overview.svg)
 
-一张图看完：**主人 → 微信服务器 → 一个 cordis 容器（② 对话 → seam → core → ③ 能力 / ④ 设备 → `state/`）→ 模型服务 / 其他设备**。
+一张图看完：**主人 → 通道服务器（微信 / 飞书 / Telegram）→ 一个 cordis 容器（② 对话 → seam → core → ③ 能力 / ④ 设备 → `state/`）→ 模型服务 / 其他设备**。
 容器里那些方框就是本仓的包；下面每一节展开其中一块（源文件 [`arch-00-overview.mmd`](diagrams/arch-00-overview.mmd)）。
 
 ---

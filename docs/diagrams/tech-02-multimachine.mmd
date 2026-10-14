@@ -1,7 +1,7 @@
 flowchart TB
-    WX["微信服务器<br/>iLink 长轮询"]
+    WX["通道服务器<br/>微信 / 飞书 / Telegram"]
     subgraph HB["中枢 · hub 角色（@butler/core）<br/>常开那台，唯一持有登录态"]
-        CH["channel-wechat"]
+        CH["任一条通道<br/>channel-wechat / -telegram / -feishu"]
         RT["@butler/core<br/>路由器 · 别名 → 节点"]
         AP["approval-im<br/>审批协调"]
         CH --> RT

@@ -1,13 +1,13 @@
 %%{init: {"flowchart": {"wrappingWidth": 420}}}%%
 flowchart TB
-    OWNER["主人 · 手机微信<br/>唯一用户，账号即身份"]
-    WXSRV["微信服务器 iLink<br/>消息中转"]
+    OWNER["主人 · 手机上的聊天软件<br/>微信 / 飞书 / Telegram · 唯一用户"]
+    WXSRV["通道服务器<br/>微信 iLink / 飞书 / Telegram Bot API<br/>消息中转（我们自己不运营）"]
     LLM["模型服务<br/>主人自备 key"]
-    OTHER["别的电脑 · node<br/>只跑 agent，不登录微信"]
+    OTHER["别的电脑 · node<br/>只跑 agent，不登录通道"]
 
     subgraph BOX["你的电脑 · 一个 cordis 容器（butler run 拉起来）"]
         direction TB
-        CH["② 对话层<br/>channel-wechat<br/>channel-telegram<br/>扫码 · 收发 · 语音 · 图/文件"]
+        CH["② 对话层<br/>channel-wechat / -telegram / -feishu<br/>扫码或贴凭据 · 收发 · 语音 · 图/文件"]
         SEAMCH["seam-channel · ctx.channel"]
         CORE["@butler/core<br/>认主 · 排队 · 进度播报 · 自检 · 回话"]
         subgraph L3["③ 能力层"]
@@ -25,7 +25,7 @@ flowchart TB
     INST["① 接入层 · 一行装上<br/>install.command / install.sh<br/>butler init / run / doctor / autostart"]
 
     OWNER <-->|"说人话 · 发图 · 发文件"| WXSRV
-    WXSRV <-->|"长轮询收信 / 主动发送"| CH
+    WXSRV <-->|"收信（长轮询 / 长连接）/ 主动发送"| CH
     CH --> SEAMCH --> CORE
     CORE --> AG
     CORE --> MEM

@@ -26,7 +26,7 @@ bash scripts/render-diagrams.sh tech-03  # 只重渲某一张
 
 **[`arch-00-overview`](arch-00-overview.svg) —— 整体架构，一页看全。**
 
-主人 → 微信服务器 → 一个 cordis 容器（产品五层 ↔ 技术部件）→ 模型 / 其他设备。
+主人 → 通道服务器 → 一个 cordis 容器（产品五层 ↔ 技术部件）→ 模型 / 其他设备。
 它回答的是「这产品由哪些东西组成、它们怎么连起来」；下面 17 张是它的展开：
 每张只讲一件事，所以改起来便宜。**改细节别动这张；动这张，要回头同步下面几张。**
 
@@ -36,7 +36,7 @@ bash scripts/render-diagrams.sh tech-03  # 只重渲某一张
 
 | 图                        | 内容     | 一句话                          |
 | ------------------------ | ------ | ---------------------------- |
-| `product-01-context`     | 产品全景   | 主人 / 微信 / 管家 / 模型 / 其他设备 的关系 |
+| `product-01-context`     | 产品全景   | 主人 / 通道（微信 · 飞书 · Telegram）/ 管家 / 模型 / 其他设备 |
 | `product-02-layers`      | 五层能力模型 | 接入 → 对话 → 能力 → 设备 → 信任       |
 | `product-03-journey`     | 首次使用旅程 | 从双击到把事办成，标出体验痛点              |
 | `product-04-mechanisms`  | 四个核心机制 | 审批 · 记忆 · 主动 · 多设备           |
@@ -50,12 +50,12 @@ bash scripts/render-diagrams.sh tech-03  # 只重渲某一张
 | `tech-02-multimachine`    | 多机部署       | 中枢（core）+ 多节点（link-lan/node），跨网走 `ctx.link` |
 | `tech-03-seams`           | 包结构与 seam  | seam 包只声明，实现包继承注册           |
 | `tech-04-patch-layers`    | 配置分层       | 内置组合 → 用户覆盖 → 运行期状态         |
-| `tech-05-seq-inbound`     | 入站回合时序     | 一条消息从微信到结果回来                |
+| `tech-05-seq-inbound`     | 入站回合时序     | 一条消息从通道到结果回来（时序跟通道无关）        |
 | `tech-06-seq-approval`    | 审批时序       | 要动手前先问，超时 = 拒绝              |
 | `tech-07-seq-multidevice` | 跨设备时序      | 别名解析 + 离线就直说                |
 | `tech-08-seq-media`       | 收图 / 收文件时序 | CDN 下载 + 两种 aes_key 编码 + 解密 |
 | `tech-09-state-approval`  | 审批状态机      | 待决 → 已批准 / 已拒绝              |
-| `tech-10-class-seams`     | seam 类图    | 五个抽象基类与各自的实现（channel-feishu 还是候选） |
+| `tech-10-class-seams`     | seam 类图    | 五个抽象基类与各自的实现（三条通道都已在列）       |
 | `tech-11-er-state`        | 数据模型       | `state/` 下的实体与关系            |
 | `tech-12-boot`            | 启动组合       | patch 行怎么变成运行时的 ctx         |
 

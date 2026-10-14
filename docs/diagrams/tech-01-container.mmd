@@ -1,7 +1,7 @@
 flowchart TB
     subgraph HOST["单机模式：一个 cordis 容器（M1 的形态 · butler 拉起来）"]
         direction TB
-        CH["ctx.channel<br/>channel-wechat（或 channel-telegram）"]
+        CH["ctx.channel<br/>channel-wechat / -telegram / -feishu"]
         CORE["@butler/core —— hub 角色<br/>认主 · 会话 · 路由 · 排队 · 进度 · 回话 · 审批 · 自检"]
         NODE["node 角色 · 单机时内嵌<br/>跑 agent · 动文件（同进程，不走 ctx.link）"]
         AG["ctx.agent<br/>agent-dsh（或 agent-exec）"]
@@ -15,9 +15,9 @@ flowchart TB
         CORE --> ST
         MEM --> ST
     end
-    WX["微信服务器"]
+    WX["通道服务器"]
     LLM["模型服务"]
-    WX <-->|"长轮询 / 发送"| CH
+    WX <-->|"收信 / 发送"| CH
     AG -->|"推理"| LLM
     classDef seam fill:#EDE0FF,stroke:#8B5CF6,stroke-width:2px,color:#3B1D6E
     classDef core fill:#D6E8FF,stroke:#3D7DE8,stroke-width:2px,color:#0B2E6B

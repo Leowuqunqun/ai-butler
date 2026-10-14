@@ -1,14 +1,14 @@
 sequenceDiagram
     autonumber
     participant U as 主人
-    participant WX as 微信
-    participant CH as channel-wechat
+    participant WX as 通道服务器
+    participant CH as channel 适配层
     participant H as core（hub 角色）
     participant N as node（单机内嵌）
     participant A as agent-dsh
 
     U->>WX: 「把桌面那堆图按日期整理一下」
-    WX->>CH: 长轮询返回消息
+    WX->>CH: 收信（长轮询 / 长连接）
     CH->>H: InboundMessage
     H->>H: 认人（不是主人则静默丢弃，不回话）
     H->>H: 路由　目标设备 = 中枢本机

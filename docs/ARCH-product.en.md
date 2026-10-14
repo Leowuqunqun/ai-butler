@@ -12,7 +12,7 @@ diagram files. The sources are in the repo — English versions would be welcome
 
 ## At a glance
 
-Start with the whole picture: **owner → WeChat → your computer (one cordis container)**, and where each of the five product layers lands.
+Start with the whole picture: **owner → channel servers (WeChat / Feishu / Telegram) → your computer (one cordis container)**, and where each of the five product layers lands.
 
 ![Overall architecture](diagrams/arch-00-overview.svg)
 
@@ -51,7 +51,7 @@ Three hard constraints fall straight out of that picture:
 | **管家** | Butler | The product's personified name. In essence: agent + memory + permissions |
 | **中枢** | Hub | One always-on device of the owner's. **The only holder of the IM session**, responsible for identification, routing, approval, memory |
 | **节点** | Node | A computer being remote-controlled. **The work happens here** (files and commands are all local to it) |
-| **通道** | Channel | The IM that is connected. WeChat first, Feishu/Telegram later |
+| **通道** | Channel | The IM that is connected — WeChat / Feishu / Telegram, **one at a time** (several at once isn't supported yet) |
 | **链路** | Link | How the Hub ↔ Node traffic travels (LAN / Tailscale / SSH…) |
 | **能力** | Skill | One thing the butler can do (find a file, tidy up, send a notification, schedule…) |
 | **回合** | Turn | The owner says one thing → the butler finishes it → the butler says one thing back |
@@ -87,7 +87,7 @@ The product as the user perceives it is these five layers, outside in. **Any one
 | --- | --- | --- | --- |
 | 1 | Double-click the installer | Install dependencies, start services, open the onboarding page | Terminal, npm, git |
 | 2 | Paste a model key | A local page: where to get it, one box, stored in a 0600 credential file | Hand-writing YAML, API docs |
-| 3 | Scan the QR code with WeChat on the phone | A scan page that rotates the code automatically (a code lives 90 seconds) | Ports, callback URLs |
+| 3 | Scan a QR code (WeChat) or paste a credential string (Feishu / Telegram) | WeChat: a scan page that rotates the code automatically (a code lives 90 seconds); Feishu/Telegram: a local page that takes the app_id/secret or the token | Ports, callback URLs |
 | 4 | Reply with a "hi" | Claim ownership, create the session, reply with a self-introduction | A config file |
 | 5 | Say the first real thing | Do the work | Working directory, permission settings |
 

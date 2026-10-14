@@ -14,7 +14,7 @@ files as the Chinese version; the sources are in the repo, so English versions w
 
 ![Overall architecture](diagrams/arch-00-overview.svg)
 
-The whole thing in one picture: **owner → WeChat servers → one cordis container (② conversation → seam → core → ③ capability / ④ devices → `state/`) → model service / other machines**.
+The whole thing in one picture: **owner → channel servers (WeChat / Feishu / Telegram) → one cordis container (② conversation → seam → core → ③ capability / ④ devices → `state/`) → model service / other machines**.
 The boxes inside the container are this repo's packages; each section below opens up one of them (source: [`arch-00-overview.mmd`](diagrams/arch-00-overview.mmd)).
 
 ---
