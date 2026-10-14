@@ -233,7 +233,7 @@ await ctx.fiber.dispose()
 pnpm --filter @butler/seam-channel test
 ```
 
-10 个用例，全部离线（不连网、不需要任何账号凭证）：
+12 个用例，全部离线（不连网、不需要任何账号凭证）：
 覆盖服务位就位、双身份、配置解析、inject 门控、消息分发与去重、
 消费者抛错隔离、默认 no-op、重复注册报错、卸载回收。
 

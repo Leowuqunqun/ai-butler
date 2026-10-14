@@ -77,33 +77,36 @@ self-description is literally "the local subprocess implementation of the bash e
 
 ```
 packages/
-├── core/                    # ✅ built: the kernel (identity / routing / queueing / progress / honest replies, 92 tests)
+├── core/                    # ✅ built: the kernel (identity / routing / queueing / progress / honest replies / memory / approval relaying / standing authorisation (optionally time-limited) / self-check (CLI + WeChat) / opener / memory auto-extraction, 166 tests)
 │                            #    the two capability slots below are required; ctx.link is optional
 ├── seam-channel/            # ✅ built: the ctx.channel interface (TypeScript, 12 tests)
 ├── seam-agent/              # ✅ built: the ctx.agent interface (TypeScript, 12 tests)
 ├── seam-link/               # ✅ built: the ctx.link interface (TypeScript, 15 tests)
-├── seam-approval/           # M2: ctx.approval
+├── seam-approval/           # ✅ landed: the ctx.approval interface (TypeScript, 7 tests)
 ├── seam-memory/             # ✅ landed: the ctx.memory interface (TypeScript, 6 tests)
 │
-├── channel-wechat/          # ✅ M0 done; ✅ M1 wired into cordis (one package, two entry points, see below; 130 tests)
+├── channel-wechat/          # ✅ M0 done; ✅ M1 wired into cordis (one package, two entry points, see below; 134 tests)
 ├── channel-telegram/        # ✅ M3: the second channel (pure `fetch`, zero deps, 51 tests).
 │                            #    Its value is not the feature — it's the **proof that swapping IM
 │                            #    needs no core changes**: only the `name` line in the config moved
-├── channel-feishu/          # candidate: a third channel (the second one landed as channel-telegram)
+├── channel-feishu/          # ✅ the third channel: Feishu/Lark (standing on the official @larksuite/channel; 82 tests; ⚠️ not yet verified on a real tenant)
 ├── agent-dsh/               # ✅ extracted from M0: DSH headless (40 tests, 7 of them end-to-end)
 ├── agent-exec/              # ✅ extracted from M0: any command line (26 tests; also the contract's second check)
 ├── link-lan/                # ✅ built: direct connection on the same LAN (HTTP + SSE, zero dependencies, 65 tests)
 │                            #    two entry points in one package: `@butler/link-lan` (hub) / `@butler/link-lan/node` (node)
-├── link-tailscale/          # ✅ built: across networks (the roster is asked of Tailscale; the wire protocol stays link-lan's HTTP + SSE, 22 tests)
-├── approval-im/             # asks the owner in the conversation (default)
-├── approval-auto/           # for tests / automation
+├── link-tailscale/          # ✅ built: across networks (the roster is asked of Tailscale; the paired part is stored on disk; the wire protocol stays link-lan's HTTP + SSE, 34 tests)
+├── approval-im/             # ✅ landed: asks the owner in the conversation (default; 18 tests, two entry points in one package)
+├── approval-auto/           # candidate: for tests / automation (no real need yet, so not built)
 ├── memory-file/             # ✅ landed: a JSON file (9 tests; 0600 + atomic writes + order by seq, not by clock)
+├── dsh-plugin/              # ✅ landed: packs the WeChat channel as a **DSH plugin** (37 tests + a real-tenant probe).
+│                            #    imports no DSH package, depends only on services both profiles have, so it mounts
+│                            #    under web or headless; one session per contact, resumable across restarts
 │
-├── hub/                     # hub orchestration
-├── node/                    # device node
-├── cli/                     # ✅ the `butler` entry point: config → install the container → go online (onboarding page) / doctor self-check (196 tests)
-│                            #    includes M3's first piece: `butler init` (the program writes the config; the user types nothing)
-└── installer/               # M3: bootstrapper + double-click shell (`install.sh` / `install.command`, same origin as the CLI)
+├── hub/                     # planned: a standalone hub orchestration package — core/ fills that role today (same process on one machine)
+├── node/                    # planned: a standalone device-node package — link-lan's /node subpath fills that role today
+├── cli/                     # ✅ the `butler` entry point: config → install the container → go online (onboarding page) / doctor self-check (274 tests)
+│                            #    includes M3's first piece: `butler init` (the program writes the config; the user types nothing; missing capability lines are filled in when upgrading an old config)
+└── installer/               # half-landed: the script ships at the repo root (install.sh generates and double-clicks install.command, same origin as the CLI); the package isn't split out yet
 ```
 
 **Naming convention** (learned from dsh): `seam-*` declares an interface only, no implementation; `<domain>-<implementation>` is a concrete implementation;

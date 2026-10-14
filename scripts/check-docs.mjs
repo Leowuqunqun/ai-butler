@@ -357,7 +357,14 @@ function selfRepoUrlViolations(text, exists) {
 // ⚠️ 这里查的是**文档 ↔ 仓库**（`packages/cli/package.json` 的版本、`docs/diagrams` 下
 //    真有几张 .svg），**不是** zh ↔ en。上面放弃的是后者（分词差异、译文天然多一个数字），
 //    那些噪声在这儿不存在：两边各自跟**事实**比。
-const README_NUMBER_DOCS = ['README.md', 'README.en.md'];
+// ⚠️ 第 74 轮把**安装指令**那半从"只查根 README"放宽到"查所有 README.md" ——
+//    因为 `packages/dsh-plugin/README.md` 里钉着 `v0.1.0`（落后两个版本），而根 README
+//    的守卫够不着它。**没有**一并放宽"图数"那半：它只认**以 `docs/` 开头的那一行**，
+//    `docs/diagrams/README.md` 里的"18 张 / 17 张"说的是另一件事（总图数 / overview 之外
+//    的张数），锚不上、也不该锚。放宽一半、留一半，是有意的。
+// ⚠️ 一开始写成 `f === 'README.md' || f.endsWith('/README.md')`，把 `README.en.md` **漏了** ——
+//    证据是「看了几条」从 4 掉到 3。所以下面那个防沉默阈值写死成 ≥4，专门拦这一类。
+const isReadme = (f) => /(^|\/)README(\.[a-z]{2})?\.md$/.test(f);
 
 function staleCountViolations(text, { version, svgCount }) {
   const hits = [];
@@ -392,6 +399,61 @@ function staleCountViolations(text, { version, svgCount }) {
     }
   });
   return { hits, examined };
+}
+
+// ───────── ⑨ 中英两版的"包清单"必须说同一件事（第 74 轮） ─────────
+//
+// 第 74 轮量出来：`docs/ARCH-technical.md` 那棵树一直被维护着（14 个需要数字的包里 12 个是对的），
+// 而 `docs/ARCH-technical.en.md` 那棵**从某个版本起就没人动过** —— core 还写着 92、wechat 130、
+// link-tailscale 22、cli 196，`dsh-plugin` **整行都没有**，`seam-approval` / `approval-im` 没数。
+// 也就是说：**英文读者看到的是一份几个月前的架构**，而他不会知道。
+//
+// ⚠️ 这和上面那段**放弃**了的"中英数字必须一样"**不是同一件事**，别搞混：
+//   · 那段比的是**整篇散文里的所有数字** —— 分词差异、`## 1.` 这种编号、译文里合法多出的
+//     数字（`32 张图` + `(32 images …)`）都会误报，所以放弃了；
+//   · 这条只比**一个围栏代码块里的树**：每行形状固定成 `├── 包名/ …… N 个测试` / `N tests`。
+//     有噪声的地方一个字都不碰，只碰这个**结构**。
+// 一个会误报的守卫比没有守卫更糟 —— 所以这条宁可窄到只覆盖一个代码块。
+//
+// ⚠️ 它拦得住什么、拦不住什么，说清楚：
+//   · 拦得住：一边加了包另一边没加、一边改了数另一边没改、一边有数另一边没数；
+//   · **拦不住**：两边**一起**错（比如两个都还写着旧数）。后者只能靠人 —— 或者靠
+//     某天有人真的拿 `pnpm test` 去对。所以它只是把"一半的时间差"变成红灯，不是真理。
+const ARCH_PAIR = { zh: 'docs/ARCH-technical.md', en: 'docs/ARCH-technical.en.md' };
+
+/** 从第一个围栏块里抓 包名 → 测试数（没写数就是 null） */
+function treeOf(text, countPat) {
+  const out = new Map();
+  let inside = false;
+  for (const line of text.split('\n')) {
+    if (line.trim() === '```') {
+      inside = !inside;
+      if (!inside && out.size) break;
+      continue;
+    }
+    if (!inside) continue;
+    const row = /[├└]──\s*([a-z0-9-]+)\//.exec(line);
+    if (!row) continue;
+    const n = new RegExp(countPat).exec(line);
+    out.set(row[1], n ? Number(n[1]) : null);
+  }
+  return out;
+}
+
+function pairedTreeViolations(zhText, enText) {
+  const zh = treeOf(zhText, '(\\d+)\\s*个测试');
+  const en = treeOf(enText, '(\\d+)\\s*tests?');
+  const hits = [];
+  for (const [k, v] of zh) {
+    if (!en.has(k)) hits.push({ text: k, why: `中文树里有 \`${k}\`，英文树里没有这一行` });
+    else if (en.get(k) !== v) {
+      hits.push({ text: k, why: `同一个包 \`${k}\`，中文写 ${v ?? '（没数）'}、英文写 ${en.get(k) ?? '（没数）'}` });
+    }
+  }
+  for (const k of en.keys()) {
+    if (!zh.has(k)) hits.push({ text: k, why: `英文树里有 \`${k}\`，中文树里没有这一行` });
+  }
+  return { hits, examined: zh.size + en.size };
 }
 
 const SELF_TEST = [
@@ -544,11 +606,51 @@ const COUNT_TEST = [
     ctx: { version: '1.2.3', svgCount: 3 },
     want: 0, examined: 0,
   },
+  {
+    why: '⭐ 包自己的 README 里钉旧版本也算（第 74 轮放宽到所有 README.md）',
+    text: 'curl …/releases/download/v0.1.0/butler-dsh-plugin-0.1.0.tar.gz',
+    ctx: { version: '1.2.3', svgCount: 3 },
+    want: 1, examined: 1,
+  },
 ];
 
 /** 自检夹具的总条数。两处汇总都用它，免得改了一处忘了另一处 */
+// ── 规则 ⑨ 的夹具
+const TREE_TEST = [
+  {
+    why: '两棵树一模一样 → 不报',
+    zh: '```\npackages/\n├── core/   # 内核（166 个测试）\n└── cli/    # 入口（274 个测试）\n```',
+    en: '```\npackages/\n├── core/   # the kernel (166 tests)\n└── cli/    # the entry point (274 tests)\n```',
+    want: 0,
+  },
+  {
+    why: '⭐ 同一边改了数、另一边没改 → 报',
+    zh: '```\npackages/\n├── core/   # 内核（166 个测试）\n```',
+    en: '```\npackages/\n├── core/   # the kernel (92 tests)\n```',
+    want: 1,
+  },
+  {
+    why: '⭐ 一边加了包、另一边整行没有 → 报',
+    zh: '```\npackages/\n├── core/   # 内核（166 个测试）\n├── dsh-plugin/  # 插件（37 个测试）\n```',
+    en: '```\npackages/\n├── core/   # the kernel (166 tests)\n```',
+    want: 1,
+  },
+  {
+    why: '⭐ 一边有数、另一边没数 → 也报',
+    zh: '```\npackages/\n├── seam-approval/  # 接口（7 个测试）\n```',
+    en: '```\npackages/\n├── seam-approval/  # the interface\n```',
+    want: 1,
+  },
+  {
+    why: '两边都没写数的（规划中的包）→ 不报',
+    zh: '```\npackages/\n├── hub/   # 规划中\n└── node/  # 规划中\n```',
+    en: '```\npackages/\n├── hub/   # planned\n└── node/  # planned\n```',
+    want: 0,
+  },
+];
+
 const RULE_FIXTURE_COUNT = () =>
-  SELF_TEST.length + URL_TEST.length + CMD_TEST.length + PROV_TEST.length + COUNT_TEST.length;
+  SELF_TEST.length + URL_TEST.length + CMD_TEST.length + PROV_TEST.length + COUNT_TEST.length + TREE_TEST.length;
 
 function runSelfTest() {
   const bad = [
@@ -601,6 +703,10 @@ function runSelfTest() {
             : `（另外：像"数"的行应该看 ${c.examined} 条，实际 ${r.examined} 条）`,
       };
     }),
+    ...TREE_TEST.map((c) => {
+      const r = pairedTreeViolations(c.zh, c.en);
+      return { ...c, got: r.hits.length, shown: (r.hits[0] && r.hits[0].why) ?? '（两棵树一致）' };
+    }),
   ].filter((c) => c.got !== c.want || c.whyWrong);
 
   if (!bad.length) return;
@@ -610,8 +716,8 @@ function runSelfTest() {
     console.error(`    ${c.shown}`);
   }
   console.error('\n改法：这是 scripts/check-docs.mjs 里 shippedDocViolations / selfRepoUrlViolations /');
-  console.error('sourceTreeCommandViolations / provenanceViolations / staleCountViolations 的规则被改动了。');
-  console.error('要是故意放宽/收紧，请把 SELF_TEST / URL_TEST / CMD_TEST / PROV_TEST / COUNT_TEST 一起改，');
+  console.error('sourceTreeCommandViolations / provenanceViolations / staleCountViolations / pairedTreeViolations 的规则被改动了。');
+  console.error('要是故意放宽/收紧，请把 SELF_TEST / URL_TEST / CMD_TEST / PROV_TEST / COUNT_TEST / TREE_TEST 一起改，');
   console.error('并在 docs/CHANNEL-FEISHU.md 里写清楚为什么。');
   process.exit(1);
 }
@@ -798,7 +904,7 @@ const svgCount = existsSync(diagramDir)
 let staleBad = 0;
 let staleExamined = 0;
 for (const file of files) {
-  if (!README_NUMBER_DOCS.includes(file)) continue;
+  if (!isReadme(file)) continue;
   const raw = readFileSync(resolve(ROOT, file), 'utf8');
   const { hits, examined } = staleCountViolations(raw, { version: cliPkg.version, svgCount });
   staleExamined += examined;
@@ -812,10 +918,41 @@ for (const file of files) {
   }
 }
 // 防沉默：理由同规则 ⑥⑦。这两份 README 里一定既有安装指令、又有那张状态表。
-if (!problems.length && staleExamined === 0) {
+// ⚠️ 阈值**不是 0 而是 4**：两份根 README 各有 2 条（一个 release URL + 一行「N 张图」），
+//    再加上包 README 里的安装 URL。写成 `=== 0` 的话，范围被误缩到只剩一份 README 也照样绿 ——
+//    第 74 轮就是这么把 `README.en.md` 漏掉的（数字从 4 掉到 3 才被发现）。
+if (!problems.length && staleExamined < 4) {
   problems.push(
-    '❌ 规则 ⑧ 一条"数"都没看到\n' +
-      '       → README.md / README.en.md 里一定有 `releases/download/v…` 和 `docs/ … N 张图`。检查那两条正则，别让它空转。',
+    `❌ 规则 ⑧ 只看了 ${staleExamined} 条「数」，太少\n` +
+      '       → 两份根 README 各有 2 条（一个 `releases/download/v…` + 一行 `docs/ … N 张图`），包 README 里还有安装 URL。' +
+      '检查 isReadme 和那两条正则，别让它空转或漏掉一份文档。',
+  );
+}
+
+// ───────── ⑨ 中英两版的"包清单"必须说同一件事（第 74 轮） ─────────
+
+let treeBad = 0;
+let treeExamined = 0;
+{
+  const zhPath = resolve(ROOT, ARCH_PAIR.zh);
+  const enPath = resolve(ROOT, ARCH_PAIR.en);
+  if (existsSync(zhPath) && existsSync(enPath)) {
+    const r = pairedTreeViolations(readFileSync(zhPath, 'utf8'), readFileSync(enPath, 'utf8'));
+    treeExamined = r.examined;
+    for (const hit of r.hits) {
+      problems.push(
+        `❌ 架构文档两棵"包树"对不上  ${ARCH_PAIR.zh} ↔ ${ARCH_PAIR.en}\n       → ${hit.why}\n` +
+          '       （这两棵树是同一件事实的两种说法。一边改了另一边没改，那边的读者就会看到' +
+          '一份**几个月前的架构** —— 而双语结构守卫只比二级标题的数量，拦不住这个）',
+      );
+      treeBad++;
+    }
+  }
+}
+// 防沉默：理由同规则 ⑥⑦⑧。两棵树加起来一定不止一两行。
+if (!problems.length && treeExamined < 10) {
+  problems.push(
+    `❌ 规则 ⑨ 只看 ${treeExamined} 行"包树"\n       → 两棵加起来应该有二十来行。检查 treeOf 里那个围栏和行形状的正则。`,
   );
 }
 
@@ -909,7 +1046,7 @@ if (problems.length) console.log(`${problems.join('\n')}\n`);
 console.log(
   `检查 ${files.length} 个 md、${checked} 个链接/图片、${pairs.length} 对双语 → ` +
   (problems.length
-    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}、本仓地址 ${selfUrlBad}、照抄命令 ${cmdBad}、出处 ${provBad}、用户面数字 ${staleBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
-    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着、本仓地址指得到、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、用户面文档里的数跟仓库对得上（看了 ${staleExamined} 条）、双语结构对齐（规则自检 ${RULE_FIXTURE_COUNT()} 条通过）`),
+    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}、本仓地址 ${selfUrlBad}、照抄命令 ${cmdBad}、出处 ${provBad}、用户面数字 ${staleBad}、包树 ${treeBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
+    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着、本仓地址指得到、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、用户面文档里的数跟仓库对得上（看了 ${staleExamined} 条）、架构包树中英对齐（看了 ${treeExamined} 行）、双语结构对齐（规则自检 ${RULE_FIXTURE_COUNT()} 条通过）`),
 );
 process.exit(problems.length ? 1 : 0);

@@ -159,7 +159,7 @@ await ctx.core.start();     // 加载 ≠ 上线，start() 才真的开始收信
 ## 测试
 
 ```bash
-pnpm test        # 87 个用例，全离线
+pnpm test        # 一百六十多个用例，全离线
 ```
 
 | 文件 | 验什么 |

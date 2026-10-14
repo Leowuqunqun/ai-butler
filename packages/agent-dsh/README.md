@@ -101,7 +101,7 @@ headless agent 会吐 NDJSON，其中 `tool_call` 事件带 `{callId, tool, inpu
 ## 测试
 
 ```bash
-pnpm test        # 32 个用例（25 + 7 端到端），全离线
+pnpm test        # 40 个用例（33 + 7 端到端），全离线
 ```
 
 `bin` 指向 `test/fixtures/fake-dsh.mjs` —— 一个**真进程**，按任务文案演出不同的

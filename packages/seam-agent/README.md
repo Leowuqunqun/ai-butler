@@ -76,7 +76,7 @@ await ctx.plugin(MyAgent, { bin: '/usr/local/bin/my-agent' });
 ## 测试
 
 ```bash
-pnpm test        # 11 个用例，全离线
+pnpm test        # 12 个用例，全离线
 ```
 
 被测对象是**编译产物**（`lib/`）；假 agent 用 TypeScript 写在

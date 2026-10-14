@@ -427,23 +427,23 @@ pnpm test      # 在仓库根目录跑全部包
 cd packages/channel-wechat && node --test test/*.mjs
 ```
 
-**119 个用例，全部离线**——不连网、不需要微信账号、**不会真的发消息**：
+**一百三十多个用例，全部离线**——不连网、不需要微信账号、**不会真的发消息**：
 
-- `test/smoke.mjs`（24 个）：文本处理、配置合并、白名单、认主、排队、发附件、
+- `test/smoke.mjs`（25 个）：文本处理、配置合并、白名单、认主、排队、发附件、
   引用前缀、会话锁重试、错误转述，以及**真的把收信循环跑一遍**（含 `stop()` 立刻返回）
 - `test/media.mjs`（24 个）：`aes_key` 的两种编码、图片的第二个 key 来源、
   AES 加解密往返、CDN 地址拼接、媒体优先级、路径穿越防护、下载失败的降级
 - `test/login.mjs`（10 个）：**第一次启动自己登录**——真起一个本地扫码页（真 HTTP）、
   喂一个假客户端，于是"码真的进了页面""浏览器真的被指向那个地址""登录态真的落了盘"
   全都能验；三个平台各自该用哪条命令打开浏览器，也钉着
-- `test/plugin.mjs`（30 个）：cordis 插件面——加载、配置默认值、幂等 start、
+- `test/plugin.mjs`（41 个）：cordis 插件面——加载、配置默认值、幂等 start、
   收信与过滤、游标持久化、附件下载落盘、失败降级、发文本/文件、正在输入、卸载自停
 - `test/home.mjs`（12 个）：数据目录的四级优先级、`--home` 的三种写法、
   安装态（路径含 `node_modules`）必须改走用户目录
 - `test/cli.mjs`（9 个）：**真的起子进程跑 CLI**——覆盖"全局 flag 写在子命令前面
   会不会把子命令派发带偏"这类只有端到端才抓得到的问题
 - `test/plugin-types.mjs`（6 个）：**防漂移**——手写的 `plugin.d.ts` 跟运行时成员对账
-- `test/ilink.mjs`（4 个）：长轮询能被立刻掐断（停机不干等 40 秒）、超时行为不变
+- `test/ilink.mjs`（7 个）：长轮询能被立刻掐断（停机不干等 40 秒）、超时行为不变
 
 另外 `pnpm typecheck` 会编译 [`test/fixtures/consumer.ts`](https://github.com/Leowuqunqun/ai-butler/blob/main/packages/channel-wechat/test/fixtures/consumer.ts)——
 一个模拟"核心层怎么用这个通道"的**消费方探针**（只做类型检查，不运行）。
