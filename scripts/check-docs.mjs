@@ -290,6 +290,58 @@ function provenanceViolations(text, rounds) {
   return { hits, examined };
 }
 
+// ── 规则 ⑬：§五 每一行契约都要有「⚙ 实际怎么做的」（第 84 轮） ──
+//
+// 为什么：第 84 轮把 §五 那 8 行**不带标记**的契约逐条对到 `packages/channel-feishu` 的代码，
+// 有两条对不上 ——
+//   · `files` 行写着「>100 MB 要 `Range` 分片（单片 ≤32 MB）」 =====> **没有任何实现者**：
+//     我们自己的上限是 `MAX_IMAGE_BYTES` 10 MB / `maxFileMb` 30 MB，**超了当场抛错**，
+//     `>100 MB` 那条路根本到不了。官方包里也没有（`Range` / `bytes=` / `206` 全零命中）；
+//   · `text` 行写着「**得**拿 `mentions[]` 换成真人（群聊必需）」=====> 那是**官方包**做的，
+//     我们**故意**不解析事件（`map.ts` 第 69 行写着原因）。措辞读起来像我们漏了一道工序。
+//
+// ⭐ 两条的共同形状：**这一行说的是"飞书协议长什么样"，却没说"谁在做"。**
+//    而旁边 `check()` / `contextToken` / `quote` 三行早就写着 `⚙ 实际怎么做的` ——
+//    ⭐ 又是"一处改对了，旁边没跟上"（第 76/77/78/79/83 轮那一族）。
+//
+// 规则：§五 契约表里**每一行契约行**（表头、分隔行除外）都必须带 `⚙`。
+// ⚠️ 只管 §五 那张表（`## 五、` 到 `**三个真问题**` 之间），和规则 ⑫ 同一个范围、同一个理由。
+// ⚠️ 为什么要"每一行"而不是"提到接口路径的行"：契约表**存在的意义**就是
+//    「契约 ↔ 飞书这边怎么做」。一行不写"我们怎么做的"，它就只是一句**计划期的承诺** ——
+//    第 84 轮抓到的那条正是这种承诺：写着、没人做、也没人发现。
+const WHO_MARK = /⚙/;
+
+function contractWhoViolations(text) {
+  const hits = [];
+  let examined = 0;
+  const a = text.indexOf(CONTRACT_REGION_START);
+  if (a < 0) return { hits, examined }; // 没有这一节就没什么可看的
+  const b = text.indexOf(CONTRACT_REGION_END, a);
+  const region = b < 0 ? text.slice(a) : text.slice(a, b);
+  for (const line of region.split('\n')) {
+    const t = line.trim();
+    if (!t.startsWith('|')) continue;
+    if (/^\|\s*-+/.test(t)) continue; // 分隔行
+    if (/^\|\s*契约\s*\|/.test(t)) continue; // 表头
+    examined++;
+    if (!WHO_MARK.test(t)) {
+      hits.push({ why: `没写"我们实际怎么做的"：${t.slice(0, 70)}` });
+    }
+  }
+  return { hits, examined };
+}
+
+/** 契约表"谁做的"那条的承诺（改规则就把它一起改，改不了说明你改的是承诺） */
+const WHO_TEST = [
+  { why: '写了 ⚙ 的行（合格）', text: '## 五、\n| `a()` | 走 X。⚙ **实际怎么做的**：就是这一句 |\n**三个真问题**', want: 0, examined: 1 },
+  { why: '没写 ⚙ 的行（计划期承诺）', text: '## 五、\n| `a()` | 走 X |\n**三个真问题**', want: 1, examined: 1 },
+  { why: '表头和分隔行不算契约行', text: '## 五、\n| 契约 | 飞书这边怎么做 |\n| --- | --- |\n| `a()` | 走 X。⚙ 实际 |\n**三个真问题**', want: 0, examined: 1 },
+  { why: '表外的散文不管', text: '## 五、\n`sendText` 走 POST 那条路。\n**三个真问题**', want: 0, examined: 0 },
+  { why: '没有 §五 就没什么可看的', text: '## 六、\n| `a()` | 走 X |', want: 0, examined: 0 },
+  { why: '范围到 **三个真问题** 为止（后面的表格不归它管）', text: '## 五、\n| `a()` | 走 X。⚙ 实际 |\n**三个真问题**\n| `b()` | 没标记 |', want: 0, examined: 1 },
+  { why: '只有表头没有契约行', text: '## 五、\n| 契约 | 飞书这边怎么做 |\n| --- | --- |\n**三个真问题**', want: 0, examined: 0 },
+];
+
 /**
  * 哪些 md 算"用户会读的文档"：仓库门面 + 上手指南 + 各包的 README（后者跟着包发出去，
  * 装完的人在 `node_modules/@butler/<包>/README.md` 读到它）+ 飞书手册的**验收那一节**。
@@ -862,7 +914,7 @@ const CONTRACT_TEST = [
 ];
 
 const RULE_FIXTURE_COUNT = () =>
-  SELF_TEST.length + URL_TEST.length + CMD_TEST.length + PROV_TEST.length + COUNT_TEST.length + TREE_TEST.length + ANCHOR_TEST.length + EXTERNAL_TEST.length + CONTRACT_TEST.length;
+  SELF_TEST.length + URL_TEST.length + CMD_TEST.length + PROV_TEST.length + COUNT_TEST.length + TREE_TEST.length + ANCHOR_TEST.length + EXTERNAL_TEST.length + CONTRACT_TEST.length + WHO_TEST.length;
 
 function runSelfTest() {
   const bad = [
@@ -927,6 +979,10 @@ function runSelfTest() {
       const r = contractGuessViolations(c.text);
       return { ...c, got: r.hits.length, examined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（定了论）' };
     }),
+    ...WHO_TEST.map((c) => {
+      const r = contractWhoViolations(c.text);
+      return { ...c, got: r.hits.length, examined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（每一行都写了谁做的）' };
+    }),
     ...TREE_TEST.map((c) => {
       const r = pairedTreeViolations(c.zh, c.en);
       return { ...c, got: r.hits.length, shown: (r.hits[0] && r.hits[0].why) ?? '（两棵树一致）' };
@@ -940,8 +996,8 @@ function runSelfTest() {
     console.error(`    ${c.shown}`);
   }
   console.error('\n改法：这是 scripts/check-docs.mjs 里 shippedDocViolations / selfRepoUrlViolations /');
-  console.error('sourceTreeCommandViolations / provenanceViolations / staleCountViolations / pairedTreeViolations / unanchoredCountViolations / externalMeasuredViolations / contractGuessViolations 的规则被改动了。');
-  console.error('要是故意放宽/收紧，请把 SELF_TEST / URL_TEST / CMD_TEST / PROV_TEST / COUNT_TEST / TREE_TEST / ANCHOR_TEST / EXTERNAL_TEST / CONTRACT_TEST 一起改，');
+  console.error('sourceTreeCommandViolations / provenanceViolations / staleCountViolations / pairedTreeViolations / unanchoredCountViolations / externalMeasuredViolations / contractGuessViolations / contractWhoViolations 的规则被改动了。');
+  console.error('要是故意放宽/收紧，请把 SELF_TEST / URL_TEST / CMD_TEST / PROV_TEST / COUNT_TEST / TREE_TEST / ANCHOR_TEST / EXTERNAL_TEST / CONTRACT_TEST / WHO_TEST 一起改，');
   console.error('并在 docs/CHANNEL-FEISHU.md 里写清楚为什么。');
   process.exit(1);
 }
@@ -1226,6 +1282,34 @@ let contractExamined = 0;
   }
 }
 
+// ───────── ⑬ §五 契约表每一行都要写"我们实际怎么做的"（第 84 轮） ─────────
+
+let whoBad = 0;
+let whoExamined = 0;
+{
+  const rel = 'docs/CHANNEL-FEISHU.md';
+  const abs = resolve(ROOT, rel);
+  if (existsSync(abs)) {
+    const r = contractWhoViolations(readFileSync(abs, 'utf8'));
+    whoExamined += r.examined;
+    for (const hit of r.hits) {
+      problems.push(
+        `❌ §五 契约行没写"我们实际怎么做的"  ${rel}\n       → ${hit.why}\n` +
+          '       （§五 这张表的意义就是「契约 ↔ 飞书这边怎么做」；一行不写"实际怎么做的"，' +
+          '它就只是一句**计划期的承诺**。⭐ 第 84 轮抓到一条正是这样：写着「>100 MB 要 Range 分片」，' +
+          '而全仓和官方包里**都没有实现者**。照同一张表里 `check()` 行的范式补上 `⚙ 实际怎么做的`）',
+      );
+      whoBad++;
+    }
+    if (whoExamined < 5) {
+      problems.push(
+        `❌ 规则 ⑬ 只看了 ${whoExamined} 行契约，太少\n` +
+          '       → 第 84 轮给 §五 配牙时是 11 行。'+ '检查 contractWhoViolations 里那两个边界词和行形状的正则。',
+      );
+    }
+  }
+}
+
 let anchorBad = 0;
 let anchorExamined = 0;
 for (const rel of ANCHOR_FILES) {
@@ -1333,7 +1417,7 @@ if (problems.length) console.log(`${problems.join('\n')}\n`);
 console.log(
   `检查 ${files.length} 个 md、${checked} 个链接/图片、${pairs.length} 对双语 → ` +
   (problems.length
-    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}、本仓地址 ${selfUrlBad}、照抄命令 ${cmdBad}、出处 ${provBad}、用户面数字 ${staleBad}、包树 ${treeBad}、时间锚 ${anchorBad}、契约定论 ${contractBad}、外部量测 ${externalBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
-    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着、本仓地址指得到、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、用户面文档里的数跟仓库对得上（看了 ${staleExamined} 条）、架构包树中英对齐（看了 ${treeExamined} 行）、精确数都带时间锚（看了 ${anchorExamined} 条）、量别人仓库的数都带日期（看了 ${externalExamined} 条）、§五 契约行都定了论（看了 ${contractExamined} 条）、双语结构对齐（规则自检 ${RULE_FIXTURE_COUNT()} 条通过）`),
+    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}、本仓地址 ${selfUrlBad}、照抄命令 ${cmdBad}、出处 ${provBad}、用户面数字 ${staleBad}、包树 ${treeBad}、时间锚 ${anchorBad}、契约定论 ${contractBad}、契约谁做的 ${whoBad}、外部量测 ${externalBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
+    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着、本仓地址指得到、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、用户面文档里的数跟仓库对得上（看了 ${staleExamined} 条）、架构包树中英对齐（看了 ${treeExamined} 行）、精确数都带时间锚（看了 ${anchorExamined} 条）、量别人仓库的数都带日期（看了 ${externalExamined} 条）、§五 契约行都定了论（看了 ${contractExamined} 条）、都写了"实际怎么做的"（看了 ${whoExamined} 行）、双语结构对齐（规则自检 ${RULE_FIXTURE_COUNT()} 条通过）`),
 );
 process.exit(problems.length ? 1 : 0);

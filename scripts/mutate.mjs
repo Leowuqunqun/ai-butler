@@ -918,7 +918,16 @@ const MUTATIONS = [
         'docs/                  product and technical architecture (diagrams under docs/diagrams/)'],
     ],
   },
+  {
+    name: '⑬ §五 契约行没写"我们实际怎么做的"（把 setTyping 那行的 ⚙ 段拿掉）',
+    claim: '§五 那张表的意义就是「契约 ↔ 飞书这边怎么做」。一行不写"实际怎么做的"，它就只是一句计划期的承诺 —— 第 84 轮抓到的那条正是这样：写着「>100 MB 要 Range 分片」，全仓和官方包里都没有实现者',
+    script: 'scripts/check-docs.mjs',
+    files: [['docs/CHANNEL-FEISHU.md',
+      '。⚙ **实际怎么做的**：就是基类那个空实现',
+      '。就是基类那个空实现']],
+  },
 ];
+
 
 // ─────────────────────────── 参数 ───────────────────────────
 

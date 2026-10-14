@@ -143,17 +143,17 @@ body 是 `app_id` + `app_secret`，**最大有效期 2 小时**；剩余不足 3
 
 | 契约 | 飞书这边怎么做 |
 | --- | --- |
-| `start()` / `stop()` | `@larksuite/channel` 或 SDK 的 `WSClient`；收尾照现成写法走 `ctx.effect(() => () => this.stop())` |
-| `sendText(to, text, opts)` | `POST /open-apis/im/v1/messages?receive_id_type=chat_id`，`msg_type=text`；**content 是转义后的 JSON 字符串**；text ≤150 KB |
-| `sendFile(to, path, opts)` | **两段式**：先 `POST /im/v1/images`（≤10 MB）或 `/im/v1/files`（≤30 MB，`file_type` 由后缀映射）换 key，再发 `image`/`file` |
-| `opts.quote` | 飞书**有原生引用**：`POST /im/v1/messages/:message_id/reply` —— 通道自己走它，文本一个字不改（和 Telegram 一样）。**接缝不用改** ✓ |
+| `start()` / `stop()` | `@larksuite/channel` 或 SDK 的 `WSClient`；收尾照现成写法走 `ctx.effect(() => () => this.stop())`。⚙ **实际怎么做的**：就是这一句（`index.ts` 第 324 行 `ctx.effect(() => () => this.stop(), 'feishu.stop')`）；长连接、重连、去重全在官方包里 |
+| `sendText(to, text, opts)` | `POST /open-apis/im/v1/messages?receive_id_type=chat_id`，`msg_type=text`；**content 是转义后的 JSON 字符串**；text ≤150 KB。⚙ **实际怎么做的**：这一整行都是**官方包**在做 —— 我们只给它 `{ markdown: text }`，**分条也交给它**（照它返回的 `chunkIds` 数告诉内核分了几条，`opts.maxChars` 因此不用） |
+| `sendFile(to, path, opts)` | **两段式**：先 `POST /im/v1/images`（≤10 MB）或 `/im/v1/files`（≤30 MB，`file_type` 由后缀映射）换 key，再发 `image`/`file`。⚙ **实际怎么做的**：两段式与 `file_type` 映射是**官方包**在做；**那两个上限是我们的**（`MAX_IMAGE_BYTES` = 10 MB、`maxFileMb` 默认 30），而且是**发之前先量**：超了当场抛错，不把大文件推上去再被拒 |
+| `opts.quote` | 飞书**有原生引用**：`POST /im/v1/messages/:message_id/reply` —— 通道自己走它，文本一个字不改（和 Telegram 一样）。**接缝不用改** ✓。⚙ **实际怎么做的**：`replyOrSend` 先试原生回复、失败才退回直接发送（会 `warn` 一句）；`opts.quote` 里的文本**故意不塞进正文** —— 飞书自己会把被引那句贴在气泡上，再顶一行 `↩…` 就重复了 |
 | `opts.contextToken` | `chat_id`（要原生回复时把 `message_id` 一起塞进去）。⚙ **实际怎么做的**：`map.ts` 的 `encodeContext` 把 `{ chatId, messageId, threadId }` 编成 JSON 交给接缝；发的时候 `index.ts` 看有没有 `messageId` —— 有就走原生回复、没有就普通发（**主动播报那条路照走**，它本来就没有 contextToken）。⭐ 当初标的是"我们的判断"，第 79 轮对着代码一看 —— **猜对了** |
-| `InboundMessage.fromId` | `event.sender.sender_id.open_id`（`ou_` 前缀，**应用内**稳定；跨应用才需要 `union_id`） |
-| `InboundMessage.text` | `content` 是**序列化后的 JSON 字符串**，要二次 `JSON.parse`；里面 `@` 变成 `@_user_N`，**得拿 `mentions[]` 换成真人**（群聊必需） |
+| `InboundMessage.fromId` | `event.sender.sender_id.open_id`（`ou_` 前缀，**应用内**稳定；跨应用才需要 `union_id`）。⚙ **实际怎么做的**：我们直接读官方包归一化后的 `msg.senderId`（`map.ts` 的 `toInbound`），不认识原始事件字段 |
+| `InboundMessage.text` | `content` 是**序列化后的 JSON 字符串**，要二次 `JSON.parse`；里面 `@` 变成 `@_user_N`。⚙ **实际怎么做的**：**我们不解析事件**，只读官方包归一化后的 `msg.content` —— `@_user_1` 已经被它拿 `mentions[]` 换成人名了（`map.ts` 第 69 行写明了这就是"不自己解析事件"的原因之一）。旧版这里写着"**得**拿 `mentions[]` 换成真人"，读起来像**我们**漏了一道工序 |
 | `InboundMessage.quote` | 事件只给 `parent_id` / `root_id`（**仅回复场景有值**），**不给原话**。⚙ **实际怎么做的**：选了"多调一次"那条路 —— `index.ts` 的 `fetchQuote` 真去 `fetchMessage` 把原话取回来，用 `toQuoteLine` 压成一行（≤50 字）交给内核；**取不到就当没引用**（正文照走，"少一段上下文好过整条不回"）。它和附件下载是 `Promise.all` **并行**的，不让用户白等两趟网络。⭐ 第 79 轮对着代码钉死（原先那句后面写的"见下面决策 3"是**悬空引用** —— 下面只有"三个真问题"；这个坑记在第十一节） |
-| `InboundMessage.files` | 先下载到本机再交出：`GET /im/v1/messages/:message_id/resources/:file_key?type=image\|file`；>100 MB 要 `Range` 分片（单片 ≤32 MB） |
+| `InboundMessage.files` | 先下载到本机再交出：`GET /im/v1/messages/:message_id/resources/:file_key?type=image\|file`。⚙ **实际怎么做的**：走官方包的 `downloadResourceToFile`；**没有做过 `Range` 分片** —— 第 84 轮对代码查过：我们自己的上限是 `MAX_IMAGE_BYTES` 10 MB / `maxFileMb` 30 MB，**超了当场抛错**（`index.ts` 的 `sendFile`），所以 `>100 MB` 那条路根本到不了。旧版这里写着"要 `Range` 分片"，是一个**没有任何实现者**的断言 |
 | `check()` | 自己做是拿一次 `tenant_access_token`（免费）→ 通了报应用名，被拒了给"去开发者后台看一眼"（照 Telegram 那句 `getMe` 的写法）。⚙ **实际怎么做的**：站在官方包上就是一次 `getAppInfo()` —— 免费的一次 REST 调用，`tenant_access_token` 由 SDK 内部自己取（`packages/channel-feishu/src/index.ts` 里那个 `withTimeout(this.lark.getAppInfo(), …)`）。⚠️ 第 69 轮量到原来这里只写了"拿一次 `tenant_access_token`"，读者会以为要自己写这一步 |
-| `setTyping` | 飞书没有"正在输入" → 基类默认 no-op，不用管 |
+| `setTyping` | 飞书没有"正在输入" → 基类默认 no-op，不用管。⚙ **实际怎么做的**：就是基类那个空实现（`seam-channel/src/index.ts` 第 109 行 `async setTyping() {}`），本包一行都没写 |
 
 注意这张表里"**谁来做**"的差别很大：如果站在官方 `@larksuite/channel` 上（见下面第六节），
 `start` / `stop`、断线重连、去重、媒体上传**都已经有了** —— 这张表大部分是"接线"，不是"实现"。
@@ -4104,6 +4104,110 @@ for (const [f, s] of snap) writeFileSync(join(copy, f), s);   // 第 1064 行还
 - ⚠️ 「形态」那一列（第 81 轮的账）仍然只是人工读过的。
 - ⚠️ 不带出处标记的那几行契约（`start`/`stop`、`sendText`、`sendFile`、`opts.quote`、`fromId`、
   `text`、`files`、`setTyping`）还是没量。⭐ 第四轮记着它了。
+
+### 第 84 轮：把 §五 那 8 行"不带标记的契约"逐条对到代码 —— 抓到一条**没有任何实现者**的断言
+
+这块账记了三轮（第 81、82、83 轮的"没做的"里都有它）：
+
+> ⚠️ 不带出处标记的那几行契约（`start`/`stop`、`sendText`、`sendFile`、`opts.quote`、
+> `fromId`、`text`、`files`、`setTyping`）还是没量。
+
+这轮把它量了。⭐ 量出来**两条有问题**，⭐ 而且**形状是同一个**。
+
+#### 怎么量的
+
+§五 那张表是"契约 ↔ 飞书这边怎么做"，共 **11 行**。其中 3 行早就写着 `⚙ 实际怎么做的`
+（`check()`、`opts.contextToken`、`InboundMessage.quote`，第 79 轮改的），剩下 **8 行没有标记**。
+
+于是逐条读代码：`packages/channel-feishu` 的 `index.ts` / `map.ts` / `files.ts`，
+外加官方包 `@larksuite/channel@0.7.1`（⭐ 它装在**包自己的** `node_modules` 里，不在仓库根 —— 见下）。
+
+| 行 | 手册说 | 代码里是什么 | 判定 |
+| --- | --- | --- | --- |
+| `start()` / `stop()` | 收尾走 `ctx.effect(() => () => this.stop())` | `index.ts:324` 就是这一句 | ✅ |
+| `sendText` | `receive_id_type=chat_id`、`msg_type=text`、content 转义 JSON、≤150 KB | **官方包**在做；我们只给 `{ markdown: text }`，分条也交给它 | ✅ |
+| `sendFile` | 两段式；image ≤10 MB、file ≤30 MB；`file_type` 由后缀映射 | 两段式是官方包的；**那两个上限是我们的**（`MAX_IMAGE_BYTES` = 10 MB、`maxFileMb` 默认 30） | ✅ |
+| `opts.quote` | 走 `/reply`，文本一个字不改 | `replyOrSend` 先试原生回复、失败退回直接发送 | ✅ |
+| `fromId` | `event.sender.sender_id.open_id` | 我们读的是官方包归一化后的 `msg.senderId` | ✅ |
+| `text` | 二次 `JSON.parse`；**得**拿 `mentions[]` 换成真人（群聊必需） | ⭐ 那是**官方包**做的，我们**故意**不解析事件 | ⚠️ 措辞误导 |
+| `files` | `resources?type=image\|file`；**>100 MB 要 `Range` 分片（单片 ≤32 MB）** | ⭐ ⭐ **没有任何实现者** | ❌ |
+| `setTyping` | 飞书没有"正在输入" → 基类默认 no-op | `seam-channel/src/index.ts:109` 就是那个空实现 | ✅ |
+
+#### ❌ 那条没有任何实现者的断言
+
+`files` 行写着「**>100 MB 要 `Range` 分片（单片 ≤32 MB）**」。查了三处：
+
+- 我们的代码：`Range` / `bytes=` / `206` ——**一个都没有**；
+- 官方包 `@larksuite/channel@0.7.1`：同样**一个都没有**；
+- 我们自己的上限：`MAX_IMAGE_BYTES` = **10 MB**、`maxFileMb` 默认 **30 MB**，
+  而且 `sendFile` 是**发之前先量**：超了当场 `throw`。
+
+⇒ ⭐ ⭐ **`>100 MB` 那条路根本到不了**：一个 100 MB 的文件在 30 MB 那关就被拒了，
+⭐ 永远不会走到"要不要分片"。这条断言**写在手册里三年，没有一个实现者**。
+
+#### ⚠️ 那条读起来像"我们漏了一道工序"的
+
+`text` 行写着「里面 `@` 变成 `@_user_N`，**得**拿 `mentions[]` 换成真人（群聊必需）」。
+读起来像我们的待办。⭐ 而 `map.ts` 第 69 行写着：
+
+> `content` 是 `@larksuite/channel` 归一化后的文本（群里 @ 机器人时，
+> 正文里的 `@_user_1` 已经被换成人名了 —— **这正是我们不自己解析事件的原因之一**）。
+
+⭐ 也就是说：**官方包做了，我们故意不做**，而且代码里写明了理由。手册那句话本身没错，
+⭐ 错在**没说清是谁做**。
+
+#### ⭐ 两条的共同形状
+
+⭐⭐ **这一行说的是"飞书协议长什么样"，却没说"谁在做"。**
+
+而同一张表里 `check()` / `opts.contextToken` / `InboundMessage.quote` 三行**早就**写着
+`⚙ 实际怎么做的` —— ⭐ 又是第 76/77/78/79/83 轮那一族：**一处改对了，旁边没跟上。**
+只不过这次"旁边"是**整张表的其余 8 行**。
+
+#### 药：两件事
+
+**① 8 行都补上 `⚙ 实际怎么做的`**，⭐ 于是 **11/11 行**都能看出"谁做的"。
+顺带把那两条错的/误导的改写成事实（`Range` 那条写明"没有实现者、而且到不了"；
+`mentions` 那条写明"官方包做的、我们故意不做"）。
+
+**② ⭐ 加规则 ⑬ —— 让它不会再烂。**
+
+> **§五 契约表里每一行契约行（表头、分隔行除外）都必须带 `⚙`。**
+
+⭐ 为什么要求"每一行"而不是"提到接口路径的行"：契约表**存在的意义**就是
+「契约 ↔ 飞书这边怎么做」；一行不写"我们怎么做的"，⭐ 它就只是一句**计划期的承诺** ——
+第 84 轮抓到的那条正是这种承诺：**写着、没人做、也没人发现。**
+
+配套：7 条夹具（表头不算、分隔行不算、表外散文不管、没有 §五 就没什么可看的、
+范围到 `**三个真问题**` 为止……）、一条**防沉默**（看了不到 5 行就报红）、
+以及变异清单里的一条牙。自检 **69 → 76 条**，清单 **91 → 92 处**。
+
+#### ⚠️ 顺带记一个我自己重复犯的错
+
+量"官方包在不在"时我先跑了：
+
+```
+ls -d node_modules/@larksuite/*
+```
+
+⭐ 空的。我当场得出"这个包根本没装"—— 而它是 `packages/channel-feishu/package.json`
+里的一条 `dependencies`。再查一次才发现：**pnpm 把它装在包自己的 `node_modules` 里**，
+根目录本来就不会有。
+
+⭐⭐ 第 83 轮我刚在手册里写下「**`grep` 的范围就是断言的`范围`**」（当时也是栽在同一个坑上，
+把"规则 ④ 空跑"写进了草稿）。**隔一轮又在同一个地方绊了一次。**
+⭐ 这次它没有变成手册里的一句话（我先查了 `package.json` 和锁文件），
+⭐ 但"看一眼就下结论"这个动作本身，是这个仓库里最贵的那类错误。
+
+#### 没做的 / 没验的
+
+- ⚠️ 规则 ⑥ / ⑦ 的**防沉默分支**仍然没有牙（第 83 轮说过的三条理由没变）。
+- ⚠️ 规则 ⑧ / ⑨ 的**阈值本身**（4 / 10）还是没人盯 —— 第 83 轮的账。
+- ⚠️ 规则 ④ 有牙但还是没有"看得太少"的阈值 —— 第 83 轮的账。
+- ⚠️ 规则 ⑬ 只咬"有没有 `⚙`"，**咬不动"⚙ 里说的是不是真的"**。
+  第 84 轮那两条能抓出来，靠的是**人读代码**，不是规则 —— ⭐ 规则只是保证"以后新加的行也得写"。
+- ⚠️ 「形态」那一列（第 81 轮的账）仍然只是人工读过的。
+- ⚠️ 手册 §五 之外还有没有"没人实现的承诺"，这轮**没系统扫** —— 只扫了那一张表。
 
 ## 十二、真机验收手册（给"第一枪"用）
 
