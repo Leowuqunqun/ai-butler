@@ -456,6 +456,41 @@ function pairedTreeViolations(zhText, enText) {
   return { hits, examined: zh.size + en.size };
 }
 
+// ───────── ⑩ 精确的"当时多少测试"必须带时间锚（第 75 轮） ─────────
+//
+// 第 73/74 轮定下的政策是：**会烂的精确数换成量级**（`九百多个`），**历史记录则加时间锚**。
+// 但这条政策一直没人守。第 75 轮把它写下来时，同一类缺陷一次冒出四处：
+//   · `README.en.md` 的包树里 `channel-feishu ... 50 offline tests` —— 中文那侧早就换成了
+//     "八十多个离线用例"（第 73 轮），英文那侧**没人动**；
+//   · `README.en.md` / `VISION.en.md` 的 M0 行写着 `19 offline tests` / `Done, 19 offline tests`，
+//     而中文两处都有"当时"（`当时 19 个离线测试` / `已完成（当时 19 个离线测试）`）。
+//     ⚠️ 注意行里的 `Done` **不算锚**：它说的是"这个里程碑完成了"，不是"这个数是当时的"。
+//
+// 规则：`README*.md` 和 `docs/VISION*.md` 里，**出现精确测试数的那一行必须同时出现时间锚**
+//（`当时` / `at the time`）。要么它是量级（`eighty-odd offline cases`，没有精确数字，天然通过），
+// 要么它带着"这是当时"的字样。
+//
+// ⚠️ 范围**故意不含** `docs/ARCH-technical*.md`：那棵树里的 `166 个测试` 是**精确且当前**的，
+//    由规则 ⑨ 盯着两边一致、由人维护。这不是"历史记录"，不该被这条规则逼着加锚。
+// ⚠️ 也**不含**各包自己的 README：那里 `test/smoke.mjs（25 个）` 这种分文件计数是**当前值**，
+//    给每一行加"当时"是荒谬的。它们的政策是"只修不守"（见手册第 74 轮）。
+const ANCHOR_FILES = ['README.md', 'README.en.md', 'docs/VISION.md', 'docs/VISION.en.md'];
+const ANCHOR_WORDS = /当时|at the time/;
+const EXACT_TEST_COUNT = /\d+\s*个(?:离线)?(?:测试|用例)|\b\d+\s+(?:offline\s+)?tests?\b/;
+
+/** 只看第一行：一张表的一行就是一行 */
+function unanchoredCountViolations(text) {
+  const hits = [];
+  let examined = 0;
+  for (const line of text.split('\n')) {
+    if (!EXACT_TEST_COUNT.test(line)) continue;
+    examined++;
+    if (ANCHOR_WORDS.test(line)) continue;
+    hits.push({ text: line.trim().slice(0, 80), why: `这是一个精确的测试数，但没说"这是当时的"：${line.trim().slice(0, 70)}` });
+  }
+  return { hits, examined };
+}
+
 const SELF_TEST = [
   { why: '指向别的包（npm 读者够不着）', file: 'packages/a/README.md', link: '../b/README.md', shipped: ['README.md'], want: 1 },
   { why: '指向仓库根（更够不着）', file: 'packages/a/README.md', link: '../../docs/x.md', shipped: ['README.md'], want: 1 },
@@ -649,8 +684,37 @@ const TREE_TEST = [
   },
 ];
 
+// ── 规则 ⑩ 的夹具
+const ANCHOR_TEST = [
+  {
+    why: '量级（没有精确数字）→ 不报',
+    text: '| 全仓 | 九百多个离线测试，现跑现数：`pnpm test` |',
+    want: 0, examined: 0,
+  },
+  {
+    why: '精确数 + 中文时间锚 → 不报',
+    text: '| **M0** | 通道层跑通 | 当时 19 个离线测试 | ✅ 已完成 |',
+    want: 0, examined: 1,
+  },
+  {
+    why: '精确数 + 英文时间锚 → 不报',
+    text: '| **M0** | Channel layer works end to end | 19 offline tests at the time | ✅ Done |',
+    want: 0, examined: 1,
+  },
+  {
+    why: '⭐ 精确数 + 只有 `Done`（那是里程碑完成，不是时间锚）→ 报',
+    text: '| **M0** | Channel layer works end to end | Done, 19 offline tests |',
+    want: 1, examined: 1,
+  },
+  {
+    why: '⭐ 精确数、什么都没带 → 报（第 75 轮 README.en.md 那行 `50 offline tests`）',
+    text: 'channel-feishu/      📐 third channel: Feishu (...; 50 offline tests, inbound images land on disk)',
+    want: 1, examined: 1,
+  },
+];
+
 const RULE_FIXTURE_COUNT = () =>
-  SELF_TEST.length + URL_TEST.length + CMD_TEST.length + PROV_TEST.length + COUNT_TEST.length + TREE_TEST.length;
+  SELF_TEST.length + URL_TEST.length + CMD_TEST.length + PROV_TEST.length + COUNT_TEST.length + TREE_TEST.length + ANCHOR_TEST.length;
 
 function runSelfTest() {
   const bad = [
@@ -703,6 +767,10 @@ function runSelfTest() {
             : `（另外：像"数"的行应该看 ${c.examined} 条，实际 ${r.examined} 条）`,
       };
     }),
+    ...ANCHOR_TEST.map((c) => {
+      const r = unanchoredCountViolations(c.text);
+      return { ...c, got: r.hits.length, examined: r.examined, shown: (r.hits[0] && r.hits[0].why) ?? '（都有锚）' };
+    }),
     ...TREE_TEST.map((c) => {
       const r = pairedTreeViolations(c.zh, c.en);
       return { ...c, got: r.hits.length, shown: (r.hits[0] && r.hits[0].why) ?? '（两棵树一致）' };
@@ -716,8 +784,8 @@ function runSelfTest() {
     console.error(`    ${c.shown}`);
   }
   console.error('\n改法：这是 scripts/check-docs.mjs 里 shippedDocViolations / selfRepoUrlViolations /');
-  console.error('sourceTreeCommandViolations / provenanceViolations / staleCountViolations / pairedTreeViolations 的规则被改动了。');
-  console.error('要是故意放宽/收紧，请把 SELF_TEST / URL_TEST / CMD_TEST / PROV_TEST / COUNT_TEST / TREE_TEST 一起改，');
+  console.error('sourceTreeCommandViolations / provenanceViolations / staleCountViolations / pairedTreeViolations / unanchoredCountViolations 的规则被改动了。');
+  console.error('要是故意放宽/收紧，请把 SELF_TEST / URL_TEST / CMD_TEST / PROV_TEST / COUNT_TEST / TREE_TEST / ANCHOR_TEST 一起改，');
   console.error('并在 docs/CHANNEL-FEISHU.md 里写清楚为什么。');
   process.exit(1);
 }
@@ -956,6 +1024,25 @@ if (!problems.length && treeExamined < 10) {
   );
 }
 
+// ───────── ⑩ 精确的"当时多少测试"必须带时间锚（第 75 轮） ─────────
+
+let anchorBad = 0;
+let anchorExamined = 0;
+for (const rel of ANCHOR_FILES) {
+  const abs = resolve(ROOT, rel);
+  if (!existsSync(abs)) continue;
+  const r = unanchoredCountViolations(readFileSync(abs, 'utf8'));
+  anchorExamined += r.examined;
+  for (const hit of r.hits) {
+    problems.push(
+      `❌ 精确的测试数没带时间锚  ${rel}\n       → ${hit.why}\n` +
+        '       （政策见手册第 73/74 轮：会烂的精确数换成量级（`九百多个`），历史记录加时间锚（`当时`）。' +
+        '⚠️ `Done` 不算锚 —— 它说的是里程碑完成了，不是"这个数是当时的"）',
+    );
+    anchorBad++;
+  }
+}
+
 // ───────────────────────── 双语结构守卫 ─────────────────────────
 //
 // 第 4 条检查，也是唯一一条跟"内容"有关的：**中文版和英文版的结构要对得上**。
@@ -1046,7 +1133,7 @@ if (problems.length) console.log(`${problems.join('\n')}\n`);
 console.log(
   `检查 ${files.length} 个 md、${checked} 个链接/图片、${pairs.length} 对双语 → ` +
   (problems.length
-    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}、本仓地址 ${selfUrlBad}、照抄命令 ${cmdBad}、出处 ${provBad}、用户面数字 ${staleBad}、包树 ${treeBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
-    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着、本仓地址指得到、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、用户面文档里的数跟仓库对得上（看了 ${staleExamined} 条）、架构包树中英对齐（看了 ${treeExamined} 行）、双语结构对齐（规则自检 ${RULE_FIXTURE_COUNT()} 条通过）`),
+    ? `❌ 断链 ${broken}、锚点 ${badAnchor}、被忽略 ${ignored}、围栏 ${oddFence}、出包链接 ${shippedBad}、本仓地址 ${selfUrlBad}、照抄命令 ${cmdBad}、出处 ${provBad}、用户面数字 ${staleBad}、包树 ${treeBad}、时间锚 ${anchorBad}、结构 ${h2Mismatch}、缺切换链接 ${noSwitch}`
+    : `✅ 链接有效、都在版本库里、围栏成对、出包文档的链接读者够得着、本仓地址指得到、照抄的命令路径够得着（看了 ${cmdExamined} 条）、出处跟得上原话（看了 ${provExamined} 条）、用户面文档里的数跟仓库对得上（看了 ${staleExamined} 条）、架构包树中英对齐（看了 ${treeExamined} 行）、精确数都带时间锚（看了 ${anchorExamined} 条）、双语结构对齐（规则自检 ${RULE_FIXTURE_COUNT()} 条通过）`),
 );
 process.exit(problems.length ? 1 : 0);

@@ -115,7 +115,7 @@ packages/
   link-lan/            ✅ link implementation: LAN (HTTP + SSE, zero dependencies; authentication is a red line; a pairing code admits devices)
   link-tailscale/      ✅ link implementation: across networks (the roster is asked of Tailscale; the wire protocol is link-lan's)
   cli/                 ✅ the entry point `butler`: config + patch overlay → bring up the container → go online / `doctor` self-check
-  channel-feishu/      📐 third channel: Feishu (on top of the official @larksuite/channel; 50 offline tests, inbound images/files land on disk; not yet verified on a real device)
+  channel-feishu/      📐 third channel: Feishu (on top of the official @larksuite/channel; eighty-odd offline cases, inbound images/files land on disk; not yet verified on a real device)
   (the following are not packages yet)
   hub/ node/           —— the roles already have owners: hub is `core/`, node is `link-lan/node`
   installer/           —— the installer script already ships at the repo root (install.sh); the package isn't split out yet
@@ -172,7 +172,7 @@ sends messages to nobody. CI runs the full suite on Node 20 / 22 / 24.
 
 | | What | Acceptance | Status |
 | --- | --- | --- | --- |
-| **M0** | Channel layer working end to end: QR, send/receive, attachments, quotes, pluggable backends | 19 offline tests | ✅ Done |
+| **M0** | Channel layer working end to end: QR, send/receive, attachments, quotes, pluggable backends | 19 offline tests at the time | ✅ Done |
 | **M1** | Channel layer plugins + receiving images/files + `doctor` self-check + CI + Chinese/English docs | **ready to open-source once done** | ✅ Done |
 | **M2** | Multi-terminal (hub + nodes + alias routing) + in-WeChat configuration | Two machines; saying "that file on the home computer" in WeChat gets it | ✅ complete |
 | **M3** | Non-technical installer (double-click install, onboarding page QR scan, never asks for a key) + a second IM channel | A non-technical user walks the whole thing alone | 🚧 in progress |

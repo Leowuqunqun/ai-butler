@@ -207,7 +207,7 @@ To productize it, the first move is to stand up the three service slots `ctx.cha
 
 | | Content | Acceptance |
 | --- | --- | --- |
-| **M0 ✅** | Channel layer works end to end: QR scan, send/receive, attachments, quotes, pluggable backend | Done, 19 offline tests |
+| **M0 ✅** | Channel layer works end to end: QR scan, send/receive, attachments, quotes, pluggable backend | Done; 19 offline tests at the time |
 | **M1** | Channel layer becomes a real plugin (`ctx.channel` seam) + receiving images/files + `doctor` self-check + CI + bilingual docs | **This version is ready to open-source** |
 | **M2** | Multiple terminals (LAN hub + nodes) + configuration inside WeChat | Two machines; saying "that file on the home computer" in WeChat retrieves it |
 | **M3** | Non-technical-user installer (double-click install, onboarding-page QR scan, never asks for a key) + a second IM channel to validate the abstraction | A non-technical person completes install through use on their own |
